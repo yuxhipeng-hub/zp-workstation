@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+app-extracted/
+vendor/
+coverage/
+.vite/
+.env
+.env.*
+!.env.example
+*.log
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zp的工作站</title>
+  </head>
+  <body data-theme="dark">
+    <a class="skip-link" href="#view">跳到主要内容</a>
+    <div id="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-wordmark" aria-hidden="true">zp</div>
+          <div class="brand-copy">
+            <strong>zp的工作站</strong>
+            <span>LOCAL COMMAND DECK</span>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="主导航">
+          <p class="nav-label">工作区</p>
+          <button class="nav-item active" type="button" data-page="overview" aria-label="总览" title="总览" aria-current="page">
+            <i data-lucide="layout-dashboard"></i><span>总览</span>
+          </button>
+          <button class="nav-item" type="button" data-page="updates" aria-label="版本与更新" title="版本与更新">
+            <i data-lucide="refresh-cw"></i><span>版本与更新</span>
+            <span class="nav-dot hidden" id="updateDot"></span>
+          </button>
+          <p class="nav-label">扩展</p>
+          <button class="nav-item" type="button" data-page="plugins" aria-label="插件" title="插件">
+            <i data-lucide="plug"></i><span>插件</span>
+          </button>
+          <button class="nav-item" type="button" data-page="models" aria-label="模型与 API" title="模型与 API">
+            <i data-lucide="key-round"></i><span>模型与 API</span>
+          </button>
+          <p class="nav-label">系统</p>
+          <button class="nav-item" type="button" data-page="logs" aria-label="日志" title="日志">
+            <i data-lucide="terminal"></i><span>日志</span>
+          </button>
+          <button class="nav-item" type="button" data-page="settings" aria-label="设置" title="设置">
+            <i data-lucide="settings"></i><span>设置</span>
+          </button>
+          <button class="nav-item" type="button" data-page="about" aria-label="关于" title="关于">
+            <i data-lucide="info"></i><span>关于</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="mini-status">
+            <span class="status-beacon">
+              <span class="status-dot" id="sideStatusDot"></span>
+            </span>
+            <div>
+              <strong id="sideStatusText">正在读取状态</strong>
+              <span id="sideVersionText">--</span>
+            </div>
+          </div>
+          <p class="rail-footnote">LOCAL ONLY · WINDOWS X64</p>
+        </div>
+      </aside>
+
+      <div class="shell">
+        <header class="topbar">
+          <div class="topbar-heading">
+            <div class="route-marker" aria-hidden="true"><span></span></div>
+            <div>
+              <p class="eyebrow" id="pageEyebrow">控制台</p>
+              <h1 id="pageTitle">总览</h1>
+              <p class="page-summary" id="pageSummary">运行时状态、更新和工作台入口集中在这里。</p>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <div class="runtime-ribbon" id="runtimeRibbon">
+              <span class="runtime-ribbon-dot" id="topStatusDot" aria-hidden="true"></span>
+              <div>
+                <strong id="topStatusText">读取中</strong>
+                <span id="topVersionText">DSH --</span>
+              </div>
+            </div>
+            <span class="local-time" id="localTime">--:--</span>
+            <button class="icon-button" type="button" data-action="toggle-theme" title="切换主题" aria-label="切换主题">
+              <i data-lucide="sun-moon"></i>
+            </button>
+            <button class="button secondary" type="button" data-action="check-update">
+              <i data-lucide="refresh-cw"></i><span>检查更新</span>
+            </button>
+            <button class="button primary" type="button" data-action="launch">
+              <i data-lucide="play"></i><span>启动工作台</span>
+            </button>
+          </div>
+        </header>
+
+        <main class="view" id="view" tabindex="-1"></main>
+      </div>
+    </div>
+
+    <div class="task-strip hidden" id="taskStrip" role="status" aria-live="polite">
+      <span class="task-spinner"><i data-lucide="loader"></i></span>
+      <div class="task-copy">
+        <strong id="taskTitle">正在执行</strong>
+        <span id="taskDetail"></span>
+      </div>
+      <button class="icon-button compact" type="button" data-action="hide-task" title="收起任务">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+
+    <div class="toast-stack" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
