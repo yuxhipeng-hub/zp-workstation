@@ -82,6 +82,60 @@ function inferExperimentGroup(fileName) {
   return sanitizePathSegment(candidate)
 }
 
+function longestCommonSubstringLength(left, right) {
+  if (!left || !right) return 0
+  let previous = new Array(right.length + 1).fill(0)
+  let longest = 0
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = new Array(right.length + 1).fill(0)
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      if (left[leftIndex - 1] === right[rightIndex - 1]) {
+        current[rightIndex] = previous[rightIndex - 1] + 1
+        longest = Math.max(longest, current[rightIndex])
+      }
+    }
+    previous = current
+  }
+  return longest
+}
+
+function groupMatchScore(left, right) {
+  const normalizedLeft = normalizeLookupText(left)
+  const normalizedRight = normalizeLookupText(right)
+  if (!normalizedLeft || !normalizedRight) return 0
+  if (normalizedLeft === normalizedRight) return 1
+
+  const shorter =
+    normalizedLeft.length <= normalizedRight.length ? normalizedLeft : normalizedRight
+  const longer =
+    normalizedLeft.length > normalizedRight.length ? normalizedLeft : normalizedRight
+  if (longer.includes(shorter)) {
+    return 0.25 + shorter.length / longer.length
+  }
+
+  const longest = longestCommonSubstringLength(normalizedLeft, normalizedRight)
+  return longest / Math.max(normalizedLeft.length, normalizedRight.length)
+}
+
+function resolveExperimentGroup(fileName, existingGroups = []) {
+  const inferred = inferExperimentGroup(fileName)
+  if (!inferred || normalizeLookupText(inferred) === normalizeLookupText('未分类实验')) {
+    return ''
+  }
+
+  let bestMatch = ''
+  let bestScore = 0
+  for (const candidate of existingGroups) {
+    const score = groupMatchScore(inferred, candidate)
+    if (score > bestScore) {
+      bestMatch = String(candidate || '').trim()
+      bestScore = score
+    }
+  }
+
+  return bestScore >= 0.55 ? bestMatch : ''
+}
+
 function isPathInside(parent, candidate) {
   const relative = path.relative(path.resolve(parent), path.resolve(candidate))
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
@@ -128,11 +182,21 @@ class ExperimentLibrary {
     await fsp.mkdir(root, { recursive: true })
     const imported = []
     const rejected = []
+    const createdGroups = []
     const existingPaths = new Set(
       (this.workspace.get().experiments || [])
         .filter((item) => item.filePath)
         .map((item) => path.resolve(item.filePath).toLocaleLowerCase('zh-CN')),
     )
+    const existingGroups = new Set(
+      (this.workspace.get().experiments || [])
+        .map((item) => String(item.group || '').trim())
+        .filter(Boolean),
+    )
+    const directoryEntries = await fsp.readdir(root, { withFileTypes: true }).catch(() => [])
+    for (const entry of directoryEntries) {
+      if (entry.isDirectory()) existingGroups.add(entry.name)
+    }
 
     for (const entry of entries || []) {
       const sourceValue = typeof entry === 'string' ? entry : entry?.path
@@ -160,7 +224,12 @@ class ExperimentLibrary {
         }
 
         const originalName = path.basename(resolvedSource)
-        const group = inferExperimentGroup(originalName)
+        const matchedGroup = resolveExperimentGroup(originalName, [...existingGroups])
+        const group = matchedGroup || inferExperimentGroup(originalName)
+        if (!existingGroups.has(group)) {
+          existingGroups.add(group)
+          createdGroups.push(group)
+        }
         const targetDirectory = this.groupDirectory(group)
         await fsp.mkdir(targetDirectory, { recursive: true })
 
@@ -189,7 +258,7 @@ class ExperimentLibrary {
     }
 
     const workspace = imported.length ? this.workspace.addExperiments(imported) : this.workspace.get()
-    return { workspace, imported: imported.length, rejected }
+    return { workspace, imported: imported.length, rejected, createdGroups }
   }
 
   async updateExperiment(id, patch = {}) {
@@ -224,6 +293,70 @@ class ExperimentLibrary {
     return this.workspace.deleteExperiment(id)
   }
 
+  async renameGroup(currentGroup, nextGroup) {
+    const current = sanitizePathSegment(currentGroup)
+    const next = sanitizePathSegment(nextGroup)
+    if (!String(currentGroup || '').trim()) throw new Error('原课程文件夹名称不能为空。')
+    if (!String(nextGroup || '').trim()) throw new Error('新的课程文件夹名称不能为空。')
+    if (normalizeLookupText(current) === normalizeLookupText(next)) {
+      return { workspace: this.workspace.get(), renamed: 0, group: current }
+    }
+
+    const root = this.getRoot()
+    const oldDirectory = this.groupDirectory(current)
+    const nextDirectory = this.groupDirectory(next)
+    const items = this.workspace
+      .get()
+      .experiments.filter((item) => String(item.group || '').trim() === current)
+    const existingFileIds = new Set(
+      items.filter((item) => item.filePath && fs.existsSync(item.filePath)).map((item) => item.id),
+    )
+    const movedPaths = new Map()
+    const oldDirectoryExists = fs.existsSync(oldDirectory)
+    const nextDirectoryExists = fs.existsSync(nextDirectory)
+
+    if (oldDirectoryExists && oldDirectory !== nextDirectory) {
+      if (!nextDirectoryExists) {
+        await fsp.mkdir(path.dirname(nextDirectory), { recursive: true })
+        await fsp.rename(oldDirectory, nextDirectory)
+      } else {
+        const entries = await fsp.readdir(oldDirectory, { withFileTypes: true })
+        await fsp.mkdir(nextDirectory, { recursive: true })
+        for (const entry of entries) {
+          const source = path.join(oldDirectory, entry.name)
+          const destination = await uniqueDestination(nextDirectory, entry.name)
+          await fsp.rename(source, destination)
+          movedPaths.set(path.basename(source), destination)
+        }
+        await fsp.rmdir(oldDirectory).catch(() => {})
+      }
+    }
+
+    const nextPaths = {}
+    for (const item of items) {
+      if (!existingFileIds.has(item.id)) continue
+      if (!oldDirectoryExists || oldDirectory === nextDirectory) {
+        nextPaths[item.id] = path.join(nextDirectory, path.basename(item.filePath))
+        continue
+      }
+
+      if (!isPathInside(oldDirectory, item.filePath)) {
+        nextPaths[item.id] = path.join(nextDirectory, path.basename(item.filePath))
+        continue
+      }
+
+      const relativePath = path.relative(oldDirectory, item.filePath)
+      const [topLevelName, ...nestedParts] = relativePath.split(path.sep)
+      const movedTopLevel = movedPaths.get(topLevelName)
+      nextPaths[item.id] = movedTopLevel
+        ? path.join(movedTopLevel, ...nestedParts)
+        : path.join(nextDirectory, relativePath)
+    }
+
+    const workspace = this.workspace.updateExperimentGroup(current, next, nextPaths)
+    return { workspace, renamed: items.length, group: next }
+  }
+
   getExperiment(id) {
     return this.workspace.getExperiment(id)
   }
@@ -242,5 +375,6 @@ module.exports = {
   ExperimentLibrary,
   inferExperimentGroup,
   isPathInside,
+  resolveExperimentGroup,
   sanitizePathSegment,
 }

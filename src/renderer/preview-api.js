@@ -32,6 +32,31 @@ function inferPreviewExperimentGroup(fileName) {
   return (marker > 1 ? baseName.slice(0, marker) : baseName).trim() || '未分类实验'
 }
 
+function normalizePreviewGroup(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLocaleLowerCase('zh-CN')
+    .replace(/[\s_\-—–.·]+/g, '')
+}
+
+function resolvePreviewExperimentGroup(fileName, existingGroups) {
+  const inferred = inferPreviewExperimentGroup(fileName)
+  const normalizedInferred = normalizePreviewGroup(inferred)
+  if (!normalizedInferred || normalizedInferred === normalizePreviewGroup('未分类实验')) return ''
+  for (const candidate of existingGroups) {
+    const normalizedCandidate = normalizePreviewGroup(candidate)
+    if (
+      normalizedCandidate &&
+      (normalizedCandidate === normalizedInferred ||
+        normalizedCandidate.includes(normalizedInferred) ||
+        normalizedInferred.includes(normalizedCandidate))
+    ) {
+      return candidate
+    }
+  }
+  return ''
+}
+
 function emit(channel, payload) {
   for (const listener of listeners.get(channel) || []) listener(clone(payload))
 }
@@ -409,13 +434,23 @@ export function createPreviewLauncherApi() {
     async importExperiments(entries) {
       const imported = []
       const rejected = []
+      const createdGroups = []
+      const existingGroups = new Set(
+        state.workspace.experiments.map((item) => String(item.group || '').trim()).filter(Boolean),
+      )
       for (const entry of entries || []) {
         const originalName = String(entry?.name || entry?.path?.split(/[\\/]/).pop() || '')
         if (!originalName.toLocaleLowerCase('en-US').endsWith('.pdf')) {
           rejected.push({ name: originalName || '未知文件', reason: '目前只接收 PDF 文件。' })
           continue
         }
-        const group = inferPreviewExperimentGroup(originalName)
+        const group =
+          resolvePreviewExperimentGroup(originalName, existingGroups) ||
+          inferPreviewExperimentGroup(originalName)
+        if (!existingGroups.has(group)) {
+          existingGroups.add(group)
+          createdGroups.push(group)
+        }
         const id = createId()
         imported.push({
           id,
@@ -433,6 +468,7 @@ export function createPreviewLauncherApi() {
         workspace: clone(state.workspace),
         imported: imported.length,
         rejected,
+        createdGroups,
       }
     },
     async updateExperiment(id, patch) {
@@ -451,6 +487,25 @@ export function createPreviewLauncherApi() {
       return {
         workspace: clone(state.workspace),
         experiment: clone(state.workspace.experiments.find((item) => item.id === id)),
+      }
+    },
+    async renameExperimentGroup(currentGroup, nextGroup) {
+      const next = String(nextGroup || '').trim()
+      let renamed = 0
+      state.workspace.experiments = state.workspace.experiments.map((item) => {
+        if (item.group !== currentGroup) return item
+        renamed += 1
+        return {
+          ...item,
+          group: next,
+          filePath: `${state.settings.experimentDir}\\${next}\\${item.originalName}`,
+          updatedAt: new Date().toISOString(),
+        }
+      })
+      return {
+        workspace: clone(state.workspace),
+        renamed,
+        group: next,
       }
     },
     async deleteExperiment(id) {

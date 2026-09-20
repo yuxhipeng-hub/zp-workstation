@@ -177,6 +177,23 @@ class WorkspaceStore {
     return this.get()
   }
 
+  updateExperimentGroup(currentGroup, nextGroup, nextPaths = {}) {
+    const now = new Date().toISOString()
+    this.data.experiments = this.data.experiments.map((item) => {
+      if (String(item.group || '').trim() !== currentGroup) return item
+      return cleanExperiment(
+        {
+          ...item,
+          group: nextGroup,
+          filePath: nextPaths[item.id] || item.filePath,
+        },
+        { ...item, updatedAt: now },
+      )
+    })
+    this.save()
+    return this.get()
+  }
+
   deleteExperiment(id) {
     this.data.experiments = this.data.experiments.filter((item) => item.id !== id)
     this.save()

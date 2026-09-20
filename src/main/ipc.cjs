@@ -90,6 +90,9 @@ function registerIpc({
   ipcMain.handle('workspace:experiment-update', (_event, id, patch) =>
     experimentLibrary.updateExperiment(id, patch),
   )
+  ipcMain.handle('workspace:experiment-rename-group', (_event, currentGroup, nextGroup) =>
+    experimentLibrary.renameGroup(currentGroup, nextGroup),
+  )
   ipcMain.handle('workspace:experiment-delete', (_event, id) =>
     experimentLibrary.removeExperiment(id),
   )

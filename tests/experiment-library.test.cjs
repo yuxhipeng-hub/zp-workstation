@@ -6,6 +6,7 @@ const test = require('node:test')
 const {
   ExperimentLibrary,
   inferExperimentGroup,
+  resolveExperimentGroup,
   sanitizePathSegment,
 } = require('../src/main/experiment-library.cjs')
 const { WorkspaceStore } = require('../src/main/workspace-store.cjs')
@@ -34,6 +35,11 @@ test('infers known and unknown experiment groups from Chinese PDF names', () => 
   assert.equal(inferExperimentGroup('计算机系统基础_实验3.pdf'), '计算机系统基础')
   assert.equal(inferExperimentGroup('数据结构实验报告1.pdf'), '数据结构')
   assert.equal(sanitizePathSegment('算法/实验:一'), '算法 实验 一')
+  assert.equal(resolveExperimentGroup('数据结构实验报告.pdf', ['数据结构课程']), '数据结构课程')
+  assert.equal(
+    resolveExperimentGroup('算法设计与分析实验报告.pdf', ['算法设计']),
+    '算法设计',
+  )
 })
 
 test('copies PDFs into inferred group folders without moving originals', async (t) => {
@@ -81,4 +87,43 @@ test('moves a PDF when its group is changed and removes only its metadata', asyn
   const nextWorkspace = library.removeExperiment(experiment.id)
   assert.equal(nextWorkspace.experiments.length, 0)
   assert.equal(fs.existsSync(moved.filePath), true)
+})
+
+test('matches an existing course folder before creating a new group', async (t) => {
+  const { directory, sourceDirectory, libraryDirectory, workspace, library } = createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const existingGroup = path.join(libraryDirectory, '数据结构课程')
+  fs.mkdirSync(existingGroup, { recursive: true })
+  const source = path.join(sourceDirectory, '数据结构实验报告.pdf')
+  fs.writeFileSync(source, '%PDF data structures', 'utf8')
+
+  const result = await library.importEntries([source])
+  assert.equal(result.createdGroups.length, 0)
+  assert.equal(workspace.get().experiments[0].group, '数据结构课程')
+  assert.equal(fs.existsSync(path.join(existingGroup, path.basename(source))), true)
+})
+
+test('renames a course folder and moves every tracked PDF into it', async (t) => {
+  const { directory, sourceDirectory, libraryDirectory, workspace, library } = createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const first = path.join(sourceDirectory, '数据结构实验报告1.pdf')
+  const second = path.join(sourceDirectory, '数据结构实验报告2.pdf')
+  fs.writeFileSync(first, '%PDF first', 'utf8')
+  fs.writeFileSync(second, '%PDF second', 'utf8')
+  await library.importEntries([first, second])
+
+  const result = await library.renameGroup('数据结构', '数据结构课程')
+  assert.equal(result.renamed, 2)
+  assert.equal(result.group, '数据结构课程')
+  assert.equal(result.workspace.experiments.every((item) => item.group === '数据结构课程'), true)
+  assert.equal(
+    result.workspace.experiments.every((item) =>
+      fs.existsSync(item.filePath) && item.filePath.includes(`${path.sep}数据结构课程${path.sep}`),
+    ),
+    true,
+  )
+  assert.equal(fs.existsSync(path.join(libraryDirectory, '数据结构')), false)
+  assert.equal(fs.existsSync(path.join(libraryDirectory, '数据结构课程')), true)
 })

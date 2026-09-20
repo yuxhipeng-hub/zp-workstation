@@ -22,41 +22,49 @@
         </div>
 
         <nav class="nav" aria-label="主导航">
-          <p class="nav-label">工作区</p>
-          <button class="nav-item active" type="button" data-page="overview" aria-label="总览" title="总览" aria-current="page">
-            <i data-lucide="layout-dashboard"></i><span>总览</span>
-          </button>
-          <button class="nav-item" type="button" data-page="assignments" aria-label="作业收件箱" title="作业收件箱">
-            <i data-lucide="list-todo"></i><span>作业收件箱</span>
-          </button>
-          <button class="nav-item" type="button" data-page="experiments" aria-label="实验资料" title="实验资料">
-            <i data-lucide="folder-open"></i><span>实验资料</span>
-          </button>
-          <p class="nav-label">知识</p>
-          <button class="nav-item" type="button" data-page="knowledge" aria-label="知识卡片" title="知识卡片">
-            <i data-lucide="library-big"></i><span>知识卡片</span>
-          </button>
-          <p class="nav-label">Harness</p>
-          <button class="nav-item" type="button" data-page="updates" aria-label="版本与更新" title="版本与更新">
-            <i data-lucide="refresh-cw"></i><span>版本与更新</span>
-            <span class="nav-dot hidden" id="updateDot"></span>
-          </button>
-          <button class="nav-item" type="button" data-page="plugins" aria-label="插件" title="插件">
-            <i data-lucide="plug"></i><span>插件</span>
-          </button>
-          <button class="nav-item" type="button" data-page="models" aria-label="模型与 API" title="模型与 API">
-            <i data-lucide="key-round"></i><span>模型与 API</span>
-          </button>
-          <p class="nav-label">系统</p>
-          <button class="nav-item" type="button" data-page="logs" aria-label="日志" title="日志">
-            <i data-lucide="terminal"></i><span>日志</span>
-          </button>
-          <button class="nav-item" type="button" data-page="settings" aria-label="设置" title="设置">
-            <i data-lucide="settings"></i><span>设置</span>
-          </button>
-          <button class="nav-item" type="button" data-page="about" aria-label="关于" title="关于">
-            <i data-lucide="info"></i><span>关于</span>
-          </button>
+          <div class="nav-section nav-section-learning">
+            <p class="nav-label">学习</p>
+            <button class="nav-item active" type="button" data-page="overview" aria-label="总览" title="总览" aria-current="page">
+              <i data-lucide="layout-dashboard"></i><span>总览</span>
+            </button>
+            <button class="nav-item" type="button" data-page="assignments" aria-label="作业收件箱" title="作业收件箱">
+              <i data-lucide="list-todo"></i><span>作业收件箱</span>
+            </button>
+            <button class="nav-item" type="button" data-page="experiments" aria-label="资料库" title="资料库">
+              <i data-lucide="folder-open"></i><span>资料库</span>
+            </button>
+            <button class="nav-item" type="button" data-page="knowledge" aria-label="知识卡片" title="知识卡片">
+              <i data-lucide="library-big"></i><span>卡片板块</span>
+              <span class="nav-status">待开发</span>
+            </button>
+          </div>
+
+          <div class="nav-section nav-section-runtime">
+            <p class="nav-label">运行时</p>
+            <button class="nav-item" type="button" data-page="updates" aria-label="版本与更新" title="版本与更新">
+              <i data-lucide="refresh-cw"></i><span>版本与更新</span>
+              <span class="nav-dot hidden" id="updateDot"></span>
+            </button>
+            <button class="nav-item" type="button" data-page="plugins" aria-label="插件" title="插件">
+              <i data-lucide="plug"></i><span>插件</span>
+            </button>
+            <button class="nav-item" type="button" data-page="models" aria-label="模型与 API" title="模型与 API">
+              <i data-lucide="key-round"></i><span>模型与 API</span>
+            </button>
+          </div>
+
+          <div class="nav-section nav-section-system">
+            <p class="nav-label">系统</p>
+            <button class="nav-item" type="button" data-page="logs" aria-label="日志" title="日志">
+              <i data-lucide="terminal"></i><span>日志</span>
+            </button>
+            <button class="nav-item" type="button" data-page="settings" aria-label="设置" title="设置">
+              <i data-lucide="settings"></i><span>设置</span>
+            </button>
+            <button class="nav-item" type="button" data-page="about" aria-label="关于" title="关于">
+              <i data-lucide="info"></i><span>关于</span>
+            </button>
+          </div>
         </nav>
 
         <div class="sidebar-foot">

@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('launcher', {
   deleteKnowledge: (id) => ipcRenderer.invoke('workspace:knowledge-delete', id),
   importExperiments: (entries) => ipcRenderer.invoke('workspace:experiments-import', entries),
   updateExperiment: (id, patch) => ipcRenderer.invoke('workspace:experiment-update', id, patch),
+  renameExperimentGroup: (currentGroup, nextGroup) =>
+    ipcRenderer.invoke('workspace:experiment-rename-group', currentGroup, nextGroup),
   deleteExperiment: (id) => ipcRenderer.invoke('workspace:experiment-delete', id),
   copyText: (value) => ipcRenderer.invoke('clipboard:write', value),
   chooseDshHome: () => ipcRenderer.invoke('dialog:choose-dsh-home'),

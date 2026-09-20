@@ -36,8 +36,8 @@ const state = {
 const pageMeta = {
   overview: ['控制台', '总览', '运行时状态、更新和工作台入口集中在这里。'],
   assignments: ['学习', '作业收件箱', '收集零碎任务，按截止时间和处理状态逐项清空。'],
-  experiments: ['学习', '实验资料', '拖入 PDF 实验报告，按课程自动归类并集中保存。'],
-  knowledge: ['知识', '知识卡片', '把课程结构、公式、方法和复习线索沉淀为可检索的卡片。'],
+  experiments: ['学习', '资料库', '按课程归纳文件，像 Windows 文件夹一样逐层展开。'],
+  knowledge: ['知识', '卡片板块', '卡片板块仍在开发中，已有数据会安全保留。'],
   updates: ['运行时', '版本与更新', '检查通道、安装版本并保持 Harness 处于最新状态。'],
   plugins: ['扩展', '插件', '管理 Web Profile 的第三方 npm 插件。'],
   models: ['连接', '模型与 API', '定位 DSH 的模型配置与安全凭据入口。'],
@@ -378,7 +378,7 @@ function render() {
     overview: renderOverview,
     assignments: renderAssignments,
     experiments: renderExperiments,
-    knowledge: renderKnowledge,
+    knowledge: renderKnowledgePending,
     updates: renderUpdates,
     plugins: renderPlugins,
     models: renderModels,
@@ -555,17 +555,17 @@ function renderFocusBoard() {
         <div>
           <span class="eyebrow">TODAY'S FOCUS</span>
           <h2>学习工作区</h2>
-          <p>先清空最紧急的作业，把实验 PDF 集中归档，再把处理过程中的要点沉淀成知识卡。</p>
+          <p>先清空最紧急的作业，再把课程文件集中归档。卡片板块暂时保留为待开发入口。</p>
         </div>
         <div class="button-row">
           <button class="button secondary" type="button" data-page-jump="assignments">
             <i data-lucide="list-todo"></i><span>作业收件箱</span>
           </button>
           <button class="button secondary" type="button" data-page-jump="knowledge">
-            <i data-lucide="library-big"></i><span>知识卡片</span>
+            <i data-lucide="library-big"></i><span>卡片板块</span>
           </button>
           <button class="button secondary" type="button" data-page-jump="experiments">
-            <i data-lucide="folder-open"></i><span>实验资料</span>
+            <i data-lucide="folder-open"></i><span>资料库</span>
           </button>
         </div>
       </div>
@@ -575,7 +575,7 @@ function renderFocusBoard() {
           <div><span>待处理</span><strong>${stats.open}</strong><small>包含进行中的任务</small></div>
           <div><span>进行中</span><strong>${stats.doing}</strong><small>正在处理的作业</small></div>
           <div><span>实验 PDF</span><strong>${stats.experiments}</strong><small>已归类的实验文件</small></div>
-          <div><span>知识卡</span><strong>${stats.knowledge}</strong><small>可检索的复习线索</small></div>
+          <div><span>卡片板块</span><strong class="pending-label">待开发</strong><small>已有 ${stats.knowledge} 张卡片保留</small></div>
         </div>
         <div class="focus-quick">
           <div>
@@ -586,8 +586,8 @@ function renderFocusBoard() {
             <button class="button primary" type="button" data-action="copy-focus-prompt" ${stats.open ? '' : 'disabled'}>
               <i data-lucide="notebook-pen"></i><span>拆解待办</span>
             </button>
-            <button class="button secondary" type="button" data-action="copy-knowledge-prompt" ${stats.knowledge ? '' : 'disabled'}>
-              <i data-lucide="sparkles"></i><span>整理知识</span>
+            <button class="button secondary" type="button" data-page-jump="knowledge">
+              <i data-lucide="sparkles"></i><span>查看开发计划</span>
             </button>
           </div>
         </div>
@@ -793,7 +793,7 @@ function syncExperimentMorph() {
 
 function renderExperiments() {
   if (!state.workspace) {
-    return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取实验资料</span></div>'
+    return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取资料库</span></div>'
   }
   const experiments = state.workspace.experiments || []
   const groups = experimentGroups(experiments)
@@ -803,8 +803,8 @@ function renderExperiments() {
   return `
     <section class="page-intro action-intro">
       <div>
-        <h2>让实验报告自己回到课程文件夹</h2>
-        <p>拖入 PDF 后会复制到实验资料目录，并按文件名识别“算法设计与分析实验”“面向对象程序设计实验”“计算机系统基础”等课程分组。</p>
+        <h2>资料库</h2>
+        <p>拖入 PDF 后会先匹配已有课程文件夹；没有匹配才新建。课程文件夹可以随时整体改名。</p>
       </div>
       <div class="button-row">
         <button class="button secondary" type="button" data-action="open-experiment-directory">
@@ -818,10 +818,10 @@ function renderExperiments() {
 
     <section class="experiment-metrics">
       <div><span>PDF 文件</span><strong>${experiments.length}</strong></div>
-      <div><span>课程分组</span><strong>${groups.length}</strong></div>
+      <div><span>课程文件夹</span><strong>${groups.length}</strong></div>
       <div><span>占用空间</span><strong>${formatBytes(totalSize)}</strong></div>
       <div class="experiment-path">
-        <span>存储位置</span>
+        <span>根目录</span>
         <button type="button" data-action="open-experiment-directory" title="${escapeHtml(directory)}">${escapeHtml(directory)}</button>
       </div>
     </section>
@@ -831,8 +831,8 @@ function renderExperiments() {
         <morph-icon class="experiment-morph" aria-hidden="true"></morph-icon>
       </div>
       <div class="experiment-dropzone-copy">
-        <strong>${state.experimentImporting ? '正在复制并分类…' : state.experimentDropActive ? '松手后自动归档' : '把 PDF 实验报告拖到这里'}</strong>
-        <span>${state.experimentDropActive ? '会按课程建立文件夹，原文件不会被移动。' : '支持一次拖入多个 PDF，同名文件会自动保留两个版本。'}</span>
+        <strong>${state.experimentImporting ? '正在复制并分类…' : state.experimentDropActive ? '松手后自动归档' : '把课程 PDF 拖到这里'}</strong>
+        <span>${state.experimentDropActive ? '会先检索已有分类，匹配不到时自动新建。' : '支持批量拖入；分类有误时可直接改名，PDF 会同步搬迁。'}</span>
       </div>
       <button class="button secondary" type="button" data-action="choose-experiment-pdfs" ${state.experimentImporting ? 'disabled' : ''}>
         <i data-lucide="upload"></i><span>选择文件</span>
@@ -841,30 +841,42 @@ function renderExperiments() {
 
     ${
       groups.length
-        ? `<div class="experiment-groups">
+        ? `<div class="experiment-tree" role="tree" aria-label="课程资料文件夹">
+            <div class="experiment-root-row" role="treeitem" aria-selected="false">
+              <span class="experiment-tree-chevron"><i data-lucide="chevron-down"></i></span>
+              <i data-lucide="library"></i>
+              <strong>资料库</strong>
+              <span>${experiments.length} 个文件</span>
+            </div>
             ${groups
               .map(
                 (group) => `
-                  <section class="experiment-group" data-experiment-group="${escapeHtml(group.name)}">
-                    <div class="experiment-group-head">
+                  <details class="experiment-group" data-experiment-group="${escapeHtml(group.name)}">
+                    <summary class="experiment-group-head">
+                      <span class="experiment-tree-chevron"><i data-lucide="chevron-right"></i></span>
                       <div class="experiment-folder">
                         <i data-lucide="folder"></i>
                         <span class="experiment-folder-count">${group.items.length}</span>
                       </div>
-                      <div>
+                      <div class="experiment-group-copy">
                         <h3>${escapeHtml(group.name)}</h3>
-                        <p>${group.items.length} 个 PDF · ${formatBytes(group.items.reduce((sum, item) => sum + (Number(item.size) || 0), 0))}</p>
+                        <p>${group.items.length} 个文件 · ${formatBytes(group.items.reduce((sum, item) => sum + (Number(item.size) || 0), 0))}</p>
                       </div>
-                      <button class="icon-button compact" type="button" data-action="open-experiment-group" data-group="${escapeHtml(group.name)}" title="打开这个课程文件夹">
-                        <i data-lucide="folder-open"></i>
-                      </button>
-                    </div>
-                    <div class="experiment-file-list">
+                      <span class="experiment-group-actions">
+                        <button class="icon-button compact" type="button" data-action="rename-experiment-group" data-group="${escapeHtml(group.name)}" title="重命名课程文件夹">
+                          <i data-lucide="pencil"></i>
+                        </button>
+                        <button class="icon-button compact" type="button" data-action="open-experiment-group" data-group="${escapeHtml(group.name)}" title="在资源管理器中打开课程文件夹">
+                          <i data-lucide="folder-open"></i>
+                        </button>
+                      </span>
+                    </summary>
+                    <div class="experiment-file-list" role="group">
                       ${group.items
                         .map(
                           (item) => `
-                            <article class="experiment-file" data-experiment-id="${escapeHtml(item.id)}">
-                              <span class="pdf-sigil">PDF</span>
+                            <article class="experiment-file" data-experiment-id="${escapeHtml(item.id)}" role="treeitem">
+                              <span class="pdf-sigil"><span>PDF</span></span>
                               <div class="experiment-file-copy">
                                 <strong title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</strong>
                                 <span>${escapeHtml(item.originalName)} · ${formatBytes(item.size)} · ${formatTime(item.modifiedAt || item.importedAt)}</span>
@@ -887,15 +899,39 @@ function renderExperiments() {
                         )
                         .join('')}
                     </div>
-                  </section>`,
+                  </details>`,
               )
               .join('')}
           </div>`
         : `<div class="empty-state experiment-empty">
             <i data-lucide="file-stack"></i>
-            <span>还没有实验文件。拖入第一份 PDF，工作站会替你建立课程目录。</span>
+            <span>资料库还是空的。拖入第一份 PDF，工作站会替你建立课程文件夹。</span>
           </div>`
     }
+  `
+}
+
+function renderKnowledgePending() {
+  const count = state.workspace?.knowledge?.length || 0
+  return `
+    <section class="pending-panel">
+      <div class="pending-panel-icon"><i data-lucide="library-big"></i></div>
+      <span class="eyebrow">ROADMAP</span>
+      <h2>卡片板块 · 待开发</h2>
+      <p>已完成的卡片结构、编辑逻辑和本地数据已经备份保留，当前版本先不开放入口。后续会围绕课程知识点、公式、错题和复习线索重新设计。</p>
+      <div class="pending-panel-meta">
+        <span><i data-lucide="database"></i>已有 ${count} 张卡片数据保留</span>
+        <span><i data-lucide="shield-check"></i>不会自动删除或上传</span>
+      </div>
+      <div class="button-row">
+        <button class="button primary" type="button" data-page-jump="assignments">
+          <i data-lucide="list-todo"></i><span>先处理作业</span>
+        </button>
+        <button class="button secondary" type="button" data-page-jump="experiments">
+          <i data-lucide="folder-open"></i><span>打开资料库</span>
+        </button>
+      </div>
+    </section>
   `
 }
 
@@ -1444,9 +1480,9 @@ function renderSettings() {
       </div>
 
       <div class="settings-group">
-        <div class="settings-group-head"><h2>实验资料</h2><p>拖入的 PDF 会复制到这里，并按课程自动建立文件夹。</p></div>
+        <div class="settings-group-head"><h2>资料库</h2><p>拖入的 PDF 会复制到这里，并按课程自动建立文件夹。</p></div>
         <label class="field">
-          <span>实验文件目录</span>
+          <span>资料库目录</span>
           <div class="input-with-button">
             <input type="text" data-setting="experimentDir" value="${escapeHtml(settings.experimentDir || '')}" />
             <button class="icon-button" type="button" data-action="choose-experiment-dir" title="选择目录">
@@ -1462,7 +1498,7 @@ function renderSettings() {
         <div class="path-list">
           <button type="button" data-action="open-runtime"><i data-lucide="hard-drive"></i><span><strong>托管运行时</strong><small>${escapeHtml(state.status?.runtimeDir || '')}</small></span><i data-lucide="chevron-right"></i></button>
           <button type="button" data-action="open-dsh-home"><i data-lucide="database"></i><span><strong>DSH_HOME</strong><small>${escapeHtml(state.status?.dshHome || '')}</small></span><i data-lucide="chevron-right"></i></button>
-          <button type="button" data-action="open-experiment-directory"><i data-lucide="folder-open"></i><span><strong>实验资料</strong><small>${escapeHtml(settings.experimentDir || '')}</small></span><i data-lucide="chevron-right"></i></button>
+          <button type="button" data-action="open-experiment-directory"><i data-lucide="folder-open"></i><span><strong>资料库</strong><small>${escapeHtml(settings.experimentDir || '')}</small></span><i data-lucide="chevron-right"></i></button>
           <button type="button" data-action="open-logs"><i data-lucide="file-text"></i><span><strong>日志目录</strong><small>${escapeHtml(state.status?.logsDir || '')}</small></span><i data-lucide="chevron-right"></i></button>
         </div>
       </div>
@@ -1673,7 +1709,13 @@ async function importExperimentEntries(entries) {
     if (morph) morph.morphTo(FileCheck2, 'snappy')
 
     if (result.imported) {
-      toast(`已归类 ${result.imported} 个 PDF。`, 'success')
+      const createdCount = result.createdGroups?.length || 0
+      toast(
+        createdCount
+          ? `已归档 ${result.imported} 个 PDF，并新建 ${createdCount} 个课程文件夹。`
+          : `已归档 ${result.imported} 个 PDF，已匹配现有课程文件夹。`,
+        'success',
+      )
     }
     if (result.rejected?.length) {
       const detail = result.rejected
@@ -1864,6 +1906,19 @@ async function handleAction(action, element) {
     case 'open-experiment-directory':
       await guard(() => api.openExperimentDirectory(), '打开实验资料目录失败')
       break
+    case 'rename-experiment-group': {
+      const currentGroup = element.dataset.group || ''
+      const nextGroup = window.prompt('输入新的课程文件夹名称：', currentGroup)
+      if (!nextGroup || nextGroup.trim() === currentGroup) return
+      const result = await guard(
+        () => api.renameExperimentGroup(currentGroup, nextGroup.trim()),
+        '重命名课程文件夹失败',
+      )
+      applyWorkspace(result.workspace)
+      render()
+      toast(`课程文件夹已改名为“${result.group}”，PDF 已同步搬迁。`, 'success')
+      break
+    }
     case 'open-experiment-group':
       await guard(
         () => api.openExperimentDirectory(element.dataset.group || ''),
@@ -1982,7 +2037,7 @@ async function handleAction(action, element) {
       if (selected) {
         state.settings = await api.patchSettings({ experimentDir: selected })
         render()
-        toast('实验资料目录已更新。之后的 PDF 会保存到新位置。', 'success')
+        toast('资料库目录已更新。之后的 PDF 会保存到新位置。', 'success')
       }
       break
     }
@@ -2124,6 +2179,10 @@ document.addEventListener('click', async (event) => {
 
   const action = event.target.closest('[data-action]')
   if (action && !action.disabled) {
+    if (action.closest('summary')) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
     action.disabled = true
     try {
       await handleAction(action.dataset.action, action)

@@ -12,3 +12,8 @@ coverage/
 Thumbs.db
 Desktop.ini
 build/icon-*.png
+build/*-review.*
+build/zp-*.png
+build/.chrome-review-*/
+build/ui-review-*.png
+src/renderer/icon-review.html
