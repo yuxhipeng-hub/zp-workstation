@@ -594,6 +594,9 @@ class DshManager extends EventEmitter {
     }
     await this.ensurePnpmShim()
 
+    const dshHome = this.getDshHome()
+    await fsp.mkdir(dshHome, { recursive: true })
+
     const settings = this.settings.get()
     const host = settings.host || '127.0.0.1'
     const port = Number(settings.port) || 3080
@@ -624,7 +627,7 @@ class DshManager extends EventEmitter {
     const node = this.nodeExecutablePath()
     if (!fs.existsSync(node)) throw new Error(`找不到内置 Node.js：${node}`)
     const exitPromise = this.runner.run(node, args, {
-      cwd: this.getDshHome(),
+      cwd: dshHome,
       scope: 'dsh',
       taskId,
       env: this.buildEnvironment(),

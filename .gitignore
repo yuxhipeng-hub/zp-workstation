@@ -11,3 +11,4 @@ coverage/
 *.log
 Thumbs.db
 Desktop.ini
+build/icon-*.png
