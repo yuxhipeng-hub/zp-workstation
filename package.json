@@ -1,6 +1,6 @@
 {
   "name": "zp-workstation",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "zp的工作站：Windows 上的 DeepSeek Harness 安装、更新与启动工具。",
   "main": "src/main/index.cjs",
   "author": "zp",
