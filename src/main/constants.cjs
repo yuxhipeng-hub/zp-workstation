@@ -6,7 +6,7 @@ const DEFAULT_REGISTRY = process.env.ZP_NPM_REGISTRY || 'https://registry.npmmir
 const REGISTRY_URL = `${DEFAULT_REGISTRY}/${encodeURIComponent(DSH_PACKAGE)}`
 const RELEASE_URL = 'https://github.com/deepseek-ai/deepseek-harness/releases'
 const DOCS_URL = 'https://deepseek-harness.github.io/deepseek-harness/'
-const APP_NAME = 'zp的工作站'
+const APP_NAME = 'ZP Workbench'
 const APP_ID = 'com.zp.workstation'
 const THEME_VALUES = new Set(['system', 'light', 'dark'])
 
@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS = {
   channel: 'latest',
   npmRegistry: DEFAULT_REGISTRY,
   dshHome: path.join(os.homedir(), '.dsh'),
+  experimentDir: path.join(os.homedir(), 'ZP Workbench', '实验资料'),
   host: '127.0.0.1',
   port: 3080,
   openMode: 'embedded',

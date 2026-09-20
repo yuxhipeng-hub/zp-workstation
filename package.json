@@ -1,7 +1,7 @@
 {
   "name": "zp-workstation",
   "version": "0.2.0",
-  "description": "zp的工作站：Windows 上的 DeepSeek Harness 安装、更新与启动工具。",
+  "description": "ZP Workbench：面向本地学习与知识整理的 DeepSeek Harness 工作站。",
   "main": "src/main/index.cjs",
   "author": "zp",
   "license": "MIT",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@pnpm/exe.win32-x64": "12.4.2",
+    "morphicons": "1.7.1",
     "npm": "12.0.2",
     "semver": "7.8.5"
   },
@@ -35,11 +36,11 @@
     "provider": "github",
     "owner": "",
     "repo": "",
-    "assetPattern": "zp-Workstation-Setup-${version}-x64.exe"
+    "assetPattern": "ZP-Workbench-Setup-${version}-x64.exe"
   },
   "build": {
     "appId": "com.zp.workstation",
-    "productName": "zp的工作站",
+    "productName": "ZP Workbench",
     "copyright": "Copyright © 2026 zp",
     "directories": {
       "output": "release",
@@ -88,7 +89,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "zp-Workstation-Setup-${version}-${arch}.${ext}",
+      "artifactName": "ZP-Workbench-Setup-${version}-${arch}.${ext}",
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
@@ -98,7 +99,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "zp的工作站",
+      "shortcutName": "ZP Workbench",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",

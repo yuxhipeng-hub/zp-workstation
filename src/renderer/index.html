@@ -7,7 +7,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>zp的工作站</title>
+    <title>ZP Workbench</title>
   </head>
   <body data-theme="dark">
     <a class="skip-link" href="#view">跳到主要内容</a>
@@ -16,8 +16,8 @@
         <div class="brand">
           <div class="brand-wordmark" aria-hidden="true">zp</div>
           <div class="brand-copy">
-            <strong>zp的工作站</strong>
-            <span>LOCAL COMMAND DECK</span>
+            <strong>ZP Workbench</strong>
+            <span>LOCAL WORKSPACE</span>
           </div>
         </div>
 
@@ -26,11 +26,21 @@
           <button class="nav-item active" type="button" data-page="overview" aria-label="总览" title="总览" aria-current="page">
             <i data-lucide="layout-dashboard"></i><span>总览</span>
           </button>
+          <button class="nav-item" type="button" data-page="assignments" aria-label="作业收件箱" title="作业收件箱">
+            <i data-lucide="list-todo"></i><span>作业收件箱</span>
+          </button>
+          <button class="nav-item" type="button" data-page="experiments" aria-label="实验资料" title="实验资料">
+            <i data-lucide="folder-open"></i><span>实验资料</span>
+          </button>
+          <p class="nav-label">知识</p>
+          <button class="nav-item" type="button" data-page="knowledge" aria-label="知识卡片" title="知识卡片">
+            <i data-lucide="library-big"></i><span>知识卡片</span>
+          </button>
+          <p class="nav-label">Harness</p>
           <button class="nav-item" type="button" data-page="updates" aria-label="版本与更新" title="版本与更新">
             <i data-lucide="refresh-cw"></i><span>版本与更新</span>
             <span class="nav-dot hidden" id="updateDot"></span>
           </button>
-          <p class="nav-label">扩展</p>
           <button class="nav-item" type="button" data-page="plugins" aria-label="插件" title="插件">
             <i data-lucide="plug"></i><span>插件</span>
           </button>
@@ -84,6 +94,9 @@
             <span class="local-time" id="localTime">--:--</span>
             <button class="icon-button" type="button" data-action="toggle-theme" title="切换主题" aria-label="切换主题">
               <i data-lucide="sun-moon"></i>
+            </button>
+            <button class="button secondary" type="button" data-page-jump="assignments">
+              <i data-lucide="notebook-pen"></i><span>处理作业</span>
             </button>
             <button class="button secondary" type="button" data-action="check-update">
               <i data-lucide="refresh-cw"></i><span>检查更新</span>

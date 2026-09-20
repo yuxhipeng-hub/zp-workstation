@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 const allowedEvents = new Set([
   'log:entry',
@@ -22,7 +22,24 @@ contextBridge.exposeInMainWorld('launcher', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   patchSettings: (patch) => ipcRenderer.invoke('settings:patch', patch),
   getModelConfig: () => ipcRenderer.invoke('dsh:model-config'),
+  getWorkspace: () => ipcRenderer.invoke('workspace:get'),
+  createAssignment: (input) => ipcRenderer.invoke('workspace:assignment-create', input),
+  updateAssignment: (id, patch) => ipcRenderer.invoke('workspace:assignment-update', id, patch),
+  deleteAssignment: (id) => ipcRenderer.invoke('workspace:assignment-delete', id),
+  createKnowledge: (input) => ipcRenderer.invoke('workspace:knowledge-create', input),
+  updateKnowledge: (id, patch) => ipcRenderer.invoke('workspace:knowledge-update', id, patch),
+  deleteKnowledge: (id) => ipcRenderer.invoke('workspace:knowledge-delete', id),
+  importExperiments: (entries) => ipcRenderer.invoke('workspace:experiments-import', entries),
+  updateExperiment: (id, patch) => ipcRenderer.invoke('workspace:experiment-update', id, patch),
+  deleteExperiment: (id) => ipcRenderer.invoke('workspace:experiment-delete', id),
+  copyText: (value) => ipcRenderer.invoke('clipboard:write', value),
   chooseDshHome: () => ipcRenderer.invoke('dialog:choose-dsh-home'),
+  chooseExperimentDir: () => ipcRenderer.invoke('dialog:choose-experiment-dir'),
+  chooseExperimentPdfs: () => ipcRenderer.invoke('dialog:choose-experiment-pdfs'),
+  openExperimentFile: (id) => ipcRenderer.invoke('experiments:open-file', id),
+  revealExperimentFile: (id) => ipcRenderer.invoke('experiments:reveal-file', id),
+  openExperimentDirectory: (group) => ipcRenderer.invoke('experiments:open-directory', group),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   openPath: (target) => ipcRenderer.invoke('path:open', target),
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   clearLogs: () => ipcRenderer.invoke('logs:clear'),

@@ -2,6 +2,8 @@ const path = require('node:path')
 const { app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, shell } = require('electron')
 const { APP_ID, APP_NAME } = require('./constants.cjs')
 const { SettingsStore } = require('./settings-store.cjs')
+const { WorkspaceStore } = require('./workspace-store.cjs')
+const { ExperimentLibrary } = require('./experiment-library.cjs')
 const { Logger } = require('./logger.cjs')
 const { DshManager } = require('./dsh-manager.cjs')
 const { LauncherUpdater } = require('./launcher-updater.cjs')
@@ -25,6 +27,8 @@ let workbenchWindow = null
 let tray = null
 let quitting = false
 let settings
+let workspace
+let experimentLibrary
 let logger
 let dshManager
 let launcherUpdater
@@ -153,6 +157,8 @@ function createTray() {
 async function bootstrap() {
   const userData = app.getPath('userData')
   settings = new SettingsStore(userData)
+  workspace = new WorkspaceStore(userData)
+  experimentLibrary = new ExperimentLibrary({ settings, workspace })
   nativeTheme.themeSource = settings.get().theme || 'system'
   logger = new Logger(userData)
   dshManager = new DshManager({ app, settings, logger })
@@ -171,6 +177,8 @@ async function bootstrap() {
   registerIpc({
     app,
     settings,
+    workspace,
+    experimentLibrary,
     logger,
     dshManager,
     launcherUpdater,
