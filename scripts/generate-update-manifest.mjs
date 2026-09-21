@@ -69,13 +69,7 @@ const installer = fs.readFileSync(installerPath)
 const sha256 = createHash('sha256').update(installer).digest('hex')
 const tag = `v${version}`
 const releaseUrl = `https://github.com/${owner}/${repo}/releases/download/${tag}/${encodeURIComponent(assetName)}`
-const urls = [
-  {
-    id: 'github-direct',
-    label: 'GitHub 直连',
-    url: releaseUrl,
-  },
-]
+const urls = []
 
 for (const [index, mirrorValue] of (releaseConfig.downloadMirrors || []).entries()) {
   const mirror =
@@ -87,6 +81,12 @@ for (const [index, mirrorValue] of (releaseConfig.downloadMirrors || []).entries
     url: joinSourceUrl(mirror.prefix, releaseUrl),
   })
 }
+
+urls.push({
+  id: 'github-direct',
+  label: 'GitHub 直连',
+  url: releaseUrl,
+})
 
 const outputPath = path.resolve(
   rootDir,

@@ -344,7 +344,7 @@ class LauncherUpdater extends EventEmitter {
         url: joinSourceUrl(item.prefix, direct),
       })
     }
-    const all = [...directUrls, ...mirrorUrls]
+    const all = [...mirrorUrls, ...directUrls]
       .map((item, index) => normalizeDownloadUrl(item, index, '下载线路'))
       .filter((item) => item.url)
     return all.filter(

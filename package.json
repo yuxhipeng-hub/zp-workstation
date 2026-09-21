@@ -53,6 +53,11 @@
         "id": "manifest-gh-proxy",
         "label": "国内加速更新清单",
         "url": "https://gh-proxy.com/https://github.com/yuxhipeng-hub/zp-workstation/releases/latest/download/latest.json"
+      },
+      {
+        "id": "manifest-ghfast",
+        "label": "国内加速更新清单备用",
+        "url": "https://ghfast.top/https://github.com/yuxhipeng-hub/zp-workstation/releases/latest/download/latest.json"
       }
     ],
     "apiMirrors": [
@@ -67,6 +72,11 @@
         "id": "github-download-gh-proxy",
         "label": "国内 GitHub 下载加速",
         "prefix": "https://gh-proxy.com/"
+      },
+      {
+        "id": "github-download-ghfast",
+        "label": "国内 GitHub 下载加速备用",
+        "prefix": "https://ghfast.top/"
       }
     ]
   },

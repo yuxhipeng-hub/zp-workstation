@@ -237,6 +237,42 @@ test('launcher updater switches download mirrors and verifies SHA-256', async (t
   assert.equal(requests.length, 2)
 })
 
+test('launcher updater prioritizes configured download mirrors', (t) => {
+  const { updater, tempDir } = createUpdater({
+    releaseConfig: {
+      provider: 'github',
+      owner: 'yuxhipeng-hub',
+      repo: 'zp-workstation',
+      assetPattern: ASSET_PATTERN,
+      downloadMirrors: [
+        { id: 'gh-proxy', label: '主加速', prefix: 'https://gh-proxy.com/' },
+        { id: 'ghfast', label: '备用加速', prefix: 'https://ghfast.top/' },
+      ],
+    },
+  })
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }))
+
+  const urls = updater.buildDownloadUrls({
+    urls: [
+      {
+        id: 'github-direct',
+        label: 'GitHub 直连',
+        url: 'https://github.com/yuxhipeng-hub/zp-workstation/releases/download/v0.3.2/setup.exe',
+      },
+      {
+        id: 'gh-proxy-existing',
+        label: '清单中的主加速',
+        url: 'https://gh-proxy.com/https://github.com/yuxhipeng-hub/zp-workstation/releases/download/v0.3.2/setup.exe',
+      },
+    ],
+  })
+
+  assert.deepEqual(
+    urls.map((item) => item.id),
+    ['gh-proxy', 'ghfast', 'github-direct'],
+  )
+})
+
 test('launcher updater rejects a bad checksum and tries the next route', async (t) => {
   const expectedPayload = Buffer.from('correct-installer')
   const tamperedPayload = Buffer.from('tampered-installer')
