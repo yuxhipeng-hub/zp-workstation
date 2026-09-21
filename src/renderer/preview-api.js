@@ -964,9 +964,21 @@ export function createPreviewLauncherApi() {
       return clone(state.status)
     },
     async install() {
-      emit('task:update', { visible: true, title: '安装 Harness', detail: '浏览器预览模式' })
+      emit('task:update', {
+        taskId: 'preview-install',
+        state: 'running',
+        label: '安装 Harness',
+        detail: '浏览器预览模式',
+        progress: { indeterminate: true },
+      })
       setTimeout(
-        () => emit('task:update', { visible: false, title: '安装完成', detail: '预览数据已更新' }),
+        () =>
+          emit('task:update', {
+            taskId: 'preview-install',
+            state: 'success',
+            label: '安装完成',
+            detail: '预览数据已更新',
+          }),
         900,
       )
       return clone(state.status)

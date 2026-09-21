@@ -1,6 +1,6 @@
 {
   "name": "zp-workstation",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "ZP Workbench：面向本地学习与知识整理的 DeepSeek Harness 工作站。",
   "main": "src/main/index.cjs",
   "author": "zp",

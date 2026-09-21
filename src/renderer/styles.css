@@ -718,7 +718,10 @@ body[data-theme="light"] .nav-item.active {
   font-size: 10px;
 }
 
-.launcher-update-progress {
+.launcher-update-progress,
+.about-update-progress,
+.task-progress {
+  position: relative;
   height: 2px;
   margin-top: 8px;
   overflow: hidden;
@@ -726,7 +729,9 @@ body[data-theme="light"] .nav-item.active {
   background: var(--line);
 }
 
-.launcher-update-progress span {
+.launcher-update-progress span,
+.about-update-progress span,
+.task-progress span {
   display: block;
   width: 100%;
   height: 100%;
@@ -735,6 +740,14 @@ body[data-theme="light"] .nav-item.active {
   transform: scaleX(0);
   transform-origin: 0 50%;
   transition: transform 120ms linear;
+}
+
+.launcher-update-progress.is-indeterminate span,
+.about-update-progress.is-indeterminate span,
+.task-progress.is-indeterminate span {
+  width: 34%;
+  transform: translateX(-120%);
+  animation: progress-indeterminate 1.05s var(--ease-out) infinite;
 }
 
 .topbar-actions,
@@ -1312,6 +1325,19 @@ body[data-theme="light"] .nav-item.active {
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.about-update-progress {
+  height: 3px;
+  margin: -2px 0 18px;
+}
+
+.launcher-update-section {
+  scroll-margin-top: 18px;
+}
+
+.launcher-update-section.is-targeted {
+  animation: update-section-target 900ms var(--ease-out);
 }
 
 .run-pill {
@@ -4341,6 +4367,11 @@ input::placeholder {
   font-size: 9px;
 }
 
+.task-copy .task-progress {
+  width: 100%;
+  margin-top: 3px;
+}
+
 .toast-stack {
   position: fixed;
   top: 106px;
@@ -4418,6 +4449,27 @@ input::placeholder {
   from {
     opacity: 0;
     transform: translate3d(0, -5px, 0);
+  }
+}
+
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(310%);
+  }
+}
+
+@keyframes update-section-target {
+  0%,
+  100% {
+    border-color: var(--line);
+    box-shadow: var(--shadow-sm);
+  }
+  32% {
+    border-color: var(--text);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 8%, transparent), var(--shadow-sm);
   }
 }
 

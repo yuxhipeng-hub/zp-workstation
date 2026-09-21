@@ -26,6 +26,7 @@ const state = {
   modelConfig: null,
   workspace: null,
   activeTask: null,
+  dismissedTaskId: null,
   pluginBusy: false,
   assignmentFilter: 'open',
   assignmentComposerOpen: false,
@@ -1603,6 +1604,7 @@ async function refreshStatus({ check = false } = {}) {
 function updateChrome() {
   const status = state.status
   syncLauncherUpdateBanner()
+  syncLauncherUpdateAbout()
   const dot = document.querySelector('#sideStatusDot')
   const text = document.querySelector('#sideStatusText')
   const version = document.querySelector('#sideVersionText')
@@ -1654,6 +1656,35 @@ function formatLauncherProgress(progress) {
   return `已下载 ${received}${source}`
 }
 
+const LAUNCHER_DOWNLOAD_TASK_ID = 'launcher-download'
+
+function launcherProgressView(progress) {
+  const phase = progress?.phase || ''
+  const active = ['starting', 'downloading', 'retrying', 'opening'].includes(phase)
+  const indeterminate =
+    active && (['starting', 'retrying'].includes(phase) || !Number.isFinite(progress?.percent))
+  const percent = Number.isFinite(progress?.percent)
+    ? Math.max(0, Math.min(100, progress.percent))
+    : phase === 'opening'
+      ? 100
+      : 0
+  return { active, indeterminate, percent }
+}
+
+function applyProgressElement(node, bar, view, label = '下载进度') {
+  if (!node || !bar) return
+  node.classList.toggle('hidden', !view.active)
+  node.classList.toggle('is-indeterminate', view.indeterminate)
+  node.setAttribute('aria-label', label)
+  if (view.indeterminate) {
+    bar.style.removeProperty('transform')
+    node.removeAttribute('aria-valuenow')
+    return
+  }
+  bar.style.transform = `scaleX(${view.percent / 100})`
+  node.setAttribute('aria-valuenow', String(Math.round(view.percent)))
+}
+
 function syncLauncherUpdateBanner() {
   const banner = document.querySelector('#launcherUpdateBanner')
   if (!banner) return
@@ -1693,13 +1724,12 @@ function syncLauncherUpdateBanner() {
   if (titleNode) titleNode.textContent = title
   if (detailNode) detailNode.textContent = detail
   if (versionNode) versionNode.textContent = version
-  if (progressNode) {
-    progressNode.classList.toggle('hidden', !downloading && !opening)
-  }
-  if (progressBar) {
-    const percent = Number.isFinite(progress?.percent) ? progress.percent : 0
-    progressBar.style.transform = `scaleX(${Math.max(0, Math.min(1, percent / 100))})`
-  }
+  applyProgressElement(
+    progressNode,
+    progressBar,
+    launcherProgressView(progress),
+    '启动器更新下载进度',
+  )
   if (downloadButton) {
     downloadButton.disabled = !update.asset || downloading || opening
     if (downloadLabel) {
@@ -1711,6 +1741,46 @@ function syncLauncherUpdateBanner() {
             ? '立即更新'
             : '暂无安装包'
     }
+  }
+}
+
+function syncLauncherUpdateAbout() {
+  if (state.page !== 'about') return
+  const launcher = state.launcherUpdate
+  const progress = state.launcherUpdateProgress
+  const progressNode = document.querySelector('#launcherAboutProgress')
+  const progressBar = document.querySelector('#launcherAboutProgressBar')
+  const progressDetail = document.querySelector('#launcherAboutProgressDetail')
+  const downloadButton = document.querySelector('#launcherAboutDownloadButton')
+  const downloadLabel = document.querySelector('#launcherAboutDownloadLabel')
+  const downloading = Boolean(
+    launcher?.downloading ||
+      ['starting', 'downloading', 'retrying'].includes(progress?.phase),
+  )
+  const opening = progress?.phase === 'opening'
+
+  applyProgressElement(
+    progressNode,
+    progressBar,
+    launcherProgressView(progress),
+    '启动器更新下载进度',
+  )
+  if (progressDetail) {
+    progressDetail.textContent = progress
+      ? formatLauncherProgress(progress)
+      : launcher?.message || ''
+  }
+  if (downloadButton) {
+    downloadButton.disabled = !launcher?.updateAvailable || !launcher?.asset || downloading || opening
+  }
+  if (downloadLabel) {
+    downloadLabel.textContent = opening
+      ? '正在启动安装程序'
+      : downloading
+        ? `下载中 ${Number.isFinite(progress?.percent) ? progress.percent : '--'}%`
+        : launcher?.asset
+          ? '下载并安装'
+          : '暂无可下载安装包'
   }
 }
 
@@ -3492,6 +3562,7 @@ function renderAbout() {
   const launcher = state.launcherUpdate
   const configured = launcher?.supported
   const progress = state.launcherUpdateProgress
+  const progressView = launcherProgressView(progress)
   const downloading = Boolean(
     launcher?.downloading ||
       ['starting', 'downloading', 'retrying'].includes(progress?.phase),
@@ -3539,7 +3610,7 @@ function renderAbout() {
     </section>
 
     <div class="dashboard-columns">
-      <section class="section">
+      <section class="section launcher-update-section" id="launcherUpdateSection">
         <div class="section-heading"><div><h2>工作站更新</h2><p>${configured ? '从配置的发布仓库检查安装包。' : escapeHtml(launcher?.message || '尚未配置更新源。')}</p></div></div>
         <div class="update-source">
           <div><span>当前版本</span><strong>${escapeHtml(state.status?.launcherVersion || '--')}</strong></div>
@@ -3558,15 +3629,18 @@ function renderAbout() {
               </div>`
             : ''
         }
+        <div class="about-update-progress ${progressView.active ? '' : 'hidden'} ${progressView.indeterminate ? 'is-indeterminate' : ''}" id="launcherAboutProgress" role="progressbar" aria-label="启动器更新下载进度" aria-valuemin="0" aria-valuemax="100" ${progressView.indeterminate ? '' : `aria-valuenow="${Math.round(progressView.percent)}"`}>
+          <span id="launcherAboutProgressBar" ${progressView.indeterminate ? '' : `style="transform:scaleX(${progressView.percent / 100})"`}></span>
+        </div>
         <div class="button-row">
           <button class="button secondary" type="button" data-action="check-launcher" ${configured && !launcher?.checking ? '' : 'disabled'}>
             <i data-lucide="refresh-cw"></i><span>检查启动器更新</span>
           </button>
-          <button class="button primary" type="button" data-action="download-launcher" ${launcher?.updateAvailable && launcher?.asset && !downloading && !opening ? '' : 'disabled'}>
-            <i data-lucide="download"></i><span>下载并安装</span>
+          <button class="button primary" id="launcherAboutDownloadButton" type="button" data-action="download-launcher" ${launcher?.updateAvailable && launcher?.asset && !downloading && !opening ? '' : 'disabled'}>
+            <i data-lucide="download"></i><span id="launcherAboutDownloadLabel">${downloadLabel}</span>
           </button>
         </div>
-        <p class="setting-hint">${escapeHtml(progress ? formatLauncherProgress(progress) : launcher?.message || '')}</p>
+        <p class="setting-hint" id="launcherAboutProgressDetail">${escapeHtml(progress ? formatLauncherProgress(progress) : launcher?.message || '')}</p>
         ${releaseNotes ? `<p class="setting-hint">更新摘要：${escapeHtml(releaseNotes)}</p>` : ''}
       </section>
 
@@ -3593,24 +3667,78 @@ function scrollLogs() {
 }
 
 function showTask(payload) {
-  state.activeTask = payload
+  const normalized = {
+    ...payload,
+    state: payload?.state || (payload?.visible === false ? 'success' : 'running'),
+    label: payload?.label || payload?.title || '正在执行',
+    detail: payload?.detail || '',
+    taskId:
+      payload?.taskId ||
+      payload?.id ||
+      `${payload?.label || payload?.title || 'task'}:${payload?.detail || ''}`,
+  }
+  state.activeTask = normalized
+  if (normalized.taskId === state.dismissedTaskId) {
+    if (normalized.state === 'error') {
+      toast(normalized.detail || normalized.label, 'error', 7000)
+    }
+    return
+  }
+  if (normalized.taskId !== state.dismissedTaskId) state.dismissedTaskId = null
+
   const strip = document.querySelector('#taskStrip')
   const title = document.querySelector('#taskTitle')
   const detail = document.querySelector('#taskDetail')
+  const progressNode = document.querySelector('#taskProgress')
+  const progressBar = document.querySelector('#taskProgressBar')
   strip.classList.remove('hidden')
-  strip.dataset.state = payload.state
+  strip.dataset.state = normalized.state
+  strip.dataset.taskId = normalized.taskId
   const taskIcon =
-    payload.state === 'success' ? 'circle-check' : payload.state === 'error' ? 'circle-alert' : 'loader'
+    normalized.state === 'success'
+      ? 'circle-check'
+      : normalized.state === 'error'
+        ? 'circle-alert'
+        : 'loader'
   const spinner = strip.querySelector('.task-spinner')
-  if (spinner) spinner.innerHTML = `<i data-lucide="${taskIcon}"></i>`
-  title.textContent = payload.label
-  detail.textContent = payload.detail || ''
-  refreshIcons()
-  if (payload.state === 'success') {
-    toast(payload.detail ? `${payload.label}：${payload.detail}` : payload.label, 'success')
+  const iconKey = `${normalized.state}:${taskIcon}`
+  if (spinner && strip.dataset.iconKey !== iconKey) {
+    spinner.innerHTML = `<i data-lucide="${taskIcon}"></i>`
+    strip.dataset.iconKey = iconKey
+    refreshIcons()
   }
-  if (payload.state === 'error') {
-    toast(payload.detail || payload.label, 'error', 7000)
+  title.textContent = normalized.label
+  detail.textContent = normalized.detail
+
+  const taskProgress = normalized.progress || {}
+  const progressPercent = Number.isFinite(taskProgress.percent)
+    ? Math.max(0, Math.min(100, taskProgress.percent))
+    : null
+  const running = normalized.state === 'running'
+  const indeterminate =
+    running &&
+    (taskProgress.indeterminate === true ||
+      ['starting', 'retrying'].includes(taskProgress.phase) ||
+      progressPercent === null)
+  applyProgressElement(
+    progressNode,
+    progressBar,
+    {
+      active: running,
+      indeterminate,
+      percent: progressPercent ?? 0,
+    },
+    normalized.label,
+  )
+
+  if (normalized.state === 'success') {
+    toast(
+      normalized.detail ? `${normalized.label}：${normalized.detail}` : normalized.label,
+      'success',
+    )
+  }
+  if (normalized.state === 'error') {
+    toast(normalized.detail || normalized.label, 'error', 7000)
   }
 }
 
@@ -4619,7 +4747,8 @@ async function handleAction(action, element) {
       break
     }
     case 'hide-task':
-      document.querySelector('#taskStrip').classList.add('hidden')
+      state.dismissedTaskId = state.activeTask?.taskId || null
+      document.querySelector('#taskStrip')?.classList.add('hidden')
       break
     case 'check-launcher':
       state.launcherUpdate = await api.checkLauncherUpdate()
@@ -4627,8 +4756,19 @@ async function handleAction(action, element) {
       if (state.page === 'about') render()
       break
     case 'launcher-update-details':
-      state.page = 'about'
-      render({ scroll: 'top' })
+      if (state.page !== 'about') {
+        state.page = 'about'
+        render()
+      }
+      requestAnimationFrame(() => {
+        const section = document.querySelector('#launcherUpdateSection')
+        if (!section) return
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        section.classList.remove('is-targeted')
+        void section.offsetWidth
+        section.classList.add('is-targeted')
+        setTimeout(() => section.classList.remove('is-targeted'), 900)
+      })
       break
     case 'dismiss-launcher-update':
       state.launcherUpdateDismissedVersion = state.launcherUpdate?.latestVersion || null
@@ -4684,6 +4824,7 @@ async function handleAction(action, element) {
       break
     }
     case 'download-launcher':
+      state.dismissedTaskId = null
       await downloadLauncherUpdate()
       break
     default:
@@ -5019,39 +5160,53 @@ api.on('launcher:update-state', (update) => {
 })
 api.on('launcher:download-progress', (progress) => {
   state.launcherUpdateProgress = progress
+  const taskProgress = {
+    ...progress,
+    taskId: LAUNCHER_DOWNLOAD_TASK_ID,
+    progress: {
+      phase: progress.phase,
+      received: progress.received,
+      total: progress.total,
+      percent: progress.percent,
+    },
+  }
   if (progress.phase === 'error') {
     showTask({
+      ...taskProgress,
       state: 'error',
       label: '启动器更新下载失败',
       detail: progress.error || '请检查网络后重试。',
     })
   } else if (progress.phase === 'opening') {
     showTask({
+      ...taskProgress,
       state: 'success',
       label: '安装程序已启动',
       detail: 'ZP Workbench 即将退出，请在安装向导中完成更新。',
     })
   } else if (progress.phase === 'completed') {
     showTask({
+      ...taskProgress,
       state: 'success',
       label: '更新包下载完成',
       detail: formatLauncherProgress(progress),
     })
   } else if (progress.phase === 'retrying') {
     showTask({
+      ...taskProgress,
       state: 'running',
       label: '正在切换更新下载线路',
       detail: formatLauncherProgress(progress),
     })
   } else {
     showTask({
+      ...taskProgress,
       state: 'running',
       label: '正在下载 ZP Workbench 更新',
       detail: formatLauncherProgress(progress),
     })
   }
   updateChrome()
-  if (state.page === 'about') render()
 })
 api.on('task:update', showTask)
 api.on('update:state', (update) => {
