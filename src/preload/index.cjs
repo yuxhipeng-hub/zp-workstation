@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('launcher', {
   deleteScheduleCourse: (id) => ipcRenderer.invoke('schedule:course-delete', id),
   clearSchedule: () => ipcRenderer.invoke('schedule:clear'),
   copyText: (value) => ipcRenderer.invoke('clipboard:write', value),
+  stageDroppedFile: (payload) => ipcRenderer.invoke('file:stage-drop', payload),
   chooseDshHome: () => ipcRenderer.invoke('dialog:choose-dsh-home'),
   chooseExperimentDir: () => ipcRenderer.invoke('dialog:choose-experiment-dir'),
   chooseExperimentFiles: () => ipcRenderer.invoke('dialog:choose-experiment-files'),

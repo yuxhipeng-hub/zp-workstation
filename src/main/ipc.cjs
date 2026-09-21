@@ -1,4 +1,6 @@
 const fsp = require('node:fs/promises')
+const path = require('node:path')
+const { randomUUID } = require('node:crypto')
 const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = require('electron')
 const { CHANNELS, DOCS_URL, RELEASE_URL, THEME_VALUES } = require('./constants.cjs')
 
@@ -169,6 +171,24 @@ function registerIpc({
     clipboard.writeText(String(value ?? ''))
     return true
   })
+  ipcMain.handle('file:stage-drop', async (_event, payload = {}) => {
+    const originalName = path.basename(String(payload.name || '').trim())
+    const safeName =
+      originalName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 160) ||
+      'dropped-file'
+    const data = payload.data
+    if (!data) throw new Error('拖入的文件没有可读取的内容。')
+    const buffer = Buffer.from(data)
+    if (!buffer.length) throw new Error('拖入的文件内容为空。')
+    if (buffer.length > 200 * 1024 * 1024) {
+      throw new Error('拖入的单个文件超过 200 MB，请先保存到本地后再导入。')
+    }
+    const directory = path.join(app.getPath('temp'), 'ZP-Workbench-Drops', randomUUID())
+    const filePath = path.join(directory, safeName)
+    await fsp.mkdir(directory, { recursive: true })
+    await fsp.writeFile(filePath, buffer)
+    return { path: filePath, name: safeName, size: buffer.length }
+  })
 
   ipcMain.handle('settings:get', () => settings.get())
   ipcMain.handle('settings:patch', (_event, patch) => {
@@ -331,6 +351,7 @@ function registerIpc({
             'xlsx',
             'xls',
             'xlsm',
+            'et',
             'csv',
             'tsv',
             'ics',

@@ -9,6 +9,7 @@ const WORKBOOK_EXTENSIONS = new Set([
   '.xlsx',
   '.xls',
   '.xlsm',
+  '.et',
   '.csv',
   '.tsv',
   '.txt',
@@ -250,9 +251,20 @@ function parseCourseCell(value) {
   const cleanedLines = []
 
   for (const line of lines) {
-    const labeledTeacher = line.match(/^(?:任课)?(?:教师|老师)\s*[:：]\s*(.+)$/)
+    const labeledTeacher = line.match(
+      /(?:^|[/\s])(?:任课)?(?:教师|老师)\s*[:：]\s*(.+)$/,
+    )
     if (labeledTeacher) {
       teacher ||= cleanText(labeledTeacher[1], 40)
+      const locationPrefix = cleanText(line.slice(0, labeledTeacher.index), 80)
+        .replace(/[\/\s]+$/g, '')
+      if (
+        locationPrefix &&
+        !/节|周|课程|科目/.test(locationPrefix) &&
+        !/^(?:上午|下午|晚上)$/.test(locationPrefix)
+      ) {
+        location = `${location}${locationPrefix}`
+      }
       continue
     }
     const namedTeacher = line.match(/^([\p{Script=Han}·]{1,6})老师$/u)
@@ -260,7 +272,9 @@ function parseCourseCell(value) {
       teacher ||= cleanText(namedTeacher[0], 40)
       continue
     }
-    const labeledLocation = line.match(/^(?:上课)?(?:地点|教室|场地)\s*[:：]\s*(.+)$/)
+    const labeledLocation = line.match(
+      /(?:^|[/\s])(?:上课)?(?:地点|教室|场地)\s*[:：]\s*(.+)$/,
+    )
     if (labeledLocation) {
       location ||= cleanText(labeledLocation[1], 80)
       continue
@@ -268,14 +282,19 @@ function parseCourseCell(value) {
     const stripped = stripCourseMetadata(line)
     if (!stripped) continue
     if (looksLikeLocation(stripped)) {
-      location ||= stripped
+      if (!location) {
+        location = stripped
+      } else if (!location.includes(stripped)) {
+        location += stripped
+      }
       continue
     }
     cleanedLines.push(stripped)
   }
 
   const nameIndex = cleanedLines.findIndex((line) => !looksLikeLocation(line))
-  let name = nameIndex >= 0 ? cleanedLines[nameIndex] : ''
+  const nameParts = []
+  if (nameIndex >= 0) nameParts.push(cleanedLines[nameIndex])
   for (let index = 0; index < cleanedLines.length; index += 1) {
     if (index === nameIndex) continue
     const line = cleanedLines[index]
@@ -283,15 +302,26 @@ function parseCourseCell(value) {
       location ||= line
       continue
     }
-    if (looksLikeTeacher(line)) teacher ||= line
+    if (looksLikeTeacher(line)) {
+      teacher ||= line
+      continue
+    }
+    if (index > nameIndex) nameParts.push(line)
   }
+  let name = nameParts.join('')
   if (!name) {
     const beforeMetadata = stripCourseMetadata(
       raw.replace(/(?:第\s*)?\d{1,2}(?:[-—–~～至]\d{1,2})?\s*节.*$/s, ''),
     )
     name = beforeMetadata.split(/\s{2,}/)[0] || beforeMetadata
   }
-  name = cleanText(name.replace(/^(?:课程名称|课程|科目)\s*[:：]?\s*/, ''), 100)
+  name = cleanText(
+    name
+      .replace(/^(?:课程名称|课程|科目)\s*[:：]?\s*/, '')
+      .replace(/[★☆◆■〇]/g, '')
+      .trim(),
+    100,
+  )
   if (!name || /^(?:星期|周|礼拜)[一二三四五六日天\d]$/.test(name)) return null
 
   return {
@@ -708,6 +738,131 @@ function parseTextSchedule(value) {
   return parseTextLines(text)
 }
 
+function isPdfCourseMetadata(value) {
+  const text = cleanText(value, 260)
+  return (
+    /^(?:[（(]?\s*(?:第\s*)?\d{1,2}\s*(?:[-—–~～至]\s*\d{1,2})?\s*(?:节|周)|[（(]?\s*\d{1,2}\s*[-—–~～至]\s*\d{1,2}\s*节)/.test(
+      text,
+    ) ||
+    /(?:\/场地|\/地点|\/教室|\/教师|\/老师|(?:场地|地点|教室|教师|老师)\s*[:：])/.test(
+      text,
+    )
+  )
+}
+
+function pdfWeekdayColumns(page) {
+  const layout = page?.layout
+  const items = Array.isArray(layout?.items) ? layout.items : []
+  if (!items.length) return null
+  const height = Number(layout.height) || 0
+  const headerLimit = height ? height * 0.45 : Number.POSITIVE_INFINITY
+  const byWeekday = new Map()
+  for (const item of items) {
+    const text = cleanText(item.text, 24)
+    const weekday = parseWeekday(text)
+    if (!weekday || item.y > headerLimit || compactText(text).length > 8) continue
+    const current = byWeekday.get(weekday)
+    if (!current || item.y > current.y) {
+      byWeekday.set(weekday, {
+        weekday,
+        y: item.y,
+        anchor: item.x,
+      })
+    }
+  }
+  const columns = [...byWeekday.values()].sort((left, right) => left.anchor - right.anchor)
+  if (columns.length < 3) return null
+  const gaps = columns
+    .slice(1)
+    .map((column, index) => column.anchor - columns[index].anchor)
+    .filter((gap) => gap > 0)
+    .sort((left, right) => left - right)
+  const medianGap = gaps[Math.floor(gaps.length / 2)] || 100
+  return {
+    columns,
+    headerY: Math.max(...columns.map((column) => column.y)),
+    maxDistance: Math.max(40, medianGap * 0.5),
+  }
+}
+
+function nearestPdfWeekday(item, table) {
+  let best = null
+  for (const column of table.columns) {
+    const distance = Math.abs(item.x - column.anchor)
+    if (!best || distance < best.distance) best = { ...column, distance }
+  }
+  return best && best.distance <= table.maxDistance ? best.weekday : 0
+}
+
+function parsePdfLayout(pages) {
+  const courses = []
+  for (const page of pages || []) {
+    const table = pdfWeekdayColumns(page)
+    if (!table) continue
+    const height = Number(page?.layout?.height) || 0
+    const bottomLimit = height ? height - 35 : Number.POSITIVE_INFINITY
+    const grouped = new Map()
+
+    for (const item of page.layout.items) {
+      const text = cleanText(item.text, 500)
+      if (
+        !text ||
+        item.y <= table.headerY + 4 ||
+        item.y >= bottomLimit ||
+        /打印时间|其他课程|^\s*[★☆◆■〇]\s*[:：]/.test(text)
+      ) {
+        continue
+      }
+      const weekday = nearestPdfWeekday(item, table)
+      if (!weekday) continue
+      const items = grouped.get(weekday) || []
+      items.push({ ...item, text })
+      grouped.set(weekday, items)
+    }
+
+    for (const [weekday, items] of grouped) {
+      items.sort((left, right) => left.y - right.y || left.x - right.x)
+      const clusters = []
+      for (const item of items) {
+        const current = clusters.at(-1)
+        const gap = current ? item.y - current.lastY : Number.POSITIVE_INFINITY
+        const hasPeriod = current ? /节|period/i.test(current.text) : false
+        const hasContact = current
+          ? /(?:场地|地点|教室|教师|老师)/.test(current.text)
+          : false
+        const startsNew =
+          !current ||
+          gap > 55 ||
+          (hasPeriod &&
+            hasContact &&
+            !isPdfCourseMetadata(item.text) &&
+            !looksLikeLocation(item.text)) ||
+          (hasPeriod &&
+            gap > 15 &&
+            !isPdfCourseMetadata(item.text) &&
+            !looksLikeLocation(item.text))
+        if (startsNew) {
+          clusters.push({
+            text: item.text,
+            lines: [item.text],
+            lastY: item.y,
+          })
+          continue
+        }
+        current.lines.push(item.text)
+        current.text += ` ${item.text}`
+        current.lastY = item.y
+      }
+
+      for (const cluster of clusters) {
+        const parsed = parseCourseCell(cluster.lines.join('\n'))
+        if (parsed) courses.push({ ...parsed, weekday })
+      }
+    }
+  }
+  return courses
+}
+
 function parseSheet(rows) {
   const matrix = parseMatrixSheet(rows)
   if (matrix.length) return matrix
@@ -802,7 +957,7 @@ function inspectScheduleFile(filePath) {
   const extension = path.extname(resolved).toLocaleLowerCase('en-US')
   if (!SUPPORTED_EXTENSIONS.has(extension)) {
     throw new Error(
-      '暂不支持这个课表格式。请使用 Excel、CSV、ICS、HTML、PDF、Word、PPT 或常见文本文件。',
+      '暂不支持这个课表格式。请使用 Excel、WPS 表格、CSV、ICS、HTML、PDF、Word、PPT 或常见文本文件。',
     )
   }
   if (!fs.existsSync(resolved)) throw new Error('没有找到这个课表文件。')
@@ -864,7 +1019,11 @@ async function parseScheduleFileAsync(filePath) {
       rawCourses = parseIcs(await fs.promises.readFile(file.resolved, 'utf8'))
     } else if (DOCUMENT_EXTENSIONS.has(file.extension)) {
       const extraction = await extractDocumentText(file.resolved)
-      rawCourses = parseTextSchedule(extraction.text)
+      rawCourses =
+        file.extension === '.pdf'
+          ? parsePdfLayout(extraction.pages)
+          : parseTextSchedule(extraction.text)
+      if (!rawCourses.length) rawCourses = parseTextSchedule(extraction.text)
     } else {
       try {
         rawCourses = parseWorkbook(file.resolved)
@@ -885,6 +1044,7 @@ module.exports = {
   formatWeeksCompact,
   parseCourseCell,
   parseIcs,
+  parsePdfLayout,
   parsePeriodRange,
   parseScheduleFile,
   parseScheduleFileAsync,

@@ -1436,6 +1436,9 @@ export function createPreviewLauncherApi() {
         },
       }
     },
+    async stageDroppedFile() {
+      throw new Error('预览环境不支持自动暂存拖入文件。')
+    },
     async createScheduleCourse(input) {
       const now = new Date().toISOString()
       if (!state.workspace.schedule) {

@@ -715,7 +715,7 @@ function guideSteps() {
     {
       id: 'schedule',
       title: '导入课表',
-      body: '把学校导出的 Excel、CSV、ICS、PDF 或 Word 文件拖进「课表」，会自动排成周视图；也可以手动一条条添加。',
+      body: '把学校导出的 Excel、WPS 表格、CSV、ICS、PDF 或 Word 文件拖进「课表」，会自动排成周视图；也可以手动一条条添加。',
       done: Boolean(workspace.schedule?.courses?.length),
       action: { label: '打开课表', page: 'schedule' },
     },
@@ -2175,7 +2175,7 @@ function renderSchedule() {
         </div>
         <div>
           <h2>${importing ? '正在识别课表结构' : state.scheduleDropActive ? '松手后开始解析' : '拖入课表文件'}</h2>
-          <p>${importing ? '正在读取文件并匹配课程字段，请稍候。' : '支持 Excel、CSV、ICS、PDF、Word、PPT、HTML 和常见文本文件。'}</p>
+          <p>${importing ? '正在读取文件并匹配课程字段，请稍候。' : '支持 Excel、WPS 表格、CSV、ICS、PDF、Word、PPT、HTML 和常见文本文件。'}</p>
         </div>
         <button class="button secondary" type="button" data-action="choose-schedule-file" ${importing ? 'disabled' : ''}>
           <i data-lucide="folder-open"></i><span>浏览文件</span>
@@ -4890,7 +4890,36 @@ function setScheduleDropActive(active) {
 }
 
 function hasDraggedFiles(event) {
-  return [...(event.dataTransfer?.types || [])].includes('Files')
+  return (
+    [...(event.dataTransfer?.types || [])].includes('Files') ||
+    [...(event.dataTransfer?.items || [])].some((item) => item.kind === 'file')
+  )
+}
+
+function droppedFiles(event) {
+  const files = [...(event.dataTransfer?.files || [])]
+  if (files.length) return files
+  return [...(event.dataTransfer?.items || [])]
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile?.())
+    .filter(Boolean)
+}
+
+async function resolveDroppedFilePath(file) {
+  const directPath = api.getPathForFile?.(file) || file.path || ''
+  if (directPath) return directPath
+  if (!api.stageDroppedFile) {
+    throw new Error('当前版本无法读取这个拖入文件，请先保存到本地。')
+  }
+  if (Number(file.size) > 200 * 1024 * 1024) {
+    throw new Error('拖入的单个文件超过 200 MB，请先保存到本地后再导入。')
+  }
+  const data = new Uint8Array(await file.arrayBuffer())
+  const staged = await api.stageDroppedFile({
+    name: file.name || 'dropped-file',
+    data,
+  })
+  return staged?.path || ''
 }
 
 document.addEventListener('dragenter', (event) => {
@@ -4933,13 +4962,14 @@ document.addEventListener('drop', async (event) => {
   if (state.page === 'schedule') {
     scheduleDragDepth = 0
     setScheduleDropActive(false)
-    const file = event.dataTransfer.files?.[0]
-    const filePath = file ? api.getPathForFile?.(file) || file.path || '' : ''
-    if (!filePath) {
+    const file = droppedFiles(event)[0]
+    if (!file) {
       toast('没有取得课表文件路径，请改用“选择课表文件”。', 'error', 6500)
       return
     }
     try {
+      const filePath = await resolveDroppedFilePath(file)
+      if (!filePath) throw new Error('没有取得课表文件路径，请先保存到本地。')
       await importScheduleFile(filePath)
     } catch (error) {
       toast(error.message, 'error', 6500)
@@ -4952,14 +4982,23 @@ document.addEventListener('drop', async (event) => {
   }
   experimentDragDepth = 0
   setExperimentDropActive(false)
-  const entries = [...event.dataTransfer.files].map((file) => ({
-      name: file.name,
-      path: api.getPathForFile?.(file) || file.path || '',
-    }))
-  if (!entries.length) {
+  const files = droppedFiles(event)
+  if (!files.length) {
     toast('拖入的内容里没有可导入的文件。', 'error')
     return
   }
+  const entries = []
+  for (const file of files) {
+    try {
+      entries.push({
+        name: file.name,
+        path: await resolveDroppedFilePath(file),
+      })
+    } catch (error) {
+      toast(`“${file.name || '文件'}”读取失败：${error.message}`, 'error', 6500)
+    }
+  }
+  if (!entries.some((entry) => entry.path)) return
   try {
     await importExperimentEntries(entries)
   } catch (error) {

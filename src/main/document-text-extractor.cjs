@@ -124,13 +124,41 @@ function textItemsToLines(items) {
   return normalizeText(lines.join('\n'))
 }
 
+function pdfItemsToLayout(items, viewport) {
+  return (items || [])
+    .map((item) => {
+      const text = String(item?.str || '').trim()
+      const transform = item?.transform || []
+      const [x, y] = viewport.convertToViewportPoint(
+        Number(transform[4]) || 0,
+        Number(transform[5]) || 0,
+      )
+      return {
+        text,
+        x,
+        y,
+        width: Number(item?.width) || 0,
+        height: Number(item?.height) || 0,
+      }
+    })
+    .filter((item) => item.text)
+}
+
+function pdfAssetDirectory(name) {
+  const root = path.dirname(require.resolve('pdfjs-dist/package.json'))
+  return `${path.join(root, name).replace(/\\/g, '/')}/`
+}
+
 async function extractPdf(filePath) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const data = new Uint8Array(await fsp.readFile(filePath))
   const loadingTask = pdfjs.getDocument({
     data,
+    cMapUrl: pdfAssetDirectory('cmaps'),
+    cMapPacked: true,
     disableFontFace: true,
     isEvalSupported: false,
+    standardFontDataUrl: pdfAssetDirectory('standard_fonts'),
     useSystemFonts: true,
   })
   const document = await loadingTask.promise
@@ -138,10 +166,16 @@ async function extractPdf(filePath) {
   try {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber)
+      const viewport = page.getViewport({ scale: 1 })
       const content = await page.getTextContent()
       pages.push({
         page: pageNumber,
         text: textItemsToLines(content.items),
+        layout: {
+          width: viewport.width,
+          height: viewport.height,
+          items: pdfItemsToLayout(content.items, viewport),
+        },
       })
     }
   } finally {
@@ -237,6 +271,7 @@ async function extractDocumentText(filePath, { maxChars = MAX_EXTRACTED_CHARS } 
 module.exports = {
   MAX_EXTRACTED_CHARS,
   extractDocumentText,
+  pdfItemsToLayout,
   stripHtml,
   textItemsToLines,
 }

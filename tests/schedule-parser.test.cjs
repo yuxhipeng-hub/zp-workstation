@@ -6,6 +6,7 @@ const test = require('node:test')
 const XLSX = require('xlsx')
 const {
   parseIcs,
+  parsePdfLayout,
   parseScheduleFile,
   parseScheduleFileAsync,
   parseTextSchedule,
@@ -141,6 +142,97 @@ Linear Algebra,Monday,Period 7-8,Weeks 1-16,Smith,A108`)
   assert.equal(courses[0].teacher, 'Smith')
 })
 
+test('rebuilds a rotated PDF timetable from positioned text', () => {
+  const pages = [
+    {
+      page: 1,
+      layout: {
+        width: 842,
+        height: 595,
+        items: [
+          ...[133, 236.8, 340.7, 444.5, 548.4, 652.2, 756.1].map((x, index) => ({
+            text: `星期${['一', '二', '三', '四', '五', '六', '日'][index]}`,
+            x,
+            y: 74,
+            width: 36,
+            height: 12,
+          })),
+          {
+            text: '计算机网络★',
+            x: 104.1,
+            y: 104.1,
+            width: 72,
+            height: 9,
+          },
+          {
+            text: '(1-3节)1-16周/场地:南5-',
+            x: 104.1,
+            y: 116.1,
+            width: 81.7,
+            height: 8,
+          },
+          {
+            text: 'A203/教师:李革新',
+            x: 104.1,
+            y: 128.1,
+            width: 61.1,
+            height: 8,
+          },
+          {
+            text: '篮球★',
+            x: 207.9,
+            y: 213.5,
+            width: 27,
+            height: 9,
+          },
+          {
+            text: '(8-9节)1-16周/场地:南塑胶',
+            x: 207.9,
+            y: 225.5,
+            width: 91,
+            height: 8,
+          },
+          {
+            text: '篮球场/教师:杨伟青',
+            x: 207.9,
+            y: 237.5,
+            width: 68.6,
+            height: 8,
+          },
+        ],
+      },
+    },
+  ]
+
+  const courses = parsePdfLayout(pages)
+  assert.equal(courses.length, 2)
+  assert.deepEqual(
+    courses.map((course) => ({
+      name: course.name,
+      weekday: course.weekday,
+      period: [course.startPeriod, course.endPeriod],
+      teacher: course.teacher,
+      location: course.location,
+    })),
+    [
+      {
+        name: '计算机网络',
+        weekday: 1,
+        period: [1, 3],
+        teacher: '李革新',
+        location: '南5-A203',
+      },
+      {
+        name: '篮球',
+        weekday: 2,
+        period: [8, 9],
+        teacher: '杨伟青',
+        location: '南塑胶篮球场',
+      },
+    ],
+  )
+})
+
 test('extracts and parses a text-based PDF timetable', async (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-schedule-pdf-'))
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
@@ -156,6 +248,22 @@ test('extracts and parses a text-based PDF timetable', async (t) => {
   assert.equal(schedule.courses[0].weekday, 1)
   assert.equal(schedule.courses[0].startPeriod, 7)
   assert.equal(schedule.source.extension, '.pdf')
+})
+
+test('accepts WPS spreadsheet files when their content is workbook-compatible', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-schedule-et-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const xlsxPath = path.join(directory, 'timetable.xlsx')
+  const etPath = path.join(directory, 'timetable.et')
+  writeWorkbook(xlsxPath, [
+    ['课程名称', '星期', '节次', '周次', '教师', '地点'],
+    ['线性代数', '星期一', '1-2节', '1-16周', '张老师', 'A101'],
+  ])
+  fs.copyFileSync(xlsxPath, etPath)
+
+  const schedule = parseScheduleFile(etPath)
+  assert.equal(schedule.courses.length, 1)
+  assert.equal(schedule.courses[0].name, '线性代数')
 })
 
 test('stores and clears a parsed schedule without touching other workspace data', (t) => {
