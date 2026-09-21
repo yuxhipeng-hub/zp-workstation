@@ -13,8 +13,9 @@
     "build": "npm run build:renderer",
     "test": "node --test tests/*.test.cjs",
     "manifest": "node scripts/generate-update-manifest.mjs",
-    "dist": "npm run icons && npm run build && electron-builder --win nsis --x64 --publish never",
-    "dist:dir": "npm run icons && npm run build && electron-builder --win --x64 --dir --publish never"
+    "vendor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-vendor.ps1",
+    "dist": "npm run vendor && npm run icons && npm run build && electron-builder --win nsis --x64 --publish never",
+    "dist:dir": "npm run vendor && npm run icons && npm run build && electron-builder --win --x64 --dir --publish never"
   },
   "dependencies": {
     "@pnpm/exe.win32-x64": "12.4.2",
@@ -113,6 +114,11 @@
     ],
     "electronDownload": {
       "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "bundledRuntime": {
+      "node": "24.18.0",
+      "npm": "12.0.2",
+      "nodeMirror": "https://npmmirror.com/mirrors/node"
     },
     "win": {
       "target": [
