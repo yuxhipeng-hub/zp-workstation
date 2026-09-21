@@ -68,6 +68,30 @@ jobs:
       - name: Build Windows installer
         run: npm run dist
 
+      - name: Verify bundled runtime and installer
+        shell: pwsh
+        run: |
+          $nodePath = "release/win-unpacked/resources/vendor/node/node.exe"
+          $installerPath = "release/ZP-Workbench-Setup-$env:VERSION-x64.exe"
+
+          if (-not (Test-Path -LiteralPath $nodePath)) {
+            throw "Bundled Node.js is missing: $nodePath"
+          }
+          $nodeVersion = (& $nodePath --version).Trim()
+          if ($nodeVersion -ne "v24.18.0") {
+            throw "Unexpected bundled Node.js version: $nodeVersion"
+          }
+          if (-not (Test-Path -LiteralPath $installerPath)) {
+            throw "Installer is missing: $installerPath"
+          }
+
+          $installerSize = (Get-Item -LiteralPath $installerPath).Length
+          if ($installerSize -lt 160MB) {
+            throw "Installer is unexpectedly small: $installerSize bytes"
+          }
+          Write-Host "Bundled Node.js: $nodeVersion"
+          Write-Host "Installer size: $installerSize bytes"
+
       - name: Generate update manifest
         shell: pwsh
         run: |
@@ -83,6 +107,7 @@ jobs:
           name: ZP Workbench ${{ env.VERSION }}
           body_path: release-notes.txt
           make_latest: true
+          overwrite_files: true
           files: |
             release/ZP-Workbench-Setup-${{ env.VERSION }}-x64.exe
             release/ZP-Workbench-Setup-${{ env.VERSION }}-x64.exe.blockmap
