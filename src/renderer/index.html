@@ -7,6 +7,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="./icon.svg" />
     <title>ZP Workbench</title>
   </head>
   <body data-theme="dark">
@@ -24,8 +25,14 @@
         <nav class="nav" aria-label="主导航">
           <div class="nav-section nav-section-learning">
             <p class="nav-label">学习</p>
-            <button class="nav-item active" type="button" data-page="overview" aria-label="总览" title="总览" aria-current="page">
+            <button class="nav-item active" type="button" data-page="today" aria-label="今日" title="今日" aria-current="page">
+              <i data-lucide="sunrise"></i><span>今日</span>
+            </button>
+            <button class="nav-item" type="button" data-page="overview" aria-label="总览" title="总览">
               <i data-lucide="layout-dashboard"></i><span>总览</span>
+            </button>
+            <button class="nav-item" type="button" data-page="schedule" aria-label="课表" title="课表">
+              <i data-lucide="calendar-days"></i><span>课表</span>
             </button>
             <button class="nav-item" type="button" data-page="assignments" aria-label="作业收件箱" title="作业收件箱">
               <i data-lucide="list-todo"></i><span>作业收件箱</span>
@@ -33,9 +40,8 @@
             <button class="nav-item" type="button" data-page="experiments" aria-label="资料库" title="资料库">
               <i data-lucide="folder-open"></i><span>资料库</span>
             </button>
-            <button class="nav-item" type="button" data-page="knowledge" aria-label="知识卡片" title="知识卡片">
-              <i data-lucide="library-big"></i><span>卡片板块</span>
-              <span class="nav-status">待开发</span>
+            <button class="nav-item" type="button" data-page="knowledge" aria-label="知识点" title="知识点">
+              <i data-lucide="brain-circuit"></i><span>知识点</span>
             </button>
           </div>
 
@@ -48,8 +54,18 @@
             <button class="nav-item" type="button" data-page="plugins" aria-label="插件" title="插件">
               <i data-lucide="plug"></i><span>插件</span>
             </button>
+            <button class="nav-item" type="button" data-page="skills" aria-label="Skills" title="Skills">
+              <i data-lucide="wand-sparkles"></i><span>Skills</span>
+            </button>
             <button class="nav-item" type="button" data-page="models" aria-label="模型与 API" title="模型与 API">
               <i data-lucide="key-round"></i><span>模型与 API</span>
+            </button>
+          </div>
+
+          <div class="nav-section nav-section-help">
+            <p class="nav-label">帮助</p>
+            <button class="nav-item" type="button" data-page="guide" aria-label="看这，Ruka！" title="看这，Ruka！">
+              <i data-lucide="compass"></i><span>看这，Ruka！</span>
             </button>
           </div>
 
@@ -115,6 +131,27 @@
           </div>
         </header>
 
+        <section class="launcher-update-banner hidden" id="launcherUpdateBanner" role="status" aria-live="polite">
+          <span class="launcher-update-mark" aria-hidden="true"><i data-lucide="sparkles"></i></span>
+          <div class="launcher-update-copy">
+            <div>
+              <strong id="launcherUpdateTitle">发现 ZP Workbench 新版本</strong>
+              <span id="launcherUpdateVersion"></span>
+            </div>
+            <p id="launcherUpdateDetail"></p>
+            <div class="launcher-update-progress hidden" id="launcherUpdateProgress">
+              <span id="launcherUpdateProgressBar"></span>
+            </div>
+          </div>
+          <div class="launcher-update-actions">
+            <button class="text-button" type="button" data-action="launcher-update-details">查看详情</button>
+            <button class="button secondary" type="button" data-action="dismiss-launcher-update">稍后</button>
+            <button class="button primary" type="button" data-action="download-launcher">
+              <i data-lucide="download"></i><span>立即更新</span>
+            </button>
+          </div>
+        </section>
+
         <main class="view" id="view" tabindex="-1"></main>
       </div>
     </div>
@@ -131,6 +168,7 @@
     </div>
 
     <div class="toast-stack" id="toasts" aria-live="polite" aria-atomic="false"></div>
+    <div id="overlayRoot"></div>
 
     <script type="module" src="/main.js"></script>
   </body>

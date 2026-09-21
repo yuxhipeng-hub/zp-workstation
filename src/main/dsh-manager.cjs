@@ -491,16 +491,18 @@ class DshManager extends EventEmitter {
     }
   }
 
-  async getStatus() {
+  async getStatus({ quick = false } = {}) {
     const settings = this.settings.get()
     const paths = this.paths()
     const installedVersion = this.getInstalledVersion()
-    let registry = null
+    let registry = this.registryCache
     let registryError = null
-    try {
-      registry = await this.getRegistryInfo(false)
-    } catch (error) {
-      registryError = error.message
+    if (!quick) {
+      try {
+        registry = await this.getRegistryInfo(false)
+      } catch (error) {
+        registryError = error.message
+      }
     }
     const selectedVersion = this.getSelectedVersion(registry)
     let updateState = 'unknown'
@@ -685,6 +687,63 @@ class DshManager extends EventEmitter {
     this.webUrl = null
     this.emit('process-state', this.getProcessState())
     return { success: true, stopped: true }
+  }
+
+  async runHeadlessTask(task, { taskId = `dsh-headless-${Date.now()}`, cwd = '', timeoutMs = 300_000 } = {}) {
+    const text = String(task || '').trim()
+    if (!text) throw new Error('一次性任务内容不能为空。')
+    if (!this.getInstalledVersion()) throw new Error('还没有安装 DeepSeek Harness。')
+    const node = this.nodeExecutablePath()
+    if (!fs.existsSync(node)) throw new Error(`找不到内置 Node.js：${node}`)
+    const workingDirectory = cwd ? path.resolve(cwd) : this.getDshHome()
+    await fsp.mkdir(workingDirectory, { recursive: true })
+
+    const args = ['--expose-internals', this.paths().dshBin, '--profile', 'headless', text]
+    let stdout = ''
+    let stderr = ''
+    this.taskState(taskId, 'running', 'DSH 正在整理资料', '')
+    const execution = this.runner.run(node, args, {
+      cwd: workingDirectory,
+      scope: 'dsh-headless',
+      taskId,
+      env: this.buildEnvironment(),
+      onOutput: ({ stream, line }) => {
+        if (stream === 'stdout') stdout += `${line}\n`
+        if (stream === 'stderr') stderr += `${line}\n`
+      },
+    })
+    const timer = setTimeout(() => {
+      this.runner.kill(taskId)
+      this.taskState(taskId, 'error', 'DSH 任务超时', `超过 ${Math.round(timeoutMs / 1000)} 秒`)
+    }, timeoutMs)
+    timer.unref?.()
+
+    try {
+      await execution
+      const result = stdout.trim()
+      if (!result) throw new Error('DSH 没有返回可用结果。')
+      this.taskState(taskId, 'success', 'DSH 整理完成', '')
+      return result
+    } catch (error) {
+      let message = error.message
+      if (/MISSING_CREDENTIAL|no API key/i.test(stderr)) {
+        message = 'DSH 还没有配置 DeepSeek API Key，请先到“模型与 API”页面完成配置。'
+      } else {
+        const detail = stderr
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(-2)
+          .join(' ')
+        if (detail && !/^dsh: reasoning:/i.test(detail)) message = detail
+      }
+      this.taskState(taskId, 'error', 'DSH 整理失败', message)
+      const wrapped = new Error(message)
+      wrapped.cause = error
+      throw wrapped
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   profileDir(profile) {

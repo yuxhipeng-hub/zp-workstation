@@ -207,10 +207,6 @@ class ExperimentLibrary {
       }
 
       const resolvedSource = path.resolve(sourcePath)
-      if (path.extname(resolvedSource).toLocaleLowerCase('en-US') !== '.pdf') {
-        rejected.push({ name: path.basename(resolvedSource), reason: '目前只接收 PDF 文件。' })
-        continue
-      }
       if (existingPaths.has(resolvedSource.toLocaleLowerCase('zh-CN'))) {
         rejected.push({ name: path.basename(resolvedSource), reason: '这个文件已经在工作站中。' })
         continue
@@ -285,6 +281,7 @@ class ExperimentLibrary {
       title: nextTitle,
       group: nextGroup,
       filePath,
+      courseId: nextGroup !== existing.group ? '' : existing.courseId,
     })
     return { workspace, experiment: workspace.experiments.find((item) => item.id === id) }
   }

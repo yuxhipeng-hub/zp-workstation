@@ -42,7 +42,7 @@ test('infers known and unknown experiment groups from Chinese PDF names', () => 
   )
 })
 
-test('copies PDFs into inferred group folders without moving originals', async (t) => {
+test('copies files into inferred group folders without moving originals', async (t) => {
   const { directory, sourceDirectory, libraryDirectory, workspace, library } = createLibrary()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
 
@@ -64,6 +64,33 @@ test('copies PDFs into inferred group folders without moving originals', async (
     true,
   )
   assert.equal(workspace.get().experiments.length, 2)
+})
+
+test('accepts non-PDF course files and preserves their extensions', async (t) => {
+  const { directory, sourceDirectory, libraryDirectory, workspace, library } = createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const document = path.join(sourceDirectory, '计算机系统基础复习提纲.docx')
+  const spreadsheet = path.join(sourceDirectory, '计算机系统基础实验数据.xlsx')
+  fs.writeFileSync(document, 'docx placeholder', 'utf8')
+  fs.writeFileSync(spreadsheet, 'xlsx placeholder', 'utf8')
+
+  const result = await library.importEntries([document, spreadsheet])
+  assert.equal(result.imported, 2)
+  assert.equal(result.rejected.length, 0)
+  assert.equal(workspace.get().experiments.length, 2)
+  assert.equal(
+    workspace
+      .get()
+      .experiments.every(
+        (item) =>
+          item.group === '计算机系统基础' &&
+          fs.existsSync(item.filePath) &&
+          ['.docx', '.xlsx'].includes(path.extname(item.filePath)),
+      ),
+    true,
+  )
+  assert.equal(fs.existsSync(path.join(libraryDirectory, '计算机系统基础')), true)
 })
 
 test('moves a PDF when its group is changed and removes only its metadata', async (t) => {
