@@ -2385,7 +2385,7 @@ function renderSchedule() {
                       >
                         <div class="schedule-course-period">${course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 节` : `第 ${course.startPeriod}-${course.endPeriod} 节`}</div>
                         <strong>${escapeHtml(course.name)}</strong>
-                        <span>${escapeHtml(course.location || course.teacher || '地点待确认')}</span>
+                        <span>${escapeHtml([course.location, course.teacher].filter(Boolean).join(' · ') || '地点待确认')}</span>
                         <small>${escapeHtml(scheduleWeekText(course) || '每周')}</small>
                         <i class="schedule-course-edit" data-lucide="pencil"></i>
                       </button>`,

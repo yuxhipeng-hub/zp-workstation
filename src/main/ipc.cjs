@@ -352,6 +352,7 @@ function registerIpc({
             'xls',
             'xlsm',
             'et',
+            'ett',
             'csv',
             'tsv',
             'ics',

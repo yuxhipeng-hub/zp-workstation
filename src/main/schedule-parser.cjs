@@ -10,6 +10,7 @@ const WORKBOOK_EXTENSIONS = new Set([
   '.xls',
   '.xlsm',
   '.et',
+  '.ett',
   '.csv',
   '.tsv',
   '.txt',
@@ -31,6 +32,13 @@ const SUPPORTED_EXTENSIONS = new Set([
 ])
 const MAX_COURSES = 500
 const MAX_PERIODS = 20
+const TEXT_WORKBOOK_EXTENSIONS = new Set(['.csv', '.tsv', '.txt', '.html', '.htm'])
+const METADATA_LABELS = {
+  weeks: '周数|周次|上课周',
+  teacher: '任课教师|教师|老师',
+  location: '上课地点|地点|教室|场地',
+}
+const ALL_METADATA_LABEL_PATTERN = Object.values(METADATA_LABELS).join('|')
 
 function cleanText(value, maxLength = 240) {
   return String(value ?? '')
@@ -129,7 +137,9 @@ function parseWeeks(value) {
   const source = String(value ?? '').normalize('NFKC')
   if (!source.trim()) return []
 
-  const weekFragments = source.match(/(?:第\s*)?\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?(?:\s*[,，、;；]\s*\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?)*\s*周/g)
+  const weekFragments = source.match(
+    /(?<![\p{L}\p{N}])(?:第\s*)?\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?(?:\s*[,，、;；]\s*\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?)*\s*周/gu,
+  )
   let weeks = []
   for (const fragment of weekFragments || []) {
     weeks.push(...expandNumericTokens(fragment.replace(/周/g, ''), 30))
@@ -177,18 +187,47 @@ function parsePeriodRange(value) {
     }
   }
   const match = source.match(/第?\s*(\d{1,2})\s*(?:[-—–~～至]\s*(\d{1,2}))?\s*节/)
-  if (!match) return null
-  const startPeriod = Math.max(1, Number(match[1]))
-  const endPeriod = Math.max(startPeriod, Number(match[2] || match[1]))
+  if (match) {
+    const startPeriod = Math.max(1, Number(match[1]))
+    const endPeriod = Math.max(startPeriod, Number(match[2] || match[1]))
+    return {
+      startPeriod: Math.min(startPeriod, MAX_PERIODS),
+      endPeriod: Math.min(endPeriod, MAX_PERIODS),
+    }
+  }
+  const bare = source.match(/^\s*(\d{1,2})\s*(?:[-—–~～至]\s*(\d{1,2}))?\s*$/)
+  if (!bare) return null
+  const startPeriod = Math.max(1, Number(bare[1]))
+  const endPeriod = Math.max(startPeriod, Number(bare[2] || bare[1]))
   return {
     startPeriod: Math.min(startPeriod, MAX_PERIODS),
     endPeriod: Math.min(endPeriod, MAX_PERIODS),
   }
 }
 
+function extractLabeledMetadata(source, labelPattern) {
+  const regex = new RegExp(
+    `(?:^|[\\s/|])(?:${labelPattern})\\s*[:：]\\s*([\\s\\S]*?)(?=\\s*(?:${ALL_METADATA_LABEL_PATTERN})\\s*[:：]|$)`,
+    'i',
+  )
+  const match = String(source ?? '').match(regex)
+  return match
+    ? cleanText(match[1].replace(/\r?\n/g, ''), 160).replace(/[\\/|]+$/, '').trim()
+    : ''
+}
+
+function stripLabeledMetadata(value) {
+  const regex = new RegExp(
+    `(?:^|[\\s/|])(?:${ALL_METADATA_LABEL_PATTERN})\\s*[:：]\\s*[\\s\\S]*?(?=\\s*(?:${ALL_METADATA_LABEL_PATTERN})\\s*[:：]|$)`,
+    'gi',
+  )
+  return String(value ?? '').replace(regex, ' ')
+}
+
 function stripCourseMetadata(value) {
+  const withoutLabeledMetadata = stripLabeledMetadata(value)
   return cleanText(
-    String(value ?? '')
+    withoutLabeledMetadata
       .replace(/(?:第\s*)?\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?(?:\s*[,，、;；]\s*\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?)*\s*周/g, ' ')
       .replace(/第?\s*\d{1,2}\s*(?:[-—–~～至]\s*\d{1,2})?\s*节/g, ' ')
       .replace(/([01]?\d|2[0-3])\s*[:：]\s*[0-5]\d\s*[-—–~～至]\s*([01]?\d|2[0-3])\s*[:：]\s*[0-5]\d/g, ' ')
@@ -220,7 +259,7 @@ function looksLikeTeacher(value) {
   ) {
     return false
   }
-  return /^[\p{Script=Han}·]{2,8}$/u.test(text)
+  return /^[\p{Script=Han}·,，、]{2,16}$/u.test(text)
 }
 
 function inferTextPeriod(value) {
@@ -246,8 +285,8 @@ function parseCourseCell(value) {
   const period = parsePeriodRange(raw)
   const time = parseTimeRange(raw)
 
-  let teacher = ''
-  let location = ''
+  let teacher = extractLabeledMetadata(raw, METADATA_LABELS.teacher)
+  let location = extractLabeledMetadata(raw, METADATA_LABELS.location)
   const cleanedLines = []
 
   for (const line of lines) {
@@ -263,7 +302,11 @@ function parseCourseCell(value) {
         !/节|周|课程|科目/.test(locationPrefix) &&
         !/^(?:上午|下午|晚上)$/.test(locationPrefix)
       ) {
-        location = `${location}${locationPrefix}`
+        if (!location) {
+          location = locationPrefix
+        } else if (!location.includes(locationPrefix)) {
+          location += locationPrefix
+        }
       }
       continue
     }
@@ -339,8 +382,10 @@ function parseCourseCell(value) {
 }
 
 function weekTextFrom(value) {
-  const matches = String(value ?? '').match(/(?:第\s*)?\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?(?:\s*[,，、;；]\s*\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?)*\s*周(?:\([单双]\)|（[单双]）)?/g)
-  return matches ? matches.join('，').slice(0, 80) : ''
+  const matches = String(value ?? '').match(
+    /(?<![\p{L}\p{N}])(?:第\s*)?\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?(?:\s*[,，、;；]\s*\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?)*\s*周(?:\s*[（(]\s*[单双]\s*[）)]|\s*[单双])?/gu,
+  )
+  return matches ? [...new Set(matches)].join('，').slice(0, 80) : ''
 }
 
 function expandMerges(sheet) {
@@ -460,6 +505,99 @@ function parseMatrixSheet(rows) {
       group.courseIndex = parsed ? courses.length - 1 : null
     }
   }
+  return courses
+}
+
+function findVerticalWeekdayColumn(rows) {
+  let best = null
+  const columnLimit = Math.min(5, Math.max(0, ...rows.slice(0, 30).map((row) => row?.length || 0)))
+  for (let column = 0; column < columnLimit; column += 1) {
+    const weekdays = new Set()
+    for (let rowIndex = 0; rowIndex < Math.min(rows.length, 40); rowIndex += 1) {
+      const value = cleanText(rows[rowIndex]?.[column], 24)
+      const weekday = parseWeekday(value)
+      if (weekday && compactText(value).length <= 8) weekdays.add(weekday)
+    }
+    if (weekdays.size >= 2 && (!best || weekdays.size > best.weekdays.size)) {
+      best = { columnIndex: column, weekdays }
+    }
+  }
+  return best
+}
+
+function findVerticalPeriodColumn(rows, weekdayColumn) {
+  let best = null
+  const columnLimit = Math.min(
+    weekdayColumn + 3,
+    Math.max(0, ...rows.slice(0, 30).map((row) => row?.length || 0)),
+  )
+  for (let column = weekdayColumn + 1; column < columnLimit; column += 1) {
+    let matches = 0
+    for (const row of rows) {
+      if (parsePeriodRange(row?.[column])) matches += 1
+    }
+    if (matches && (!best || matches > best.matches)) best = { columnIndex: column, matches }
+  }
+  return best
+}
+
+function parseVerticalMatrixSheet(rows) {
+  const weekdayHeader = findVerticalWeekdayColumn(rows)
+  if (!weekdayHeader) return []
+  const periodHeader = findVerticalPeriodColumn(rows, weekdayHeader.columnIndex)
+  if (!periodHeader) return []
+
+  const firstCourseColumn = periodHeader.columnIndex + 1
+  const courses = []
+  const recentByColumn = new Map()
+  let currentWeekday = 0
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex] || []
+    const weekdayValue = cleanText(row[weekdayHeader.columnIndex], 24)
+    const weekday = parseWeekday(weekdayValue)
+    if (weekday && compactText(weekdayValue).length <= 8) currentWeekday = weekday
+    if (!currentWeekday) continue
+
+    const period = parsePeriodRange(row[periodHeader.columnIndex])
+    if (!period) continue
+
+    for (let column = firstCourseColumn; column < row.length; column += 1) {
+      const raw = cleanText(row[column], 1000)
+      if (!raw || parseWeekday(raw)) continue
+      const rawKey = compactText(raw)
+      const recent = recentByColumn.get(column)
+      if (
+        recent &&
+        recent.weekday === currentWeekday &&
+        recent.rawKey === rawKey &&
+        recent.rowIndex === rowIndex - 1
+      ) {
+        recent.course.endPeriod = Math.max(recent.course.endPeriod, period.endPeriod)
+        recent.rowIndex = rowIndex
+        continue
+      }
+
+      const parsed = parseCourseCell(raw)
+      if (!parsed) continue
+      const startPeriod = parsed.startPeriod || period.startPeriod
+      const endPeriod = Math.max(startPeriod, parsed.endPeriod || period.endPeriod)
+      const course = {
+        ...parsed,
+        weekday: currentWeekday,
+        startPeriod,
+        endPeriod,
+      }
+      courses.push(course)
+      recentByColumn.set(column, {
+        weekday: currentWeekday,
+        rawKey,
+        rowIndex,
+        course,
+      })
+    }
+  }
+
   return courses
 }
 
@@ -866,7 +1004,9 @@ function parsePdfLayout(pages) {
 function parseSheet(rows) {
   const matrix = parseMatrixSheet(rows)
   if (matrix.length) return matrix
-  return parseRecordSheet(rows)
+  const record = parseRecordSheet(rows)
+  if (record.length) return record
+  return parseVerticalMatrixSheet(rows)
 }
 
 function parseWorkbook(filePath) {
@@ -1028,6 +1168,11 @@ async function parseScheduleFileAsync(filePath) {
       try {
         rawCourses = parseWorkbook(file.resolved)
       } catch {
+        if (!TEXT_WORKBOOK_EXTENSIONS.has(file.extension)) {
+          throw new Error(
+            'WPS 表格格式无法解析。请在 WPS 中另存为 Excel 工作簿（.xlsx）后重试。',
+          )
+        }
         rawCourses = parseTextSchedule(await fs.promises.readFile(file.resolved, 'utf8'))
       }
     }

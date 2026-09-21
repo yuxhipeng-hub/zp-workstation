@@ -16,12 +16,12 @@ const {
 const { ScheduleManager } = require('../src/main/schedule-manager.cjs')
 const { WorkspaceStore } = require('../src/main/workspace-store.cjs')
 
-function writeWorkbook(filePath, rows, merges = []) {
+function writeWorkbook(filePath, rows, merges = [], options = {}) {
   const workbook = XLSX.utils.book_new()
   const sheet = XLSX.utils.aoa_to_sheet(rows)
   sheet['!merges'] = merges
   XLSX.utils.book_append_sheet(workbook, sheet, '课表')
-  XLSX.writeFile(workbook, filePath)
+  XLSX.writeFile(workbook, filePath, options)
 }
 
 function writeSimplePdf(filePath, lines) {
@@ -264,6 +264,52 @@ test('accepts WPS spreadsheet files when their content is workbook-compatible', 
   const schedule = parseScheduleFile(etPath)
   assert.equal(schedule.courses.length, 1)
   assert.equal(schedule.courses[0].name, '线性代数')
+})
+
+test('parses WPS .ett timetables with weekday rows and inline teacher metadata', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-schedule-ett-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const ettPath = path.join(directory, 'timetable.ett')
+  writeWorkbook(
+    ettPath,
+    [
+      ['计算机学院课表', '', '', ''],
+      ['', '节次', '24计算机1课表', '24计算机2课表'],
+      [
+        '星期一',
+        '1-2',
+        '编译原理★ 地点:南5-A304 周数:1-16周(1-2节) 教师:黄家驹',
+        '',
+      ],
+      [
+        '',
+        '3-5',
+        '大数据应用开发技术★ 地点:南5-A201 周数:1-16周(3-4节) 教师:曹如军',
+        '线性代数A★ 地点:南3-B204 周数:2-18周(3-4节) 教师:段延敏',
+      ],
+      ['星期二', '1-2', '', '计算机网络★ 地点:南5-A203 周数:1-16周(1-3节) 教师:李革新'],
+    ],
+    [],
+    { bookType: 'biff8' },
+  )
+
+  const schedule = parseScheduleFile(ettPath)
+  assert.equal(schedule.source.extension, '.ett')
+  assert.equal(schedule.courses.length, 4)
+
+  const compiler = schedule.courses.find((course) => course.name === '编译原理')
+  assert.equal(compiler.weekday, 1)
+  assert.equal(compiler.startPeriod, 1)
+  assert.equal(compiler.endPeriod, 2)
+  assert.equal(compiler.location, '南5-A304')
+  assert.equal(compiler.teacher, '黄家驹')
+
+  const network = schedule.courses.find((course) => course.name === '计算机网络')
+  assert.equal(network.weekday, 2)
+  assert.equal(network.startPeriod, 1)
+  assert.equal(network.endPeriod, 3)
+  assert.equal(network.location, '南5-A203')
+  assert.equal(network.teacher, '李革新')
 })
 
 test('stores and clears a parsed schedule without touching other workspace data', (t) => {
