@@ -7,6 +7,8 @@ const XLSX = require('xlsx')
 const {
   parseIcs,
   parseScheduleFile,
+  parseScheduleFileAsync,
+  parseTextSchedule,
   parseWeekday,
   parseWeeks,
 } = require('../src/main/schedule-parser.cjs')
@@ -19,6 +21,42 @@ function writeWorkbook(filePath, rows, merges = []) {
   sheet['!merges'] = merges
   XLSX.utils.book_append_sheet(workbook, sheet, '课表')
   XLSX.writeFile(workbook, filePath)
+}
+
+function writeSimplePdf(filePath, lines) {
+  const escapedLines = lines.map((line) =>
+    String(line).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'),
+  )
+  const stream = [
+    'BT',
+    '/F1 12 Tf',
+    '50 750 Td',
+    ...escapedLines.flatMap((line, index) =>
+      index === 0 ? [`(${line}) Tj`] : ['0 -18 Td', `(${line}) Tj`],
+    ),
+    'ET',
+  ].join('\n')
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(stream, 'binary')} >>\nstream\n${stream}\nendstream`,
+  ]
+
+  let pdf = '%PDF-1.4\n'
+  const offsets = [0]
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(Buffer.byteLength(pdf, 'binary'))
+    pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`
+  }
+  const xrefOffset = Buffer.byteLength(pdf, 'binary')
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  for (let index = 1; index <= objects.length; index += 1) {
+    pdf += `${String(offsets[index]).padStart(10, '0')} 00000 n \n`
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`
+  fs.writeFileSync(filePath, pdf, 'binary')
 }
 
 test('parses Chinese weekdays and week ranges', () => {
@@ -90,6 +128,34 @@ END:VCALENDAR`)
   assert.equal(courses[0].weekday, 1)
   assert.equal(courses[0].startTime, '14:00')
   assert.equal(courses[0].endTime, '15:40')
+})
+
+test('parses a text timetable from delimited content', () => {
+  const courses = parseTextSchedule(`Course Name,Day,Period,Weeks,Teacher,Location
+Linear Algebra,Monday,Period 7-8,Weeks 1-16,Smith,A108`)
+  assert.equal(courses.length, 1)
+  assert.equal(courses[0].name, 'Linear Algebra')
+  assert.equal(courses[0].weekday, 1)
+  assert.equal(courses[0].startPeriod, 7)
+  assert.equal(courses[0].endPeriod, 8)
+  assert.equal(courses[0].teacher, 'Smith')
+})
+
+test('extracts and parses a text-based PDF timetable', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-schedule-pdf-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const filePath = path.join(directory, 'timetable.pdf')
+  writeSimplePdf(filePath, [
+    'Course Name,Day,Period,Weeks,Teacher,Location',
+    'Linear Algebra,Monday,Period 7-8,Weeks 1-16,Smith,A108',
+  ])
+
+  const schedule = await parseScheduleFileAsync(filePath)
+  assert.equal(schedule.courses.length, 1)
+  assert.equal(schedule.courses[0].name, 'Linear Algebra')
+  assert.equal(schedule.courses[0].weekday, 1)
+  assert.equal(schedule.courses[0].startPeriod, 7)
+  assert.equal(schedule.source.extension, '.pdf')
 })
 
 test('stores and clears a parsed schedule without touching other workspace data', (t) => {

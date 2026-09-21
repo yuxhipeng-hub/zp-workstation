@@ -2,7 +2,7 @@ const { randomUUID } = require('node:crypto')
 const {
   formatWeeksCompact,
   normalizeCourses,
-  parseScheduleFile,
+  parseScheduleFileAsync,
   parseWeeks,
 } = require('./schedule-parser.cjs')
 
@@ -69,8 +69,8 @@ class ScheduleManager {
     this.workspace = workspace
   }
 
-  importFile(filePath) {
-    const schedule = parseScheduleFile(filePath)
+  async importFile(filePath) {
+    const schedule = await parseScheduleFileAsync(filePath)
     const workspace = this.workspace.replaceSchedule(schedule)
     return {
       workspace,

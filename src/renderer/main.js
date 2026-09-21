@@ -715,7 +715,7 @@ function guideSteps() {
     {
       id: 'schedule',
       title: '导入课表',
-      body: '把学校导出的 xlsx、csv 或 ics 文件拖进「课表」，会自动排成周视图；也可以手动一条条添加。',
+      body: '把学校导出的 Excel、CSV、ICS、PDF 或 Word 文件拖进「课表」，会自动排成周视图；也可以手动一条条添加。',
       done: Boolean(workspace.schedule?.courses?.length),
       action: { label: '打开课表', page: 'schedule' },
     },
@@ -2175,7 +2175,7 @@ function renderSchedule() {
         </div>
         <div>
           <h2>${importing ? '正在识别课表结构' : state.scheduleDropActive ? '松手后开始解析' : '拖入课表文件'}</h2>
-          <p>${importing ? '正在读取表格并匹配课程字段，请稍候。' : '常见格式包括 .xlsx、.xls、.csv、.ics、.html 和制表符文本。'}</p>
+          <p>${importing ? '正在读取文件并匹配课程字段，请稍候。' : '支持 Excel、CSV、ICS、PDF、Word、PPT、HTML 和常见文本文件。'}</p>
         </div>
         <button class="button secondary" type="button" data-action="choose-schedule-file" ${importing ? 'disabled' : ''}>
           <i data-lucide="folder-open"></i><span>浏览文件</span>

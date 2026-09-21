@@ -45,6 +45,23 @@ test('normalizes aliases and rejects incomplete generated points', () => {
   )
 })
 
+test('repairs common model JSON variants and missing array commas', () => {
+  const smartQuoted = parseKnowledgeResponse(
+    '{“knowledgePoints”:[{“title”:“矩阵秩”,“content”:“非零行的数量。”,},]}',
+  )
+  assert.equal(smartQuoted.length, 1)
+  assert.equal(smartQuoted[0].title, '矩阵秩')
+
+  const missingComma = parseKnowledgeResponse(`{"knowledgePoints":[
+{"title":"上界","content":"大 O 表示上界。"}
+{"title":"下界","content":"大 Ω 表示下界。"}
+]}`)
+  assert.deepEqual(
+    missingComma.map((point) => point.title),
+    ['上界', '下界'],
+  )
+})
+
 test('builds a grounded prompt that references an extracted source file', () => {
   const prompt = buildKnowledgePrompt(
     { title: '线性代数实验', group: '线性代数' },

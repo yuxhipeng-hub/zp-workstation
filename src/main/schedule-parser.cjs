@@ -2,9 +2,10 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const XLSX = require('xlsx')
+const { extractDocumentText } = require('./document-text-extractor.cjs')
 
 const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-const SUPPORTED_EXTENSIONS = new Set([
+const WORKBOOK_EXTENSIONS = new Set([
   '.xlsx',
   '.xls',
   '.xlsm',
@@ -14,6 +15,18 @@ const SUPPORTED_EXTENSIONS = new Set([
   '.ics',
   '.html',
   '.htm',
+])
+const DOCUMENT_EXTENSIONS = new Set([
+  '.pdf',
+  '.docx',
+  '.pptx',
+  '.rtf',
+  '.md',
+  '.markdown',
+])
+const SUPPORTED_EXTENSIONS = new Set([
+  ...WORKBOOK_EXTENSIONS,
+  ...DOCUMENT_EXTENSIONS,
 ])
 const MAX_COURSES = 500
 const MAX_PERIODS = 20
@@ -120,6 +133,12 @@ function parseWeeks(value) {
   for (const fragment of weekFragments || []) {
     weeks.push(...expandNumericTokens(fragment.replace(/周/g, ''), 30))
   }
+  const englishFragments = source.match(
+    /\b(?:weeks?|wks?)\s*\d{1,2}(?:\s*[-–—~～]\s*\d{1,2})?(?:\s*[,;]\s*\d{1,2}(?:\s*[-–—~～]\s*\d{1,2})?)*/gi,
+  )
+  for (const fragment of englishFragments || []) {
+    weeks.push(...expandNumericTokens(fragment.replace(/^\s*(?:weeks?|wks?)\s*/i, ''), 30))
+  }
 
   const oddWeeks = /单周|(?:周|weeks?)\s*[（(]?\s*单/i.test(source)
   const evenWeeks = /双周|(?:周|weeks?)\s*[（(]?\s*双/i.test(source)
@@ -145,6 +164,17 @@ function parseTimeRange(value) {
 
 function parsePeriodRange(value) {
   const source = String(value ?? '').normalize('NFKC')
+  const english = source.match(
+    /\bperiods?\s*(\d{1,2})(?:\s*(?:[-–—~～]|to)\s*(\d{1,2}))?/i,
+  )
+  if (english) {
+    const startPeriod = Math.max(1, Number(english[1]))
+    const endPeriod = Math.max(startPeriod, Number(english[2] || english[1]))
+    return {
+      startPeriod: Math.min(startPeriod, MAX_PERIODS),
+      endPeriod: Math.min(endPeriod, MAX_PERIODS),
+    }
+  }
   const match = source.match(/第?\s*(\d{1,2})\s*(?:[-—–~～至]\s*(\d{1,2}))?\s*节/)
   if (!match) return null
   const startPeriod = Math.max(1, Number(match[1]))
@@ -405,7 +435,7 @@ function parseMatrixSheet(rows) {
 
 function findHeaderMap(rows) {
   const patterns = {
-    course: /课程名称|教学班|课程|科目/,
+    course: /课程名称|教学班|课程|科目|course|class/i,
     weekday: /星期|周几|上课日|weekday|day/i,
     period: /节次|节数|上课节次|period/i,
     time: /上课时间|时间|time/i,
@@ -599,6 +629,85 @@ function formatWeeksCompact(weeks) {
   return `${ranges.join(',')}周`
 }
 
+function stripWeekdayTokens(value) {
+  return cleanText(
+    String(value ?? '').replace(
+      /(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/gi,
+      ' ',
+    ),
+    1000,
+  )
+}
+
+function textToRows(value) {
+  const lines = String(value ?? '')
+    .replace(/\[PAGE\s+\d+\]/gi, '\n')
+    .split(/\r?\n/)
+
+  const rows = []
+  for (const rawLine of lines) {
+    const line = cleanText(rawLine, 2000)
+    if (!line || /^[\s|·,，;；:：+\-—–_=]+$/.test(line)) continue
+
+    let cells
+    if (line.includes('|')) {
+      cells = line
+        .replace(/^\s*\|/, '')
+        .replace(/\|\s*$/, '')
+        .split('|')
+    } else if (line.includes('\t')) {
+      cells = line.split('\t')
+    } else if ((line.match(/[,，]/g) || []).length >= 2) {
+      cells = line.split(/[,，]/)
+    } else {
+      const spaced = line.split(/\s{2,}/)
+      cells = spaced.length >= 2 ? spaced : [line]
+    }
+    rows.push(cells.map((cell) => cleanText(cell, 500)))
+  }
+  return rows
+}
+
+function parseTextLines(value) {
+  const courses = []
+  let currentWeekday = 0
+
+  for (const rawLine of String(value ?? '').split(/\r?\n/)) {
+    const line = cleanText(rawLine, 1000)
+    if (!line || /^\[PAGE\s+\d+\]$/i.test(line)) continue
+    if (/课程名称|上课时间|节次|周次|任课教师|上课地点/.test(line)) {
+      const weekdayCount = (
+        line.match(/(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/g) || []
+      ).length
+      if (!parsePeriodRange(line) && !parseTimeRange(line) && weekdayCount <= 1) continue
+    }
+
+    const directWeekday = parseWeekday(line)
+    const weekdayTokenCount = (
+      line.match(/(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/g) || []
+    ).length
+    if (directWeekday && weekdayTokenCount <= 1 && compactText(line).length <= 8) {
+      currentWeekday = directWeekday
+      continue
+    }
+
+    const weekday = directWeekday || currentWeekday
+    if (!weekday || weekdayTokenCount > 1) continue
+    const parsed = parseCourseCell(stripWeekdayTokens(line))
+    if (!parsed) continue
+    courses.push({ ...parsed, weekday })
+  }
+  return courses
+}
+
+function parseTextSchedule(value) {
+  const text = String(value ?? '')
+  if (!cleanText(text)) return []
+  const tableCourses = parseSheet(textToRows(text))
+  if (tableCourses.length) return tableCourses
+  return parseTextLines(text)
+}
+
 function parseSheet(rows) {
   const matrix = parseMatrixSheet(rows)
   if (matrix.length) return matrix
@@ -688,26 +797,27 @@ function parseIcs(content) {
   return courses
 }
 
-function parseScheduleFile(filePath) {
+function inspectScheduleFile(filePath) {
   const resolved = path.resolve(String(filePath || ''))
   const extension = path.extname(resolved).toLocaleLowerCase('en-US')
   if (!SUPPORTED_EXTENSIONS.has(extension)) {
-    throw new Error('暂不支持这个课表格式。请使用 Excel、CSV、ICS、HTML 或制表符文本。')
+    throw new Error(
+      '暂不支持这个课表格式。请使用 Excel、CSV、ICS、HTML、PDF、Word、PPT 或常见文本文件。',
+    )
   }
   if (!fs.existsSync(resolved)) throw new Error('没有找到这个课表文件。')
   const stats = fs.statSync(resolved)
   if (!stats.isFile()) throw new Error('拖入的内容不是文件。')
   if (stats.size > 30 * 1024 * 1024) throw new Error('课表文件超过 30 MB，请先精简内容。')
+  return { resolved, extension, stats }
+}
 
-  let rawCourses
-  try {
-    rawCourses = extension === '.ics' ? parseIcs(fs.readFileSync(resolved, 'utf8')) : parseWorkbook(resolved)
-  } catch (error) {
-    throw new Error(`课表解析失败：${error.message}`)
-  }
+function finalizeSchedule(rawCourses, { resolved, extension, stats }) {
   const courses = normalizeCourses(assignTimeBasedPeriods(rawCourses))
   if (!courses.length) {
-    throw new Error('没有识别到课程。请确认表格包含星期、节次或上课时间，也可以先导出为 CSV 后再试。')
+    throw new Error(
+      '没有识别到课程。请确认文件包含课程名称、星期以及节次或上课时间；扫描版 PDF 需要先做 OCR。',
+    )
   }
 
   const maxWeek = Math.max(16, ...courses.flatMap((course) => course.weeks))
@@ -727,6 +837,48 @@ function parseScheduleFile(filePath) {
   }
 }
 
+function parseScheduleFile(filePath) {
+  const file = inspectScheduleFile(filePath)
+  if (DOCUMENT_EXTENSIONS.has(file.extension)) {
+    throw new Error('PDF、Word 和 PPT 课表需要使用异步导入流程。')
+  }
+
+  let rawCourses
+  try {
+    rawCourses =
+      file.extension === '.ics'
+        ? parseIcs(fs.readFileSync(file.resolved, 'utf8'))
+        : parseWorkbook(file.resolved)
+  } catch (error) {
+    throw new Error(`课表解析失败：${error.message}`)
+  }
+  return finalizeSchedule(rawCourses, file)
+}
+
+async function parseScheduleFileAsync(filePath) {
+  const file = inspectScheduleFile(filePath)
+  let rawCourses
+
+  try {
+    if (file.extension === '.ics') {
+      rawCourses = parseIcs(await fs.promises.readFile(file.resolved, 'utf8'))
+    } else if (DOCUMENT_EXTENSIONS.has(file.extension)) {
+      const extraction = await extractDocumentText(file.resolved)
+      rawCourses = parseTextSchedule(extraction.text)
+    } else {
+      try {
+        rawCourses = parseWorkbook(file.resolved)
+      } catch {
+        rawCourses = parseTextSchedule(await fs.promises.readFile(file.resolved, 'utf8'))
+      }
+    }
+  } catch (error) {
+    throw new Error(`课表解析失败：${error.message}`)
+  }
+
+  return finalizeSchedule(rawCourses, file)
+}
+
 module.exports = {
   SUPPORTED_EXTENSIONS,
   WEEKDAY_LABELS,
@@ -735,6 +887,8 @@ module.exports = {
   parseIcs,
   parsePeriodRange,
   parseScheduleFile,
+  parseScheduleFileAsync,
+  parseTextSchedule,
   parseWeekday,
   parseWeeks,
   normalizeCourses,

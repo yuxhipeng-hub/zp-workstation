@@ -70,6 +70,7 @@ function createMainWindow() {
     minWidth: 1080,
     minHeight: 700,
     show: false,
+    autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#ffffff',
     icon: iconPath(),
     title: APP_NAME,
@@ -81,6 +82,7 @@ function createMainWindow() {
       spellcheck: false,
     },
   })
+  mainWindow.setMenuBarVisibility(false)
 
   const devServer = process.env.VITE_DEV_SERVER_URL
   if (devServer) {
@@ -115,6 +117,7 @@ function openWorkbench(url) {
     height: 920,
     minWidth: 900,
     minHeight: 640,
+    autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#ffffff',
     icon: iconPath(),
     title: `${APP_NAME} - DeepSeek Harness`,
@@ -124,6 +127,7 @@ function openWorkbench(url) {
       sandbox: true,
     },
   })
+  workbenchWindow.setMenuBarVisibility(false)
   workbenchWindow.loadURL(url)
   workbenchWindow.on('closed', () => {
     workbenchWindow = null
