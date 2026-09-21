@@ -70,6 +70,11 @@
       }
     ]
   },
+  "bundledRuntime": {
+    "node": "24.18.0",
+    "npm": "12.0.2",
+    "nodeMirror": "https://npmmirror.com/mirrors/node"
+  },
   "build": {
     "appId": "com.zp.workstation",
     "productName": "ZP Workbench",
@@ -114,11 +119,6 @@
     ],
     "electronDownload": {
       "mirror": "https://npmmirror.com/mirrors/electron/"
-    },
-    "bundledRuntime": {
-      "node": "24.18.0",
-      "npm": "12.0.2",
-      "nodeMirror": "https://npmmirror.com/mirrors/node"
     },
     "win": {
       "target": [

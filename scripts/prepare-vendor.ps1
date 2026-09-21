@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $rootDir = Split-Path -Parent $PSScriptRoot
 $package = Get-Content -LiteralPath (Join-Path $rootDir "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-$runtime = $package.build.bundledRuntime
+$runtime = $package.bundledRuntime
 
 if (-not $NodeVersion) {
   $NodeVersion = [string]$runtime.node
@@ -17,7 +17,7 @@ if (-not $NpmVersion) {
   $NpmVersion = [string]$runtime.npm
 }
 if (-not $NodeVersion -or -not $NpmVersion) {
-  throw "package.json build.bundledRuntime must define Node.js and npm versions."
+  throw "package.json bundledRuntime must define Node.js and npm versions."
 }
 
 $vendorDir = Join-Path $rootDir "vendor"
