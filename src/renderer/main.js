@@ -24,6 +24,12 @@ const state = {
   skills: null,
   skillFilter: 'all',
   skillQuery: '',
+  skillMode: 'installed',
+  skillCatalogQuery: '',
+  skillCatalog: null,
+  skillBusy: false,
+  skillBusyId: null,
+  skillUpdates: null,
   modelConfig: null,
   workspace: null,
   activeTask: null,
@@ -50,6 +56,10 @@ const state = {
   todayReminders: null,
   workspaceHealth: null,
   backups: null,
+  backupArchives: null,
+  backupStatus: null,
+  backupBusy: false,
+  backupNotice: null,
   reminderBusy: false,
   settingsDirty: false,
   onboarding: null,
@@ -74,6 +84,7 @@ const pageMeta = {
   models: ['连接', '模型与 API', '定位 DSH 的模型配置与安全凭据入口。'],
   logs: ['诊断', '日志', '查看本机启动、更新和运行过程中的事件记录。'],
   settings: ['偏好', '设置', '调整主题、运行时目录、端口和自动检查策略。'],
+  backup: ['系统', '备份与同步', '创建完整备份，并同步到 OneDrive 文件夹或 WebDAV。'],
   about: ['应用', '关于', '查看版本、更新源和官方资源。'],
 }
 
@@ -1935,6 +1946,7 @@ function render(options = {}) {
     models: renderModels,
     logs: renderLogs,
     settings: renderSettings,
+    backup: renderBackup,
     about: renderAbout,
   }
   view.dataset.page = state.page
@@ -3216,39 +3228,21 @@ function renderSkills() {
   }
 
   const filter = state.skillFilter
+  const updateMap = new Map((state.skillUpdates || []).map((item) => [item.name, item]))
   const skills = data.skills.filter((skill) => {
     if (filter === 'dsh') return skill.kind === 'dsh'
     if (filter === 'agents') return skill.kind === 'agents'
     if (filter === 'bundled') return skill.kind === 'bundled'
     return true
   })
-  return `
-    <section class="page-intro action-intro">
-      <div>
-        <h2>本机 Skills</h2>
-        <p>正式读取当前 DSH 的 <code>skills</code> 目录，并兼容 Agent 共享目录。这里只展示本地实际安装、且 frontmatter 有效的 Skill。</p>
-      </div>
-      <div class="button-row">
-        <button class="button secondary" type="button" data-action="open-skills-root">
-          <i data-lucide="folder-open"></i><span>打开目录</span>
-        </button>
-        <button class="button primary" type="button" data-action="refresh-skills">
-          <i data-lucide="refresh-cw"></i><span>重新扫描</span>
-        </button>
-      </div>
-    </section>
+  const managedSkills = data.skills.filter((skill) => skill.managed)
+  const availableUpdates = (state.skillUpdates || []).filter((item) => item.updateAvailable).length
 
-    <div class="workspace-metrics">
-      <div><span>全部 Skill</span><strong>${data.counts.total}</strong></div>
-      <div><span>DSH 用户</span><strong>${data.counts.dsh}</strong></div>
-      <div><span>Agent 共享</span><strong>${data.counts.agents}</strong></div>
-      <div><span>可自动调用</span><strong>${data.counts.active}</strong></div>
-    </div>
-
+  const installedView = `
     <section class="skills-toolbar">
       <label class="input-shell">
         <i data-lucide="search"></i>
-        <input id="skillSearch" type="search" value="${escapeHtml(state.skillQuery)}" placeholder="搜索名称、用途或调用名" />
+        <input id="skillSearch" type="search" value="${escapeHtml(state.skillQuery)}" placeholder="搜索名称、用途、作者或调用名" />
       </label>
       <div class="segmented small compact-segmented" role="group" aria-label="Skill 来源筛选">
         <button type="button" data-skill-filter="all" class="${filter === 'all' ? 'active' : ''}">全部</button>
@@ -3274,9 +3268,12 @@ function renderSkills() {
                   skill.whenToUse,
                   skill.invocation,
                   skill.sourceLabel,
+                  skill.author,
+                  skill.version,
                 ]
                   .join(' ')
                   .toLocaleLowerCase('zh-CN')
+                const update = updateMap.get(skill.name)
                 const statusLabel = skill.active
                   ? skill.userInvocable
                     ? '可调用'
@@ -3284,8 +3281,14 @@ function renderSkills() {
                   : skill.userInvocable
                     ? '仅用户'
                     : '已停用'
+                const permissionText = skill.permissions?.length
+                  ? skill.permissions.join('、')
+                  : '未声明'
+                const dependencyText = skill.dependencies?.length
+                  ? skill.dependencies.join('、')
+                  : '无'
                 return `
-                  <article class="skill-card" data-skill-card data-search="${escapeHtml(searchText)}">
+                  <article class="skill-card skill-card-rich" data-skill-card data-search="${escapeHtml(searchText)}">
                     <div class="skill-card-head">
                       <div class="skill-card-icon"><i data-lucide="wand-sparkles"></i></div>
                       <div class="skill-card-title">
@@ -3295,6 +3298,19 @@ function renderSkills() {
                       <span class="badge ${skill.active ? 'success' : 'neutral'}">${statusLabel}</span>
                     </div>
                     <p>${escapeHtml(skill.description || '这个 Skill 暂未提供用途说明。')}</p>
+                    <div class="skill-facts">
+                      <span><small>作者</small><strong>${escapeHtml(skill.author || '未标注')}</strong></span>
+                      <span><small>版本</small><strong>${escapeHtml(skill.version || '未标注')}</strong></span>
+                      <span><small>权限</small><strong>${escapeHtml(permissionText)}</strong></span>
+                      <span><small>依赖</small><strong>${escapeHtml(dependencyText)}</strong></span>
+                    </div>
+                    ${
+                      update?.updateAvailable
+                        ? '<div class="skill-update-note"><i data-lucide="arrow-up-circle"></i><span>GitHub 上有新提交，可以更新。</span></div>'
+                        : update?.error
+                          ? `<div class="skill-update-note muted"><i data-lucide="circle-alert"></i><span>${escapeHtml(update.error)}</span></div>`
+                          : ''
+                    }
                     <div class="skill-card-foot">
                       <code>${escapeHtml(skill.invocation)}</code>
                       <div class="assignment-actions">
@@ -3304,6 +3320,23 @@ function renderSkills() {
                         <button class="icon-button compact" type="button" data-action="open-skill-directory" data-id="${escapeHtml(skill.id)}" title="打开 Skill 目录">
                           <i data-lucide="folder-open"></i>
                         </button>
+                        ${
+                          skill.canManage
+                            ? `<button class="icon-button compact" type="button" data-action="toggle-skill" data-id="${escapeHtml(skill.id)}" data-enabled="${skill.active || skill.userInvocable ? 'false' : 'true'}" title="${skill.active || skill.userInvocable ? '停用 Skill' : '启用 Skill'}" ${state.skillBusyId === skill.id ? 'disabled' : ''}>
+                                <i data-lucide="${skill.active || skill.userInvocable ? 'power-off' : 'power'}"></i>
+                              </button>`
+                            : ''
+                        }
+                        ${
+                          skill.managed
+                            ? `<button class="icon-button compact" type="button" data-action="update-skill" data-id="${escapeHtml(skill.id)}" title="从 GitHub 更新" ${state.skillBusyId === skill.id ? 'disabled' : ''}>
+                                <i data-lucide="refresh-cw"></i>
+                              </button>
+                              <button class="icon-button compact danger" type="button" data-action="uninstall-skill" data-id="${escapeHtml(skill.id)}" title="卸载 Skill" ${state.skillBusyId === skill.id ? 'disabled' : ''}>
+                                <i data-lucide="trash-2"></i>
+                              </button>`
+                            : ''
+                        }
                       </div>
                     </div>
                     <small title="${escapeHtml(skill.skillFile)}">${escapeHtml(skill.skillFile)}</small>
@@ -3314,6 +3347,110 @@ function renderSkills() {
           <div class="empty-state hidden" id="skillEmpty">没有匹配的 Skill。</div>`
         : '<div class="empty-state">这个筛选下还没有 Skill。</div>'
     }
+  `
+
+  const discoverView = `
+    <section class="skill-install-panel">
+      <div class="skill-install-copy">
+        <span class="eyebrow">INSTALL FROM GITHUB</span>
+        <h3>安装 Skill</h3>
+        <p>支持 <code>owner/repo</code>、GitHub 链接和 <code>owner/repo/skills/名称</code>。工作站只读取并复制文件，不执行仓库脚本。</p>
+      </div>
+      <div class="skill-install-form">
+        <label class="input-shell">
+          <i data-lucide="link"></i>
+          <input id="skillInstallSpec" type="text" placeholder="例如 yuxhipeng-hub/zp-workstation/skills/example" />
+        </label>
+        <button class="button primary" type="button" data-action="install-skill" ${state.skillBusy ? 'disabled' : ''}>
+          <i data-lucide="${state.skillBusy ? 'loader-circle' : 'download'}"></i><span>${state.skillBusy ? '正在安装' : '安装'}</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="skill-search-panel">
+      <header>
+        <div>
+          <h3>搜索 GitHub</h3>
+          <p>搜索公开仓库，查看 Star、简介和更新时间后再安装。</p>
+        </div>
+        <div class="skill-search-form">
+          <label class="input-shell">
+            <i data-lucide="search"></i>
+            <input id="skillCatalogQuery" type="search" value="${escapeHtml(state.skillCatalogQuery)}" placeholder="例如 PDF、study、research" />
+          </label>
+          <button class="button secondary" type="button" data-action="search-skills" ${state.skillBusy ? 'disabled' : ''}>
+            <i data-lucide="search"></i><span>搜索</span>
+          </button>
+        </div>
+      </header>
+      ${
+        state.skillCatalog
+          ? state.skillCatalog.items.length
+            ? `<div class="skill-catalog-list">
+                ${state.skillCatalog.items
+                  .map(
+                    (item) => `
+                      <article class="skill-catalog-item">
+                        <div class="skill-catalog-head">
+                          <div>
+                            <strong>${escapeHtml(item.fullName)}</strong>
+                            <span>${item.stars.toLocaleString('zh-CN')} Star · ${escapeHtml(formatTime(item.updatedAt))}</span>
+                          </div>
+                          <button class="button secondary compact" type="button" data-action="install-skill-spec" data-spec="${escapeHtml(item.fullName)}" ${state.skillBusy ? 'disabled' : ''}>
+                            安装
+                          </button>
+                        </div>
+                        <p>${escapeHtml(item.description || '这个仓库暂未提供简介。')}</p>
+                        <div class="skill-topic-row">
+                          ${item.topics.map((topic) => `<span>${escapeHtml(topic)}</span>`).join('')}
+                        </div>
+                      </article>`,
+                  )
+                  .join('')}
+              </div>`
+            : '<div class="empty-state">没有找到相关仓库。尝试更短的英文关键词。</div>'
+          : '<div class="skill-catalog-placeholder"><i data-lucide="github"></i><span>输入关键词后搜索公开 Skill 仓库。</span></div>'
+      }
+    </section>
+  `
+
+  return `
+    <section class="page-intro action-intro">
+      <div>
+        <h2>Skills 中心</h2>
+        <p>管理 DSH 用户目录中的 Skill，也可以直接从 GitHub 安装。Agent 与内置 Skill 会展示，但不会被工作站修改。</p>
+      </div>
+      <div class="button-row">
+        <button class="button secondary" type="button" data-action="open-skills-root">
+          <i data-lucide="folder-open"></i><span>打开目录</span>
+        </button>
+        <button class="button secondary" type="button" data-action="check-skill-updates" ${managedSkills.length ? '' : 'disabled'}>
+          <i data-lucide="refresh-cw"></i><span>检查更新</span>
+          ${availableUpdates ? `<span class="button-count">${availableUpdates}</span>` : ''}
+        </button>
+        <button class="button primary" type="button" data-action="refresh-skills">
+          <i data-lucide="refresh-cw"></i><span>重新扫描</span>
+        </button>
+      </div>
+    </section>
+
+    <div class="workspace-metrics">
+      <div><span>全部 Skill</span><strong>${data.counts.total}</strong></div>
+      <div><span>GitHub 管理</span><strong>${data.counts.managed || managedSkills.length}</strong></div>
+      <div><span>可自动调用</span><strong>${data.counts.active}</strong></div>
+      <div><span>可用更新</span><strong>${availableUpdates}</strong></div>
+    </div>
+
+    <section class="skill-mode-tabs segmented" role="tablist" aria-label="Skills 页面">
+      <button type="button" data-skill-mode="installed" class="${state.skillMode === 'installed' ? 'active' : ''}">
+        <strong>已安装</strong><span>${data.counts.total} 个</span>
+      </button>
+      <button type="button" data-skill-mode="discover" class="${state.skillMode === 'discover' ? 'active' : ''}">
+        <strong>GitHub</strong><span>搜索与安装</span>
+      </button>
+    </section>
+
+    ${state.skillMode === 'discover' ? discoverView : installedView}
   `
 }
 
@@ -3634,10 +3771,13 @@ function renderSettings() {
       <div class="settings-group settings-group-wide">
         <div class="settings-group-head">
           <h2>备份与恢复</h2>
-          <p>每次写入数据前会保留自动备份，最多 ${20} 份。换电脑时用快照导出/导入迁移整套工作站数据。</p>
+          <p>完整备份、加密、OneDrive 文件夹和 WebDAV 同步已经集中到独立页面；这里保留轻量数据快照和文件校验。</p>
         </div>
         <div class="button-row">
-          <button class="button primary" type="button" data-action="create-backup">
+          <button class="button primary" type="button" data-page-jump="backup">
+            <i data-lucide="archive-restore"></i><span>打开备份与同步</span>
+          </button>
+          <button class="button secondary" type="button" data-action="create-backup">
             <i data-lucide="save"></i><span>立即备份</span>
           </button>
           <button class="button secondary" type="button" data-action="export-snapshot">
@@ -3712,6 +3852,279 @@ function toggleRow(key, label, checked) {
       <input type="checkbox" data-setting="${escapeHtml(key)}" ${checked ? 'checked' : ''} />
       <span class="toggle" aria-hidden="true"></span>
     </label>
+  `
+}
+
+function renderBackup() {
+  const status = state.backupStatus
+  const config = status?.config || {
+    backupEnabled: state.settings.backupEnabled !== false,
+    backupIntervalHours: state.settings.backupIntervalHours || 24,
+    backupRetention: state.settings.backupRetention || 20,
+    backupIncludeMaterials: state.settings.backupIncludeMaterials === true,
+    syncProvider: state.settings.syncProvider || 'none',
+    syncLocalDir: state.settings.syncLocalDir || '',
+    syncWebdavUrl: state.settings.syncWebdavUrl || '',
+    syncWebdavRemoteDir: state.settings.syncWebdavRemoteDir || 'ZP-Workbench',
+    syncWebdavUsername: state.settings.syncWebdavUsername || '',
+    syncAutoUpload: state.settings.syncAutoUpload === true,
+    syncIntervalHours: state.settings.syncIntervalHours || 24,
+    syncLastAt: state.settings.syncLastAt || null,
+    syncPasswordStored: state.backupStatus?.syncPasswordStored === true,
+  }
+  const archives = state.backupArchives || []
+  const latest = archives[0] || null
+  const providerLabels = {
+    none: '未配置',
+    local: 'OneDrive / 本地文件夹',
+    webdav: 'WebDAV',
+  }
+  const credentialReady =
+    config.syncProvider === 'webdav'
+      ? status?.webdavPasswordStored && status?.syncPasswordStored
+      : config.syncProvider === 'local'
+        ? status?.syncPasswordStored
+        : false
+  const credentialLabel =
+    config.syncProvider === 'none'
+      ? '未选择同步'
+      : credentialReady
+        ? '凭据已保存'
+        : config.syncProvider === 'webdav'
+          ? '凭据不完整'
+          : '未设置同步密码'
+
+  return `
+    <section class="page-intro action-intro">
+      <div>
+        <h2>备份与同步</h2>
+        <p>完整备份包含工作站数据、设置和由工作站管理的 Skills；资料文件可选加入。远端同步备份会自动加密。</p>
+      </div>
+      <div class="button-row">
+        <button class="button secondary" type="button" data-action="open-backups">
+          <i data-lucide="folder-open"></i><span>打开备份目录</span>
+        </button>
+        <button class="button primary" type="button" data-action="create-backup-archive" ${state.backupBusy ? 'disabled' : ''}>
+          <i data-lucide="${state.backupBusy ? 'loader-circle' : 'archive'}"></i><span>${state.backupBusy ? '正在处理' : '立即备份'}</span>
+        </button>
+      </div>
+    </section>
+
+    <div class="workspace-metrics">
+      <div><span>本地备份</span><strong>${archives.length}</strong></div>
+      <div><span>最近备份</span><strong>${latest ? escapeHtml(formatTime(latest.createdAt)) : '暂无'}</strong></div>
+      <div><span>自动备份</span><strong>${config.backupEnabled ? `${config.backupIntervalHours}h` : '关闭'}</strong></div>
+      <div><span>同步方式</span><strong>${escapeHtml(providerLabels[config.syncProvider] || '未配置')}</strong></div>
+    </div>
+
+    ${
+      state.backupNotice
+        ? `<div class="backup-notice ${state.backupNotice.tone || 'neutral'}">
+            <i data-lucide="${state.backupNotice.tone === 'error' ? 'circle-alert' : state.backupNotice.tone === 'success' ? 'circle-check' : 'info'}"></i>
+            <span>${escapeHtml(state.backupNotice.message)}</span>
+          </div>`
+        : ''
+    }
+
+    <section class="backup-center-grid">
+      <div class="backup-center-main">
+        <section class="settings-group backup-archive-panel">
+          <div class="settings-group-head">
+            <div>
+              <h2>备份历史</h2>
+              <p>恢复前会自动创建一份“恢复前备份”，防止误操作。</p>
+            </div>
+            <div class="button-row">
+              <button class="button secondary compact" type="button" data-action="export-backup-archive">
+                <i data-lucide="download"></i><span>导出</span>
+              </button>
+              <button class="button secondary compact" type="button" data-action="import-backup-archive">
+                <i data-lucide="upload"></i><span>导入</span>
+              </button>
+            </div>
+          </div>
+          <label class="field">
+            <span>备份密码（可选）</span>
+            <input id="backupArchivePassword" type="password" autocomplete="new-password" placeholder="设置后用于加密、导出和恢复" />
+            <small>密码只用于当前操作，不会明文保存在工作站设置中。同步备份还会使用下方单独的同步密码。</small>
+          </label>
+          <div class="backup-archive-list">
+            ${
+              state.backupArchives === null
+                ? '<div class="loading-panel compact"><i data-lucide="loader-circle"></i><span>正在读取备份</span></div>'
+                : archives.length
+                  ? archives
+                      .slice(0, 12)
+                      .map(
+                        (archive) => `
+                          <article class="backup-archive-row">
+                            <span class="backup-archive-icon"><i data-lucide="${archive.encrypted ? 'shield-check' : 'archive'}"></i></span>
+                            <span class="backup-archive-copy">
+                              <strong>${escapeHtml(archive.label || '手动备份')} · ${escapeHtml(formatTime(archive.createdAt))}</strong>
+                              <small>${archive.summary ? `${archive.summary.assignments} 作业 · ${archive.summary.knowledge} 知识点 · ${archive.summary.experiments} 资料` : '完整工作站备份'} · ${formatBytes(archive.size)}${archive.includeMaterials ? ' · 含资料' : ''}${archive.encrypted ? ' · 已加密' : ''}</small>
+                            </span>
+                            <button class="button secondary compact" type="button" data-action="restore-backup-archive" data-file="${escapeHtml(archive.fileName)}">
+                              恢复
+                            </button>
+                          </article>`,
+                      )
+                      .join('')
+                  : '<div class="empty-state">还没有完整备份，点击“立即备份”创建第一份。</div>'
+            }
+          </div>
+        </section>
+
+        <section class="settings-group backup-sync-panel">
+          <div class="settings-group-head">
+            <div>
+              <h2>同步目标</h2>
+              <p>OneDrive 模式使用已经同步到本机的文件夹；WebDAV 可连接坚果云、群晖等兼容服务。</p>
+            </div>
+            <span class="badge ${credentialReady ? 'success' : 'neutral'}">${credentialLabel}</span>
+          </div>
+          <div class="segmented backup-provider-tabs" role="group" aria-label="同步方式">
+            <button type="button" data-backup-provider="none" class="${config.syncProvider === 'none' ? 'active' : ''}">
+              <i data-lucide="circle-slash-2"></i><span>不同步</span>
+            </button>
+            <button type="button" data-backup-provider="local" class="${config.syncProvider === 'local' ? 'active' : ''}">
+              <i data-lucide="cloud"></i><span>OneDrive / 文件夹</span>
+            </button>
+            <button type="button" data-backup-provider="webdav" class="${config.syncProvider === 'webdav' ? 'active' : ''}">
+              <i data-lucide="server"></i><span>WebDAV</span>
+            </button>
+          </div>
+
+          ${
+            config.syncProvider === 'local'
+              ? `<label class="field">
+                  <span>同步文件夹</span>
+                  <div class="input-with-button">
+                    <input id="syncLocalDir" type="text" value="${escapeHtml(config.syncLocalDir)}" placeholder="例如 OneDrive\\ZP Workbench" />
+                    <button class="icon-button" type="button" data-action="choose-sync-dir" title="选择同步文件夹">
+                      <i data-lucide="folder-open"></i>
+                    </button>
+                  </div>
+                  <small>OneDrive 客户端会自动上传此文件夹，无需再填写账号密码。</small>
+                </label>`
+              : ''
+          }
+
+          ${
+            config.syncProvider === 'webdav'
+              ? `<div class="two-fields">
+                  <label class="field">
+                    <span>WebDAV 地址</span>
+                    <input id="syncWebdavUrl" type="url" value="${escapeHtml(config.syncWebdavUrl)}" placeholder="https://dav.example.com/remote.php/dav/files/user/" />
+                  </label>
+                  <label class="field">
+                    <span>远端目录</span>
+                    <input id="syncWebdavRemoteDir" type="text" value="${escapeHtml(config.syncWebdavRemoteDir)}" placeholder="ZP-Workbench" />
+                  </label>
+                </div>
+                <div class="two-fields">
+                  <label class="field">
+                    <span>用户名</span>
+                    <input id="syncWebdavUsername" type="text" value="${escapeHtml(config.syncWebdavUsername)}" autocomplete="username" />
+                  </label>
+                  <label class="field">
+                    <span>密码 / 应用密码</span>
+                    <input id="syncWebdavPassword" type="password" autocomplete="current-password" placeholder="${status?.webdavPasswordStored ? '已保存，留空保持不变' : '输入 WebDAV 密码'}" />
+                  </label>
+                </div>`
+              : ''
+          }
+
+          ${
+            config.syncProvider !== 'none'
+              ? `<label class="field">
+                  <span>同步加密密码</span>
+                  <input id="syncEncryptionPassword" type="password" autocomplete="new-password" placeholder="${status?.syncPasswordStored ? '已保存，留空保持不变' : '至少 8 位，换电脑恢复时需要同一密码'}" />
+                  <small>同步包始终使用 AES-256-GCM 加密。密码由系统安全存储记忆；在新电脑上需要重新输入同一密码。</small>
+                </label>`
+              : ''
+          }
+
+          <div class="backup-toggle-grid">
+            <label class="toggle-row">
+              <span>自动上传</span>
+              <input id="syncAutoUpload" type="checkbox" ${config.syncAutoUpload ? 'checked' : ''} />
+              <span class="toggle" aria-hidden="true"></span>
+            </label>
+            <label class="field">
+              <span>同步间隔（小时）</span>
+              <input id="syncIntervalHours" type="number" min="1" max="168" value="${escapeHtml(config.syncIntervalHours)}" />
+            </label>
+          </div>
+
+          <div class="button-row backup-sync-actions">
+            <button class="button secondary" type="button" data-action="save-backup-sync" ${state.backupBusy ? 'disabled' : ''}>
+              <i data-lucide="save"></i><span>保存设置</span>
+            </button>
+            <button class="button secondary" type="button" data-action="test-backup-sync" ${config.syncProvider === 'none' || state.backupBusy ? 'disabled' : ''}>
+              <i data-lucide="plug-zap"></i><span>测试连接</span>
+            </button>
+            <button class="button primary" type="button" data-action="upload-backup-sync" ${config.syncProvider === 'none' || state.backupBusy ? 'disabled' : ''}>
+              <i data-lucide="upload-cloud"></i><span>上传备份</span>
+            </button>
+            <button class="button secondary" type="button" data-action="download-backup-sync" ${config.syncProvider === 'none' || state.backupBusy ? 'disabled' : ''}>
+              <i data-lucide="cloud-download"></i><span>恢复最新</span>
+            </button>
+          </div>
+          <p class="setting-hint">${config.syncLastAt ? `上次同步：${escapeHtml(formatTime(config.syncLastAt))}` : '尚未执行同步。'} ${config.syncAutoUpload ? '自动上传已开启。' : '自动上传当前关闭。'}</p>
+        </section>
+      </div>
+
+      <aside class="backup-center-side">
+        <section class="settings-group">
+          <div class="settings-group-head">
+            <h2>备份策略</h2>
+            <p>自动备份只保存在本机；开启同步后才会上传。</p>
+          </div>
+          <label class="toggle-row">
+            <span>自动创建完整备份</span>
+            <input id="backupEnabled" type="checkbox" ${config.backupEnabled ? 'checked' : ''} />
+            <span class="toggle" aria-hidden="true"></span>
+          </label>
+          <label class="toggle-row">
+            <span>备份中包含资料文件</span>
+            <input id="backupIncludeMaterials" type="checkbox" ${config.backupIncludeMaterials ? 'checked' : ''} />
+            <span class="toggle" aria-hidden="true"></span>
+          </label>
+          <div class="two-fields">
+            <label class="field">
+              <span>备份间隔（小时）</span>
+              <input id="backupIntervalHours" type="number" min="1" max="168" value="${escapeHtml(config.backupIntervalHours)}" />
+            </label>
+            <label class="field">
+              <span>保留份数</span>
+              <input id="backupRetention" type="number" min="3" max="100" value="${escapeHtml(config.backupRetention)}" />
+            </label>
+          </div>
+          <button class="button secondary full" type="button" data-action="save-backup-policy" ${state.backupBusy ? 'disabled' : ''}>
+            <i data-lucide="save"></i><span>保存备份策略</span>
+          </button>
+          <p class="setting-hint">资料文件较多时，备份包会明显变大。同步备份始终加密。</p>
+        </section>
+
+        <section class="settings-group backup-security-card">
+          <div class="settings-group-head">
+            <h2>安全说明</h2>
+          </div>
+          <div class="backup-security-row">
+            <i data-lucide="shield-check"></i>
+            <span><strong>AES-256-GCM</strong><small>加密导出的 .zpbackup 文件</small></span>
+          </div>
+          <div class="backup-security-row">
+            <i data-lucide="key-round"></i>
+            <span><strong>系统安全存储</strong><small>WebDAV 密码与同步密码</small></span>
+          </div>
+          <div class="backup-security-row">
+            <i data-lucide="rotate-ccw"></i>
+            <span><strong>恢复前快照</strong><small>每次导入前自动保留当前状态</small></span>
+          </div>
+        </section>
+      </aside>
+    </section>
   `
 }
 
@@ -3968,6 +4381,23 @@ async function loadSkills({ refresh = false } = {}) {
   if (state.page === 'skills') render()
 }
 
+async function loadBackupCenter({ refresh = false } = {}) {
+  if (refresh || state.backupArchives === null || state.backupStatus === null) {
+    try {
+      const [archives, status] = await Promise.all([
+        api.listBackupArchives(),
+        api.getBackupStatus(),
+      ])
+      state.backupArchives = archives
+      state.backupStatus = status
+    } catch (error) {
+      state.backupArchives ||= []
+      state.backupNotice = { tone: 'error', message: error.message }
+    }
+  }
+  if (state.page === 'backup') render()
+}
+
 async function refreshModelConfig() {
   state.modelConfig = await guard(() => api.getModelConfig(), '读取模型配置失败')
   if (state.page === 'models') render()
@@ -4027,6 +4457,31 @@ function collectScheduleInput() {
     startTime: document.querySelector('#scheduleStartTime')?.value || '',
     endTime: document.querySelector('#scheduleEndTime')?.value || '',
     weekText: document.querySelector('#scheduleWeekText')?.value || '',
+  }
+}
+
+function backupArchivePassword() {
+  return document.querySelector('#backupArchivePassword')?.value || ''
+}
+
+function collectBackupPolicy() {
+  return {
+    backupEnabled: Boolean(document.querySelector('#backupEnabled')?.checked),
+    backupIncludeMaterials: Boolean(document.querySelector('#backupIncludeMaterials')?.checked),
+    backupIntervalHours: Number(document.querySelector('#backupIntervalHours')?.value || 24),
+    backupRetention: Number(document.querySelector('#backupRetention')?.value || 20),
+  }
+}
+
+function collectBackupSync() {
+  return {
+    syncProvider: state.settings.syncProvider || 'none',
+    syncLocalDir: document.querySelector('#syncLocalDir')?.value || '',
+    syncWebdavUrl: document.querySelector('#syncWebdavUrl')?.value || '',
+    syncWebdavRemoteDir: document.querySelector('#syncWebdavRemoteDir')?.value || 'ZP-Workbench',
+    syncWebdavUsername: document.querySelector('#syncWebdavUsername')?.value || '',
+    syncAutoUpload: Boolean(document.querySelector('#syncAutoUpload')?.checked),
+    syncIntervalHours: Number(document.querySelector('#syncIntervalHours')?.value || 24),
   }
 }
 
@@ -4689,6 +5144,235 @@ async function handleAction(action, element) {
       toast('快照已导入。', 'success')
       break
     }
+    case 'create-backup-archive': {
+      const password = backupArchivePassword()
+      const includeMaterials = Boolean(document.querySelector('#backupIncludeMaterials')?.checked)
+      state.backupBusy = true
+      state.backupNotice = null
+      render()
+      try {
+        const archive = await guard(
+          () =>
+            api.createBackupArchive({
+              label: 'manual',
+              includeMaterials,
+              password,
+            }),
+          '创建完整备份失败',
+        )
+        state.backupArchives = await api.listBackupArchives()
+        state.backupNotice = {
+          tone: 'success',
+          message: `完整备份已创建：${formatBytes(archive.size)}${archive.encrypted ? '，已加密' : ''}。`,
+        }
+        toast('完整备份已创建。', 'success')
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'restore-backup-archive': {
+      if (!window.confirm('从这份完整备份恢复吗？当前数据会先自动创建恢复前备份。')) return
+      const password = backupArchivePassword()
+      state.backupBusy = true
+      state.backupNotice = null
+      render()
+      try {
+        const result = await guard(
+          () => api.restoreBackupArchive(element.dataset.file, password),
+          '恢复完整备份失败',
+        )
+        applyWorkspace(result.workspace)
+        state.settings = await api.getSettings()
+        state.backupArchives = await api.listBackupArchives()
+        state.backupStatus = await api.getBackupStatus()
+        state.backupNotice = {
+          tone: 'success',
+          message: `已恢复 ${result.fileName}，恢复前状态仍保留在备份历史中。`,
+        }
+        toast('完整备份已恢复。', 'success')
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'export-backup-archive': {
+      const password = backupArchivePassword()
+      const includeMaterials = Boolean(document.querySelector('#backupIncludeMaterials')?.checked)
+      state.backupBusy = true
+      state.backupNotice = null
+      render()
+      try {
+        const result = await guard(
+          () =>
+            api.exportBackupArchive({
+              label: 'export',
+              includeMaterials,
+              password,
+            }),
+          '导出完整备份失败',
+        )
+        if (result) {
+          state.backupNotice = {
+            tone: 'success',
+            message: `已导出到 ${result.filePath}`,
+          }
+          toast('完整备份已导出。', 'success')
+        }
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'import-backup-archive': {
+      if (!window.confirm('导入完整备份会覆盖当前工作站数据，继续吗？')) return
+      const password = backupArchivePassword()
+      state.backupBusy = true
+      state.backupNotice = null
+      render()
+      try {
+        const result = await guard(() => api.importBackupArchive(password), '导入完整备份失败')
+        if (result) {
+          applyWorkspace(result.workspace)
+          state.settings = await api.getSettings()
+          state.backupArchives = await api.listBackupArchives()
+          state.backupStatus = await api.getBackupStatus()
+          state.backupNotice = { tone: 'success', message: '完整备份已导入。' }
+          toast('完整备份已导入。', 'success')
+        }
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'save-backup-policy': {
+      const config = collectBackupPolicy()
+      state.backupBusy = true
+      render()
+      try {
+        state.backupStatus = await guard(() => api.patchBackupSync({ config }), '保存备份策略失败')
+        state.settings = await api.getSettings()
+        state.backupNotice = { tone: 'success', message: '备份策略已保存。' }
+        toast('备份策略已保存。', 'success')
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'save-backup-sync': {
+      const passwordInput = document.querySelector('#syncWebdavPassword')
+      const syncPasswordInput = document.querySelector('#syncEncryptionPassword')
+      const config = collectBackupSync()
+      const password = passwordInput?.value || ''
+      const syncPassword = syncPasswordInput?.value || ''
+      state.backupBusy = true
+      render()
+      try {
+        state.backupStatus = await guard(
+          () =>
+            api.patchBackupSync({
+              config,
+              ...(password ? { webdavPassword: password } : {}),
+              ...(syncPassword ? { syncPassword } : {}),
+            }),
+          '保存同步设置失败',
+        )
+        state.settings = await api.getSettings()
+        state.backupNotice = { tone: 'success', message: '同步设置已保存。' }
+        toast('同步设置已保存。', 'success')
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'choose-sync-dir': {
+      const directory = await guard(() => api.chooseSyncDir(), '选择同步文件夹失败')
+      if (directory) {
+        const input = document.querySelector('#syncLocalDir')
+        if (input) input.value = directory
+      }
+      break
+    }
+    case 'test-backup-sync': {
+      state.backupBusy = true
+      state.backupNotice = null
+      render()
+      try {
+        const result = await guard(() => api.testBackupSync(), '测试同步连接失败')
+        state.backupNotice = { tone: 'success', message: `连接正常：${result.message}` }
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'upload-backup-sync': {
+      state.backupBusy = true
+      state.backupNotice = null
+      render()
+      try {
+        const result = await guard(() => api.uploadBackupSync(), '上传同步备份失败')
+        state.settings = await api.getSettings()
+        state.backupStatus = await api.getBackupStatus()
+        state.backupNotice = {
+          tone: 'success',
+          message: `已上传加密备份 ${result.fileName}。`,
+        }
+        toast('同步备份已上传。', 'success')
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'download-backup-sync': {
+      if (!window.confirm('从同步位置恢复最新备份吗？当前数据会先自动备份。')) return
+      state.backupBusy = true
+      state.backupNotice = null
+      render()
+      try {
+        const result = await guard(() => api.downloadBackupSync(), '下载同步备份失败')
+        applyWorkspace(result.workspace)
+        state.settings = await api.getSettings()
+        state.backupStatus = await api.getBackupStatus()
+        state.backupNotice = {
+          tone: 'success',
+          message: `已从同步备份 ${result.fileName} 恢复。`,
+        }
+        toast('同步备份已恢复。', 'success')
+      } catch (error) {
+        state.backupNotice = { tone: 'error', message: error.message }
+      } finally {
+        state.backupBusy = false
+        render()
+      }
+      break
+    }
+    case 'open-backups':
+      await guard(() => api.openPath('backups'), '打开备份目录失败')
+      break
     case 'check-workspace-health': {
       state.workspaceHealth = await guard(() => api.checkWorkspaceHealth(), '校验资料文件失败')
       render()
@@ -4752,6 +5436,106 @@ async function handleAction(action, element) {
       await loadSkills({ refresh: true })
       toast('Skills 已重新扫描。', 'success')
       break
+    case 'check-skill-updates': {
+      state.skillBusy = true
+      render()
+      try {
+        state.skillUpdates = await guard(() => api.checkSkillUpdates(), '检查 Skill 更新失败')
+        const count = state.skillUpdates.filter((item) => item.updateAvailable).length
+        toast(
+          count ? `发现 ${count} 个可更新 Skill。` : '所有 GitHub Skill 都是最新版本。',
+          'success',
+        )
+      } finally {
+        state.skillBusy = false
+        render()
+      }
+      break
+    }
+    case 'install-skill':
+    case 'install-skill-spec': {
+      const spec =
+        action === 'install-skill'
+          ? document.querySelector('#skillInstallSpec')?.value.trim() || ''
+          : element.dataset.spec || ''
+      if (!spec) {
+        toast('请输入 GitHub 仓库地址。', 'error')
+        document.querySelector('#skillInstallSpec')?.focus()
+        return
+      }
+      state.skillBusy = true
+      render()
+      try {
+        const result = await guard(() => api.installSkill(spec), '安装 Skill 失败')
+        state.skills = result.data
+        state.skillMode = 'installed'
+        state.skillUpdates = null
+        toast(`已安装 ${result.skill?.name || spec}`, 'success')
+      } finally {
+        state.skillBusy = false
+        render()
+      }
+      break
+    }
+    case 'search-skills': {
+      const query = document.querySelector('#skillCatalogQuery')?.value.trim() || ''
+      state.skillCatalogQuery = query
+      state.skillBusy = true
+      render()
+      try {
+        state.skillCatalog = await guard(() => api.searchSkills(query), '搜索 GitHub 失败')
+      } finally {
+        state.skillBusy = false
+        render()
+      }
+      break
+    }
+    case 'toggle-skill': {
+      const id = element.dataset.id
+      const enabled = element.dataset.enabled === 'true'
+      state.skillBusyId = id
+      render()
+      try {
+        const result = await guard(() => api.setSkillEnabled(id, enabled), '修改 Skill 状态失败')
+        state.skills = result.data
+        toast(enabled ? 'Skill 已启用。' : 'Skill 已停用。', 'success')
+      } finally {
+        state.skillBusyId = null
+        render()
+      }
+      break
+    }
+    case 'update-skill': {
+      const id = element.dataset.id
+      state.skillBusyId = id
+      render()
+      try {
+        const result = await guard(() => api.updateSkill(id), '更新 Skill 失败')
+        state.skills = result.data
+        state.skillUpdates = null
+        toast(`已更新 ${result.skill?.name || 'Skill'}`, 'success')
+      } finally {
+        state.skillBusyId = null
+        render()
+      }
+      break
+    }
+    case 'uninstall-skill': {
+      const skill = state.skills?.skills.find((item) => item.id === element.dataset.id)
+      if (!skill || !window.confirm(`卸载 ${skill.name} 吗？原文件会先移动到 Skill 备份目录。`))
+        return
+      state.skillBusyId = skill.id
+      render()
+      try {
+        state.skills = await guard(() => api.uninstallSkill(skill.id), '卸载 Skill 失败')
+        state.skillUpdates = null
+        toast('Skill 已卸载，原文件仍保留在备份目录。', 'success')
+      } finally {
+        state.skillBusyId = null
+        render()
+      }
+      break
+    }
     case 'open-skills-root':
       await guard(() => api.openSkillsRoot(), '打开 Skills 目录失败')
       break
@@ -5021,6 +5805,7 @@ document.addEventListener('click', async (event) => {
     if (state.page === 'skills') await loadSkills()
     if (state.page === 'models' && !state.modelConfig) await refreshModelConfig()
     if (state.page === 'settings') await loadMaintenanceData()
+    if (state.page === 'backup') await loadBackupCenter()
     return
   }
 
@@ -5046,6 +5831,7 @@ document.addEventListener('click', async (event) => {
     if (state.page === 'assignments') scrollToHighlightedAssignment()
     if (state.page === 'schedule') scrollToHighlightedScheduleCourse()
     if (state.page === 'settings') await loadMaintenanceData()
+    if (state.page === 'backup') await loadBackupCenter()
     return
   }
 
@@ -5060,6 +5846,28 @@ document.addEventListener('click', async (event) => {
   const skillFilter = event.target.closest('[data-skill-filter]')
   if (skillFilter) {
     state.skillFilter = skillFilter.dataset.skillFilter
+    render()
+    return
+  }
+
+  const skillMode = event.target.closest('[data-skill-mode]')
+  if (skillMode) {
+    state.skillMode = skillMode.dataset.skillMode === 'discover' ? 'discover' : 'installed'
+    render()
+    return
+  }
+
+  const backupProvider = event.target.closest('[data-backup-provider]')
+  if (backupProvider) {
+    Object.assign(state.settings, collectBackupSync())
+    state.settings.syncProvider = backupProvider.dataset.backupProvider
+    if (state.backupStatus?.config) {
+      state.backupStatus.config = {
+        ...state.backupStatus.config,
+        ...collectBackupSync(),
+        syncProvider: state.settings.syncProvider,
+      }
+    }
     render()
     return
   }
@@ -5177,10 +5985,24 @@ function setScheduleDropActive(active) {
   zone?.classList.toggle('is-dragging', active)
 }
 
+function draggedDataTypes(event) {
+  return [...(event.dataTransfer?.types || [])].map(String)
+}
+
+function isKnownFileDragType(type) {
+  return /(?:^files$|file|uri|wps|office|openxml|spreadsheet|presentation|pdf|word|excel)/i.test(
+    type,
+  )
+}
+
 function hasDraggedFiles(event) {
+  const types = draggedDataTypes(event)
+  if (types.some(isKnownFileDragType)) return true
+  if ([...(event.dataTransfer?.items || [])].some((item) => item.kind === 'file')) return true
   return (
-    [...(event.dataTransfer?.types || [])].includes('Files') ||
-    [...(event.dataTransfer?.items || [])].some((item) => item.kind === 'file')
+    types.length > 0 &&
+    types.some((type) => type === 'text/plain' || type === 'text/html') &&
+    (state.page === 'schedule' || state.page === 'experiments')
   )
 }
 
@@ -5191,6 +6013,32 @@ function droppedFiles(event) {
     .filter((item) => item.kind === 'file')
     .map((item) => item.getAsFile?.())
     .filter(Boolean)
+}
+
+function droppedReferenceValues(event) {
+  const dataTransfer = event.dataTransfer
+  if (!dataTransfer) return []
+  const values = []
+  for (const type of draggedDataTypes(event)) {
+    if (type === 'Files') continue
+    try {
+      const value = dataTransfer.getData(type)
+      if (value && !values.includes(value)) values.push(value)
+    } catch {
+      // Some Windows drag sources expose the type but reject getData.
+    }
+  }
+  return values
+}
+
+async function resolveDroppedReferences(values) {
+  if (!values.length || !api.resolveDropReferences) return []
+  return api.resolveDropReferences(values)
+}
+
+function droppedTypeSummary(event) {
+  const types = draggedDataTypes(event)
+  return types.length ? types.slice(0, 8).join('、') : '无'
 }
 
 async function resolveDroppedFilePath(file) {
@@ -5251,13 +6099,28 @@ document.addEventListener('drop', async (event) => {
     scheduleDragDepth = 0
     setScheduleDropActive(false)
     const file = droppedFiles(event)[0]
-    if (!file) {
-      toast('没有取得课表文件路径，请改用“选择课表文件”。', 'error', 6500)
-      return
-    }
     try {
-      const filePath = await resolveDroppedFilePath(file)
-      if (!filePath) throw new Error('没有取得课表文件路径，请先保存到本地。')
+      let filePath = ''
+      let fileError = null
+      if (file) {
+        try {
+          filePath = await resolveDroppedFilePath(file)
+        } catch (error) {
+          fileError = error
+        }
+      }
+      if (!filePath) {
+        const [reference] = await resolveDroppedReferences(droppedReferenceValues(event))
+        filePath = reference?.path || ''
+      }
+      if (!filePath) {
+        throw (
+          fileError ||
+          new Error(
+            `WPS 这次拖动没有提供可读取的本地文件路径（拖拽类型：${droppedTypeSummary(event)}）。请先在 WPS 中“另存为”，或从文件资源管理器拖入。`,
+          )
+        )
+      }
       await importScheduleFile(filePath)
     } catch (error) {
       toast(error.message, 'error', 6500)
@@ -5271,22 +6134,38 @@ document.addEventListener('drop', async (event) => {
   experimentDragDepth = 0
   setExperimentDropActive(false)
   const files = droppedFiles(event)
-  if (!files.length) {
-    toast('拖入的内容里没有可导入的文件。', 'error')
-    return
-  }
   const entries = []
+  const seenPaths = new Set()
   for (const file of files) {
     try {
+      const filePath = await resolveDroppedFilePath(file)
+      if (!filePath) continue
+      const key = filePath.toLowerCase()
+      if (seenPaths.has(key)) continue
+      seenPaths.add(key)
       entries.push({
         name: file.name,
-        path: await resolveDroppedFilePath(file),
+        path: filePath,
       })
     } catch (error) {
       toast(`“${file.name || '文件'}”读取失败：${error.message}`, 'error', 6500)
     }
   }
-  if (!entries.some((entry) => entry.path)) return
+  const references = await resolveDroppedReferences(droppedReferenceValues(event))
+  for (const reference of references) {
+    const key = reference.path.toLowerCase()
+    if (seenPaths.has(key)) continue
+    seenPaths.add(key)
+    entries.push({ name: reference.name, path: reference.path })
+  }
+  if (!entries.length) {
+    toast(
+      `没有取得可导入的文件路径（拖拽类型：${droppedTypeSummary(event)}）。请先保存到本地，或从文件资源管理器拖入。`,
+      'error',
+      7600,
+    )
+    return
+  }
   try {
     await importExperimentEntries(entries)
   } catch (error) {
@@ -5381,7 +6260,14 @@ api.on('settings:changed', (settings) => {
   state.settings = settings
   state.onboarding = settings.onboarding || state.onboarding
   if (settings.theme) applyTheme(settings.theme)
-  if (state.page === 'settings' || state.page === 'overview' || state.page === 'guide') render()
+  if (
+    state.page === 'settings' ||
+    state.page === 'overview' ||
+    state.page === 'guide' ||
+    state.page === 'backup'
+  ) {
+    render()
+  }
 })
 api.on('reminder:due', (reminder) => {
   if (!reminder?.title) return
@@ -5447,6 +6333,7 @@ async function start() {
         .catch(() => {})
     }
     if (state.page === 'skills') await loadSkills({ refresh: true })
+    if (state.page === 'backup') await loadBackupCenter({ refresh: true })
     if (state.settings.autoCheckDsh) {
       setTimeout(
         () =>

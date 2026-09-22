@@ -1,8 +1,13 @@
 import { test, expect, _electron as electron } from '@playwright/test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+
+const require = createRequire(import.meta.url)
+const XLSX = require('xlsx')
 
 function createUserDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'zp-workbench-e2e-'))
@@ -125,6 +130,109 @@ test('renames an experiment group from the workspace dialog', async () => {
     await expect(window.getByText('prompt() is not supported.')).toHaveCount(0)
     assert.equal(fs.existsSync(originalFile), false)
     assert.equal(fs.existsSync(renamedFile), true)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('renders the Skills center and creates a complete workstation backup', async () => {
+  const userDataDir = createUserDataDir()
+  const dshHome = path.join(userDataDir, '.dsh')
+  const skillDirectory = path.join(dshHome, 'skills', 'academic-writer')
+  fs.mkdirSync(skillDirectory, { recursive: true })
+  fs.writeFileSync(
+    path.join(skillDirectory, 'SKILL.md'),
+    '---\nname: academic-writer\ndescription: Improve academic writing.\n---\n',
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ dshHome, onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav').getByRole('button', { name: 'Skills', exact: true }).click()
+    await expect(
+      window.locator('#view').getByRole('heading', { name: 'Skills 中心' }),
+    ).toBeVisible()
+    await expect(window.getByText('academic-writer', { exact: true }).first()).toBeVisible()
+
+    await window.locator('.nav').getByRole('button', { name: '备份与同步', exact: true }).click()
+    await expect(
+      window.locator('#view').getByRole('heading', { name: '备份与同步', exact: true }),
+    ).toBeVisible()
+    await window.locator('#view').getByRole('button', { name: '立即备份' }).click()
+    await expect(window.getByText(/manual ·/).first()).toBeVisible()
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('imports a schedule from a WPS-style URI-list drop without DataTransfer.files', async () => {
+  const userDataDir = createUserDataDir()
+  const schedulePath = path.join(userDataDir, 'wps-schedule.xlsx')
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet([
+      ['课程名称', '星期', '节次', '周次', '教师', '地点'],
+      ['线性代数', '星期三', '第7-8节', '1-16周', '赵老师', 'A108'],
+    ]),
+    '课表',
+  )
+  XLSX.writeFile(workbook, schedulePath)
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav').getByRole('button', { name: '课表', exact: true }).click()
+    const uri = pathToFileURL(schedulePath).href
+    const resolved = await window.evaluate(
+      (value) => window.launcher.resolveDropReferences([value]),
+      uri,
+    )
+    assert.equal(resolved.length, 1)
+    assert.equal(fs.existsSync(resolved[0].path), true)
+
+    const observedDrop = await window.evaluate(
+      (value) =>
+        new Promise((resolve) => {
+          globalThis.document.addEventListener(
+            'drop',
+            (event) => {
+              resolve({
+                types: [...event.dataTransfer.types],
+                uri: event.dataTransfer.getData('text/uri-list'),
+              })
+            },
+            { capture: true, once: true },
+          )
+          const dataTransfer = new globalThis.DataTransfer()
+          dataTransfer.setData('text/uri-list', value)
+          globalThis.document.dispatchEvent(
+            new globalThis.DragEvent('drop', {
+              bubbles: true,
+              cancelable: true,
+              dataTransfer,
+            }),
+          )
+        }),
+      uri,
+    )
+    assert.deepEqual(observedDrop, { types: ['text/uri-list'], uri })
+    await expect(window.locator('.toast.success')).toContainText('已识别 1 个课程安排。')
+    await expect(window.getByText('线性代数', { exact: true }).first()).toBeVisible()
+    await expect(window.getByText(/赵老师/).first()).toBeVisible()
   } finally {
     await closeWorkstation(app, userDataDir)
   }

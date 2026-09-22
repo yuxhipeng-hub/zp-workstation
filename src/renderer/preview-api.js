@@ -318,6 +318,18 @@ function createPreviewState() {
       reviewReminderEnabled: true,
       dailyDigestTime: '08:00',
       reviewReminderTime: '19:00',
+      backupEnabled: true,
+      backupIntervalHours: 24,
+      backupRetention: 20,
+      backupIncludeMaterials: false,
+      syncProvider: 'none',
+      syncLocalDir: '',
+      syncWebdavUrl: '',
+      syncWebdavRemoteDir: 'ZP-Workbench',
+      syncWebdavUsername: '',
+      syncAutoUpload: false,
+      syncIntervalHours: 24,
+      syncLastAt: null,
       reminderLog: {},
       onboarding: {
         welcomeSeen: previewWelcomeSeen,
@@ -336,6 +348,40 @@ function createPreviewState() {
         summary: { assignments: 3, knowledge: 5, experiments: 3, courses: 4 },
       },
     ],
+    backupArchives: [
+      {
+        fileName: 'workstation-preview-manual.zpbackup',
+        size: 28672,
+        createdAt: new Date(now - 1000 * 60 * 90).toISOString(),
+        label: 'manual',
+        encrypted: true,
+        includeMaterials: false,
+        summary: { assignments: 3, knowledge: 5, experiments: 3, courses: 4 },
+      },
+    ],
+    backupStatus: {
+      config: {
+        backupEnabled: true,
+        backupIntervalHours: 24,
+        backupRetention: 20,
+        backupIncludeMaterials: false,
+        syncProvider: 'none',
+        syncLocalDir: '',
+        syncWebdavUrl: '',
+        syncWebdavRemoteDir: 'ZP-Workbench',
+        syncWebdavUsername: '',
+        syncAutoUpload: false,
+        syncIntervalHours: 24,
+        syncLastAt: null,
+      },
+      webdavPasswordStored: false,
+      syncPasswordStored: true,
+      running: false,
+      lastError: '',
+      lastSyncAt: null,
+    },
+    skillCatalog: null,
+    skillUpdates: [],
     status: {
       installed: true,
       installedVersion: '0.1.4-rc.2',
@@ -498,6 +544,8 @@ function createPreviewState() {
         active: 4,
         userInvocable: 4,
         shadowed: 0,
+        managed: 1,
+        disabled: 1,
       },
       skills: [
         {
@@ -506,12 +554,18 @@ function createPreviewState() {
           folder: 'ui-ux-pro-max',
           description: '面向 Web、移动端和桌面端的 UI/UX 设计与实现知识库。',
           whenToUse: '需要设计、审查或修复界面时使用。',
+          author: 'ZP Workbench',
+          version: '1.2.0',
+          permissions: ['filesystem'],
+          dependencies: [],
           active: true,
           userInvocable: true,
           kind: 'dsh',
           sourceLabel: 'DSH 用户',
           sourcePath: `${dshHome}\\skills`,
           invocation: '$ui-ux-pro-max',
+          canManage: true,
+          managed: true,
           directory: `${dshHome}\\skills\\ui-ux-pro-max`,
           skillFile: `${dshHome}\\skills\\ui-ux-pro-max\\SKILL.md`,
           updatedAt: new Date(now - 1000 * 60 * 60 * 36).toISOString(),
@@ -521,12 +575,18 @@ function createPreviewState() {
           name: 'find-skill',
           folder: 'find-skill',
           description: '根据当前问题寻找合适的 Skill，并搜索 GitHub 上高星的相关项目。',
+          author: 'Community',
+          version: '1.0.0',
+          permissions: ['network'],
+          dependencies: [],
           active: true,
           userInvocable: true,
           kind: 'dsh',
           sourceLabel: 'DSH 用户',
           sourcePath: `${dshHome}\\skills`,
           invocation: '$find-skill',
+          canManage: true,
+          managed: false,
           directory: `${dshHome}\\skills\\find-skill`,
           skillFile: `${dshHome}\\skills\\find-skill\\SKILL.md`,
           updatedAt: new Date(now - 1000 * 60 * 60 * 12).toISOString(),
@@ -536,12 +596,18 @@ function createPreviewState() {
           name: 'grilling',
           folder: 'grilling.md',
           description: '持续追问并检验方案、决策或设计，直到关键分支都被明确。',
+          author: 'Community',
+          version: '1.1.0',
+          permissions: [],
+          dependencies: [],
           active: true,
           userInvocable: true,
           kind: 'dsh',
           sourceLabel: 'DSH 用户',
           sourcePath: `${dshHome}\\skills`,
           invocation: '$grilling',
+          canManage: true,
+          managed: false,
           directory: `${dshHome}\\skills`,
           skillFile: `${dshHome}\\skills\\grilling.md`,
           updatedAt: new Date(now - 1000 * 60 * 60 * 12).toISOString(),
@@ -551,12 +617,18 @@ function createPreviewState() {
           name: 'shared-research',
           folder: 'shared-research',
           description: '由多个本地 Agent 共享的资料检索与整理能力。',
+          author: 'Agent Team',
+          version: '0.9.0',
+          permissions: ['network', 'filesystem'],
+          dependencies: ['pdf-reader'],
           active: true,
           userInvocable: false,
           kind: 'agents',
           sourceLabel: 'Agent 共享',
           sourcePath: 'C:\\Users\\小zp\\.agents\\skills',
           invocation: '$shared-research',
+          canManage: false,
+          managed: false,
           directory: 'C:\\Users\\小zp\\.agents\\skills\\shared-research',
           skillFile: 'C:\\Users\\小zp\\.agents\\skills\\shared-research\\SKILL.md',
           updatedAt: new Date(now - 1000 * 60 * 60 * 18).toISOString(),
@@ -566,12 +638,18 @@ function createPreviewState() {
           name: 'export-helper',
           folder: 'export-helper',
           description: '整理导出文件，但当前禁止模型自动调用。',
+          author: 'Agent Team',
+          version: '0.8.0',
+          permissions: ['filesystem'],
+          dependencies: [],
           active: false,
           userInvocable: true,
           kind: 'agents',
           sourceLabel: 'Agent 共享',
           sourcePath: 'C:\\Users\\小zp\\.agents\\skills',
           invocation: '$export-helper',
+          canManage: false,
+          managed: false,
           directory: 'C:\\Users\\小zp\\.agents\\skills\\export-helper',
           skillFile: 'C:\\Users\\小zp\\.agents\\skills\\export-helper\\SKILL.md',
           updatedAt: new Date(now - 1000 * 60 * 60 * 30).toISOString(),
@@ -1027,6 +1105,116 @@ export function createPreviewLauncherApi() {
     async listSkills() {
       return clone(state.skills)
     },
+    async searchSkills(query) {
+      state.skillCatalog = {
+        query: String(query || ''),
+        total: 2,
+        items: [
+          {
+            id: 'preview-skill-1',
+            name: 'paper-reader',
+            owner: 'community-lab',
+            fullName: 'community-lab/paper-reader',
+            description: '读取论文、提取章节结构并生成可追溯摘录。',
+            url: 'https://github.com/community-lab/paper-reader',
+            stars: 2841,
+            updatedAt: new Date().toISOString(),
+            defaultBranch: 'main',
+            topics: ['pdf', 'research', 'agent-skills'],
+          },
+          {
+            id: 'preview-skill-2',
+            name: 'study-planner',
+            owner: 'campus-tools',
+            fullName: 'campus-tools/study-planner',
+            description: '根据课程、考试日期和薄弱知识点安排复习计划。',
+            url: 'https://github.com/campus-tools/study-planner',
+            stars: 1260,
+            updatedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+            defaultBranch: 'main',
+            topics: ['study', 'planning'],
+          },
+        ],
+      }
+      return clone(state.skillCatalog)
+    },
+    async installSkill(spec) {
+      const name = String(spec || 'preview-skill')
+        .split('/')
+        .filter(Boolean)
+        .at(-1)
+        .replace(/[^a-z0-9-]/gi, '-')
+        .toLocaleLowerCase('en-US')
+      const skill = {
+        id: `dsh:${name}`,
+        name,
+        folder: name,
+        description: '从 GitHub 安装的预览 Skill。',
+        whenToUse: '',
+        author: 'GitHub',
+        version: '1.0.0',
+        permissions: ['filesystem'],
+        dependencies: [],
+        active: true,
+        userInvocable: true,
+        kind: 'dsh',
+        sourceLabel: 'DSH 用户',
+        sourcePath: `${state.settings.dshHome}\\skills`,
+        invocation: `$${name}`,
+        canManage: true,
+        managed: true,
+        directory: `${state.settings.dshHome}\\skills\\${name}`,
+        skillFile: `${state.settings.dshHome}\\skills\\${name}\\SKILL.md`,
+        updatedAt: new Date().toISOString(),
+      }
+      state.skills.skills.push(skill)
+      state.skills.counts.total += 1
+      state.skills.counts.dsh += 1
+      state.skills.counts.active += 1
+      state.skills.counts.userInvocable += 1
+      state.skills.counts.managed += 1
+      return clone({ skill, data: state.skills, managed: { name } })
+    },
+    async setSkillEnabled(id, enabled) {
+      const skill = state.skills.skills.find((item) => item.id === id)
+      if (!skill) throw new Error('没有找到这个 Skill。')
+      skill.active = Boolean(enabled)
+      skill.userInvocable = Boolean(enabled)
+      state.skills.counts.active = state.skills.skills.filter((item) => item.active).length
+      state.skills.counts.userInvocable = state.skills.skills.filter(
+        (item) => item.userInvocable,
+      ).length
+      state.skills.counts.disabled = state.skills.skills.filter(
+        (item) => !item.active && !item.userInvocable,
+      ).length
+      return clone({ skill, data: state.skills })
+    },
+    async checkSkillUpdates() {
+      state.skillUpdates = state.skills.skills
+        .filter((skill) => skill.managed)
+        .map((skill) => ({
+          name: skill.name,
+          updateAvailable: true,
+          currentCommit: 'preview-one',
+          latestCommit: 'preview-two',
+          error: '',
+        }))
+      return clone(state.skillUpdates)
+    },
+    async updateSkill(id) {
+      const skill = state.skills.skills.find((item) => item.id === id)
+      if (!skill) throw new Error('没有找到这个 Skill。')
+      skill.version = '1.1.0'
+      skill.updatedAt = new Date().toISOString()
+      return clone({ skill, data: state.skills })
+    },
+    async uninstallSkill(id) {
+      state.skills.skills = state.skills.skills.filter((item) => item.id !== id)
+      state.skills.counts.total = state.skills.skills.length
+      state.skills.counts.dsh = state.skills.skills.filter((item) => item.kind === 'dsh').length
+      state.skills.counts.managed = state.skills.skills.filter((item) => item.managed).length
+      return clone(state.skills)
+    },
     async openSkillDirectory() {
       return true
     },
@@ -1139,6 +1327,69 @@ export function createPreviewLauncherApi() {
       }
       return clone(state.workspace)
     },
+    async listBackupArchives() {
+      return clone(state.backupArchives)
+    },
+    async createBackupArchive(options = {}) {
+      const archive = {
+        fileName: `workstation-${new Date().toISOString().replace(/[:.]/g, '-')}-manual.zpbackup`,
+        size: 32768,
+        createdAt: new Date().toISOString(),
+        label: options.label || 'manual',
+        encrypted: Boolean(options.password),
+        includeMaterials: Boolean(options.includeMaterials),
+        summary: {
+          assignments: state.workspace.assignments.length,
+          knowledge: state.workspace.knowledge.length,
+          experiments: state.workspace.experiments.length,
+          courses: state.workspace.courses.length,
+        },
+      }
+      state.backupArchives.unshift(archive)
+      return clone(archive)
+    },
+    async restoreBackupArchive(fileName) {
+      if (!state.backupArchives.some((item) => item.fileName === fileName)) {
+        throw new Error('没有找到这份完整备份。')
+      }
+      return clone({ fileName, workspace: state.workspace, settings: state.settings })
+    },
+    async getBackupStatus() {
+      return clone(state.backupStatus)
+    },
+    async patchBackupSync(payload = {}) {
+      state.settings = { ...state.settings, ...(payload.config || {}) }
+      state.backupStatus.config = {
+        ...state.backupStatus.config,
+        ...(payload.config || {}),
+      }
+      if (payload.webdavPassword || payload.password) {
+        state.backupStatus.webdavPasswordStored = true
+      }
+      if (payload.syncPassword) state.backupStatus.syncPasswordStored = true
+      emit('settings:changed', state.settings)
+      return clone(state.backupStatus)
+    },
+    async testBackupSync() {
+      if (state.settings.syncProvider === 'none') throw new Error('请先选择同步方式。')
+      return {
+        ok: true,
+        provider: state.settings.syncProvider,
+        message:
+          state.settings.syncProvider === 'local'
+            ? state.settings.syncLocalDir
+            : state.settings.syncWebdavUrl,
+      }
+    },
+    async uploadBackupSync() {
+      const fileName = `ZP-Workbench-${new Date().toISOString().replace(/[:.]/g, '-')}.zpbackup`
+      state.settings.syncLastAt = new Date().toISOString()
+      state.backupStatus.config.syncLastAt = state.settings.syncLastAt
+      return clone({ fileName, size: 32768, settings: state.settings })
+    },
+    async downloadBackupSync() {
+      return clone({ fileName: 'ZP-Workbench-preview.zpbackup', workspace: state.workspace })
+    },
     async checkWorkspaceHealth() {
       return {
         checkedAt: new Date().toISOString(),
@@ -1167,6 +1418,16 @@ export function createPreviewLauncherApi() {
     },
     async importSnapshot() {
       return clone(state.workspace)
+    },
+    async exportBackupArchive(options = {}) {
+      await this.createBackupArchive(options)
+      return {
+        filePath: 'C:\\Users\\小zp\\ZP Workbench\\ZP-Workbench-backup.zpbackup',
+        size: 32768,
+      }
+    },
+    async importBackupArchive() {
+      return clone({ fileName: 'ZP-Workbench-backup.zpbackup', workspace: state.workspace })
     },
     async createAssignment(input) {
       const now = new Date().toISOString()
@@ -1405,6 +1666,9 @@ export function createPreviewLauncherApi() {
     async chooseExperimentDir() {
       return `${state.settings.experimentDir}-preview`
     },
+    async chooseSyncDir() {
+      return 'C:\\Users\\小zp\\OneDrive\\ZP Workbench'
+    },
     async chooseExperimentFiles() {
       return [
         {
@@ -1460,6 +1724,9 @@ export function createPreviewLauncherApi() {
     },
     async stageDroppedFile() {
       throw new Error('预览环境不支持自动暂存拖入文件。')
+    },
+    async resolveDropReferences() {
+      return []
     },
     async createScheduleCourse(input) {
       const now = new Date().toISOString()
