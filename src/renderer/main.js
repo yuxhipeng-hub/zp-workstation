@@ -2314,18 +2314,50 @@ function formatLauncherProgress(progress) {
       : '当前线路不可用，正在重试。'
   }
   if (progress.phase === 'starting') {
-    return `正在连接${progress.sourceLabel || '更新线路'}。`
+    return progress.mode === 'segmented'
+      ? '正在测速并建立多线路下载。'
+      : `正在连接${progress.sourceLabel || '更新线路'}。`
   }
   if (progress.phase === 'completed') {
     return `已通过${progress.sourceLabel || '更新线路'}下载完成，SHA-256 校验通过。`
   }
   const received = formatBytes(progress.received || 0)
+  const speed =
+    Number(progress.bytesPerSecond) > 0 ? ` · ${formatDownloadSpeed(progress.bytesPerSecond)}` : ''
+  const eta =
+    Number.isFinite(progress.etaSeconds) && progress.etaSeconds >= 0
+      ? ` · 约剩 ${formatRemainingTime(progress.etaSeconds)}`
+      : ''
+  const connections =
+    progress.mode === 'segmented' && Number(progress.activeConnections) > 1
+      ? ` · ${progress.activeConnections} 路并发`
+      : ''
   const source = progress.sourceLabel ? ` · ${progress.sourceLabel}` : ''
   if (Number.isFinite(progress.percent)) {
     const total = progress.total ? ` / ${formatBytes(progress.total)}` : ''
-    return `${progress.percent}% · ${received}${total}${source}`
+    return `${progress.percent}% · ${received}${total}${speed}${eta}${connections}${source}`
   }
-  return `已下载 ${received}${source}`
+  return `已下载 ${received}${speed}${eta}${connections}${source}`
+}
+
+function formatDownloadSpeed(value) {
+  const bytesPerSecond = Number(value) || 0
+  if (bytesPerSecond >= 1024 * 1024) {
+    return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`
+  }
+  if (bytesPerSecond >= 1024) {
+    return `${Math.round(bytesPerSecond / 1024)} KB/s`
+  }
+  return `${Math.max(0, Math.round(bytesPerSecond))} B/s`
+}
+
+function formatRemainingTime(value) {
+  const seconds = Math.max(0, Math.round(Number(value) || 0))
+  if (seconds < 60) return `${seconds} 秒`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} 分钟`
+  const hours = Math.floor(minutes / 60)
+  return `${hours} 小时 ${minutes % 60} 分钟`
 }
 
 const LAUNCHER_DOWNLOAD_TASK_ID = 'launcher-download'

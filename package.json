@@ -1,6 +1,6 @@
 {
   "name": "zp-workstation",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "ZP Workbench：面向本地学习与知识整理的 DeepSeek Harness 工作站。",
   "main": "src/main/index.cjs",
   "author": "zp",
@@ -65,6 +65,9 @@
     "owner": "yuxhipeng-hub",
     "repo": "zp-workstation",
     "assetPattern": "ZP-Workbench-Setup-${version}-x64.exe",
+    "downloadConcurrency": 8,
+    "downloadSegments": 32,
+    "downloadIdleTimeoutMs": 90000,
     "manifestUrls": [
       {
         "id": "manifest-direct",
