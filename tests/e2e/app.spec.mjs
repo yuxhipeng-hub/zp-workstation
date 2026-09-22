@@ -198,6 +198,11 @@ test('keeps one assignment entry on today and opens the composer', async () => {
 
   try {
     const window = await app.firstWindow()
+    await app.evaluate(({ BrowserWindow }) => {
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      mainWindow.setMinimumSize(1200, 700)
+      mainWindow.setSize(1440, 920)
+    })
     await window.locator('.nav').getByRole('button', { name: '今日', exact: true }).click()
 
     await expect(window.locator('#view .today-courses')).toHaveCount(0)
