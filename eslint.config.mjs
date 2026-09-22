@@ -56,6 +56,21 @@ export default [
       },
     },
     rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'prompt',
+          message: 'Electron 不支持 window.prompt，请使用 openTextDialog。',
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'window',
+          property: 'prompt',
+          message: 'Electron 不支持 window.prompt，请使用 openTextDialog。',
+        },
+      ],
       'no-unused-vars': [
         'error',
         {
