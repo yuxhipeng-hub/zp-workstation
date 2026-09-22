@@ -17,7 +17,13 @@ function readJson(filePath) {
 }
 
 function uniqueVersionList(versions) {
-  return [...new Set(versions.filter((version) => semver.valid(version) || semver.valid(version.replace(/^v/, ''))))]
+  return [
+    ...new Set(
+      versions.filter(
+        (version) => semver.valid(version) || semver.valid(version.replace(/^v/, '')),
+      ),
+    ),
+  ]
 }
 
 function extractDshWebUrl(value) {
@@ -221,7 +227,9 @@ class DshManager extends EventEmitter {
     env.npm_config_prefix = paths.runtimeDir
     env.PNPM_HOME = paths.shimDir
     env.PNPM_STORE_DIR = paths.pnpmStore
-    env.PATH = [paths.shimDir, path.dirname(nodeExecutable), env.PATH].filter(Boolean).join(path.delimiter)
+    env.PATH = [paths.shimDir, path.dirname(nodeExecutable), env.PATH]
+      .filter(Boolean)
+      .join(path.delimiter)
     return env
   }
 
@@ -229,11 +237,7 @@ class DshManager extends EventEmitter {
     const paths = this.paths()
     await fsp.mkdir(paths.shimDir, { recursive: true })
     const pnpmExecutable = this.pnpmExecutablePath()
-    const command = [
-      '@ECHO OFF',
-      `"${pnpmExecutable}" %*`,
-      '',
-    ].join('\r\n')
+    const command = ['@ECHO OFF', `"${pnpmExecutable}" %*`, ''].join('\r\n')
     await fsp.writeFile(path.join(paths.shimDir, 'pnpm.cmd'), command, 'utf8')
   }
 
@@ -310,7 +314,11 @@ class DshManager extends EventEmitter {
       signal: AbortSignal.timeout(15000),
     })
     if (!response.ok) throw new Error(`npm Registry 请求失败：HTTP ${response.status}`)
-    const data = await response.json()
+    const data = /** @type {{
+      'dist-tags'?: Record<string, string>,
+      versions?: Record<string, unknown>,
+      time?: Record<string, string>
+    }} */ (await response.json())
     const channels = {}
     for (const [id, channel] of Object.entries(CHANNELS)) {
       const version = data['dist-tags']?.[channel.registryTag]
@@ -335,7 +343,8 @@ class DshManager extends EventEmitter {
     try {
       return readJson(dshPackageJson).version || null
     } catch (error) {
-      if (error.code !== 'ENOENT') this.logger.warn('runtime', `读取已安装版本失败：${error.message}`)
+      if (error.code !== 'ENOENT')
+        this.logger.warn('runtime', `读取已安装版本失败：${error.message}`)
       return null
     }
   }
@@ -410,13 +419,23 @@ class DshManager extends EventEmitter {
     const installedVersion = this.getInstalledVersion()
     if (installedVersion && !options.force && !semver.gt(targetVersion, installedVersion)) {
       if (semver.eq(targetVersion, installedVersion)) {
-        return { success: true, skipped: true, version: installedVersion, message: '当前已经是最新版本。' }
+        return {
+          success: true,
+          skipped: true,
+          version: installedVersion,
+          message: '当前已经是最新版本。',
+        }
       }
-      throw new Error(`目标版本 ${targetVersion} 低于当前版本 ${installedVersion}，请明确使用切换版本操作。`)
+      throw new Error(
+        `目标版本 ${targetVersion} 低于当前版本 ${installedVersion}，请明确使用切换版本操作。`,
+      )
     }
 
     const taskId = `dsh-install-${Date.now()}`
-    this.busyTask = { taskId, label: installedVersion ? '更新 DeepSeek Harness' : '安装 DeepSeek Harness' }
+    this.busyTask = {
+      taskId,
+      label: installedVersion ? '更新 DeepSeek Harness' : '安装 DeepSeek Harness',
+    }
     this.taskState(taskId, 'running', this.busyTask.label, targetVersion)
 
     try {
@@ -491,16 +510,18 @@ class DshManager extends EventEmitter {
     }
   }
 
-  async getStatus() {
+  async getStatus({ quick = false } = {}) {
     const settings = this.settings.get()
     const paths = this.paths()
     const installedVersion = this.getInstalledVersion()
-    let registry = null
+    let registry = this.registryCache
     let registryError = null
-    try {
-      registry = await this.getRegistryInfo(false)
-    } catch (error) {
-      registryError = error.message
+    if (!quick) {
+      try {
+        registry = await this.getRegistryInfo(false)
+      } catch (error) {
+        registryError = error.message
+      }
     }
     const selectedVersion = this.getSelectedVersion(registry)
     let updateState = 'unknown'
@@ -557,7 +578,8 @@ class DshManager extends EventEmitter {
     const startedAt = Date.now()
     let readyAt = null
     while (Date.now() - startedAt < timeoutMs) {
-      if (!this.webProcess || this.webProcess.killed) throw new Error('DeepSeek Harness 进程已退出。')
+      if (!this.webProcess || this.webProcess.killed)
+        throw new Error('DeepSeek Harness 进程已退出。')
       const url = typeof getUrl === 'function' ? getUrl() : getUrl
       if (!url) {
         await new Promise((resolve) => setTimeout(resolve, 250))
@@ -685,6 +707,66 @@ class DshManager extends EventEmitter {
     this.webUrl = null
     this.emit('process-state', this.getProcessState())
     return { success: true, stopped: true }
+  }
+
+  async runHeadlessTask(
+    task,
+    { taskId = `dsh-headless-${Date.now()}`, cwd = '', timeoutMs = 300_000 } = {},
+  ) {
+    const text = String(task || '').trim()
+    if (!text) throw new Error('一次性任务内容不能为空。')
+    if (!this.getInstalledVersion()) throw new Error('还没有安装 DeepSeek Harness。')
+    const node = this.nodeExecutablePath()
+    if (!fs.existsSync(node)) throw new Error(`找不到内置 Node.js：${node}`)
+    const workingDirectory = cwd ? path.resolve(cwd) : this.getDshHome()
+    await fsp.mkdir(workingDirectory, { recursive: true })
+
+    const args = ['--expose-internals', this.paths().dshBin, '--profile', 'headless', text]
+    let stdout = ''
+    let stderr = ''
+    this.taskState(taskId, 'running', 'DSH 正在整理资料', '')
+    const execution = this.runner.run(node, args, {
+      cwd: workingDirectory,
+      scope: 'dsh-headless',
+      taskId,
+      env: this.buildEnvironment(),
+      onOutput: ({ stream, line }) => {
+        if (stream === 'stdout') stdout += `${line}\n`
+        if (stream === 'stderr') stderr += `${line}\n`
+      },
+    })
+    const timer = setTimeout(() => {
+      this.runner.kill(taskId)
+      this.taskState(taskId, 'error', 'DSH 任务超时', `超过 ${Math.round(timeoutMs / 1000)} 秒`)
+    }, timeoutMs)
+    timer.unref?.()
+
+    try {
+      await execution
+      const result = stdout.trim()
+      if (!result) throw new Error('DSH 没有返回可用结果。')
+      this.taskState(taskId, 'success', 'DSH 整理完成', '')
+      return result
+    } catch (error) {
+      let message = error.message
+      if (/MISSING_CREDENTIAL|no API key/i.test(stderr)) {
+        message = 'DSH 还没有配置 DeepSeek API Key，请先到“模型与 API”页面完成配置。'
+      } else {
+        const detail = stderr
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(-2)
+          .join(' ')
+        if (detail && !/^dsh: reasoning:/i.test(detail)) message = detail
+      }
+      this.taskState(taskId, 'error', 'DSH 整理失败', message)
+      const wrapped = new Error(message)
+      wrapped.cause = error
+      throw wrapped
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   profileDir(profile) {

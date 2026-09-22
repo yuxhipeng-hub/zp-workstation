@@ -4,6 +4,8 @@ release/
 app-extracted/
 vendor/
 coverage/
+test-results/
+playwright-report/
 .vite/
 .env
 .env.*
@@ -12,3 +14,8 @@ coverage/
 Thumbs.db
 Desktop.ini
 build/icon-*.png
+build/*-review.*
+build/zp-*.png
+build/.chrome-review-*/
+build/ui-review-*.png
+src/renderer/icon-review.html

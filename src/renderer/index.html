@@ -7,7 +7,8 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>zp的工作站</title>
+    <link rel="icon" href="./icon.svg" />
+    <title>ZP Workbench</title>
   </head>
   <body data-theme="dark">
     <a class="skip-link" href="#view">跳到主要内容</a>
@@ -16,37 +17,143 @@
         <div class="brand">
           <div class="brand-wordmark" aria-hidden="true">zp</div>
           <div class="brand-copy">
-            <strong>zp的工作站</strong>
-            <span>LOCAL COMMAND DECK</span>
+            <strong>ZP Workbench</strong>
+            <span>LOCAL WORKSPACE</span>
           </div>
         </div>
 
         <nav class="nav" aria-label="主导航">
-          <p class="nav-label">工作区</p>
-          <button class="nav-item active" type="button" data-page="overview" aria-label="总览" title="总览" aria-current="page">
-            <i data-lucide="layout-dashboard"></i><span>总览</span>
-          </button>
-          <button class="nav-item" type="button" data-page="updates" aria-label="版本与更新" title="版本与更新">
-            <i data-lucide="refresh-cw"></i><span>版本与更新</span>
-            <span class="nav-dot hidden" id="updateDot"></span>
-          </button>
-          <p class="nav-label">扩展</p>
-          <button class="nav-item" type="button" data-page="plugins" aria-label="插件" title="插件">
-            <i data-lucide="plug"></i><span>插件</span>
-          </button>
-          <button class="nav-item" type="button" data-page="models" aria-label="模型与 API" title="模型与 API">
-            <i data-lucide="key-round"></i><span>模型与 API</span>
-          </button>
-          <p class="nav-label">系统</p>
-          <button class="nav-item" type="button" data-page="logs" aria-label="日志" title="日志">
-            <i data-lucide="terminal"></i><span>日志</span>
-          </button>
-          <button class="nav-item" type="button" data-page="settings" aria-label="设置" title="设置">
-            <i data-lucide="settings"></i><span>设置</span>
-          </button>
-          <button class="nav-item" type="button" data-page="about" aria-label="关于" title="关于">
-            <i data-lucide="info"></i><span>关于</span>
-          </button>
+          <div class="nav-section nav-section-learning">
+            <p class="nav-label">学习</p>
+            <button
+              class="nav-item active"
+              type="button"
+              data-page="today"
+              aria-label="今日"
+              title="今日"
+              aria-current="page"
+            >
+              <i data-lucide="sunrise"></i><span>今日</span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="overview"
+              aria-label="总览"
+              title="总览"
+            >
+              <i data-lucide="layout-dashboard"></i><span>总览</span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="schedule"
+              aria-label="课表"
+              title="课表"
+            >
+              <i data-lucide="calendar-days"></i><span>课表</span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="assignments"
+              aria-label="作业收件箱"
+              title="作业收件箱"
+            >
+              <i data-lucide="list-todo"></i><span>作业收件箱</span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="experiments"
+              aria-label="资料库"
+              title="资料库"
+            >
+              <i data-lucide="folder-open"></i><span>资料库</span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="knowledge"
+              aria-label="知识点"
+              title="知识点"
+            >
+              <i data-lucide="brain-circuit"></i><span>知识点</span>
+            </button>
+          </div>
+
+          <div class="nav-section nav-section-runtime">
+            <p class="nav-label">运行时</p>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="updates"
+              aria-label="版本与更新"
+              title="版本与更新"
+            >
+              <i data-lucide="refresh-cw"></i><span>版本与更新</span>
+              <span class="nav-dot hidden" id="updateDot"></span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="plugins"
+              aria-label="插件"
+              title="插件"
+            >
+              <i data-lucide="plug"></i><span>插件</span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="skills"
+              aria-label="Skills"
+              title="Skills"
+            >
+              <i data-lucide="wand-sparkles"></i><span>Skills</span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="models"
+              aria-label="模型与 API"
+              title="模型与 API"
+            >
+              <i data-lucide="key-round"></i><span>模型与 API</span>
+            </button>
+          </div>
+
+          <div class="nav-section nav-section-help">
+            <p class="nav-label">帮助</p>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="guide"
+              aria-label="看这，Ruka！"
+              title="看这，Ruka！"
+            >
+              <i data-lucide="compass"></i><span>看这，Ruka！</span>
+            </button>
+          </div>
+
+          <div class="nav-section nav-section-system">
+            <p class="nav-label">系统</p>
+            <button class="nav-item" type="button" data-page="logs" aria-label="日志" title="日志">
+              <i data-lucide="terminal"></i><span>日志</span>
+            </button>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="settings"
+              aria-label="设置"
+              title="设置"
+            >
+              <i data-lucide="settings"></i><span>设置</span>
+            </button>
+            <button class="nav-item" type="button" data-page="about" aria-label="关于" title="关于">
+              <i data-lucide="info"></i><span>关于</span>
+            </button>
+          </div>
         </nav>
 
         <div class="sidebar-foot">
@@ -82,8 +189,17 @@
               </div>
             </div>
             <span class="local-time" id="localTime">--:--</span>
-            <button class="icon-button" type="button" data-action="toggle-theme" title="切换主题" aria-label="切换主题">
+            <button
+              class="icon-button"
+              type="button"
+              data-action="toggle-theme"
+              title="切换主题"
+              aria-label="切换主题"
+            >
               <i data-lucide="sun-moon"></i>
+            </button>
+            <button class="button secondary" type="button" data-page-jump="assignments">
+              <i data-lucide="notebook-pen"></i><span>处理作业</span>
             </button>
             <button class="button secondary" type="button" data-action="check-update">
               <i data-lucide="refresh-cw"></i><span>检查更新</span>
@@ -94,6 +210,38 @@
           </div>
         </header>
 
+        <section
+          class="launcher-update-banner hidden"
+          id="launcherUpdateBanner"
+          role="status"
+          aria-live="polite"
+        >
+          <span class="launcher-update-mark" aria-hidden="true"
+            ><i data-lucide="sparkles"></i
+          ></span>
+          <div class="launcher-update-copy">
+            <div>
+              <strong id="launcherUpdateTitle">发现 ZP Workbench 新版本</strong>
+              <span id="launcherUpdateVersion"></span>
+            </div>
+            <p id="launcherUpdateDetail"></p>
+            <div class="launcher-update-progress hidden" id="launcherUpdateProgress">
+              <span id="launcherUpdateProgressBar"></span>
+            </div>
+          </div>
+          <div class="launcher-update-actions">
+            <button class="text-button" type="button" data-action="launcher-update-details">
+              查看详情
+            </button>
+            <button class="button secondary" type="button" data-action="dismiss-launcher-update">
+              稍后
+            </button>
+            <button class="button primary" type="button" data-action="download-launcher">
+              <i data-lucide="download"></i><span>立即更新</span>
+            </button>
+          </div>
+        </section>
+
         <main class="view" id="view" tabindex="-1"></main>
       </div>
     </div>
@@ -103,6 +251,16 @@
       <div class="task-copy">
         <strong id="taskTitle">正在执行</strong>
         <span id="taskDetail"></span>
+        <div
+          class="task-progress"
+          id="taskProgress"
+          role="progressbar"
+          aria-label="任务进度"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
+          <span id="taskProgressBar"></span>
+        </div>
       </div>
       <button class="icon-button compact" type="button" data-action="hide-task" title="收起任务">
         <i data-lucide="x"></i>
@@ -110,6 +268,7 @@
     </div>
 
     <div class="toast-stack" id="toasts" aria-live="polite" aria-atomic="false"></div>
+    <div id="overlayRoot"></div>
 
     <script type="module" src="/main.js"></script>
   </body>

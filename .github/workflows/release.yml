@@ -1,0 +1,115 @@
+name: Release ZP Workbench
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本，例如 0.3.1'
+        required: true
+        type: string
+      notes:
+        description: '可选更新说明'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Resolve release version
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_NOTES: ${{ inputs.notes }}
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = $env:INPUT_VERSION.Trim().TrimStart("v")
+          } else {
+            $version = "${{ github.ref_name }}".Trim().TrimStart("v")
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "无效版本号：$version"
+          }
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+          $notes = if ($env:INPUT_NOTES) {
+            $env:INPUT_NOTES
+          } else {
+            git log -1 --pretty=%s
+          }
+          Set-Content -LiteralPath release-notes.txt -Value $notes -Encoding utf8
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Align package version
+        shell: pwsh
+        run: npm version "$env:VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Windows installer
+        run: npm run dist
+
+      - name: Verify bundled runtime and installer
+        shell: pwsh
+        run: |
+          $nodePath = "release/win-unpacked/resources/vendor/node/node.exe"
+          $installerPath = "release/ZP-Workbench-Setup-$env:VERSION-x64.exe"
+
+          if (-not (Test-Path -LiteralPath $nodePath)) {
+            throw "Bundled Node.js is missing: $nodePath"
+          }
+          $nodeVersion = (& $nodePath --version).Trim()
+          if ($nodeVersion -ne "v24.18.0") {
+            throw "Unexpected bundled Node.js version: $nodeVersion"
+          }
+          if (-not (Test-Path -LiteralPath $installerPath)) {
+            throw "Installer is missing: $installerPath"
+          }
+
+          $installerSize = (Get-Item -LiteralPath $installerPath).Length
+          if ($installerSize -lt 160MB) {
+            throw "Installer is unexpectedly small: $installerSize bytes"
+          }
+          Write-Host "Bundled Node.js: $nodeVersion"
+          Write-Host "Installer size: $installerSize bytes"
+
+      - name: Generate update manifest
+        shell: pwsh
+        run: |
+          node scripts/generate-update-manifest.mjs `
+            --version "$env:VERSION" `
+            --notes-file release-notes.txt `
+            --output release/latest.json
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: ZP Workbench ${{ env.VERSION }}
+          body_path: release-notes.txt
+          make_latest: true
+          overwrite_files: true
+          files: |
+            release/ZP-Workbench-Setup-${{ env.VERSION }}-x64.exe
+            release/ZP-Workbench-Setup-${{ env.VERSION }}-x64.exe.blockmap
+            release/ZP-Workbench-Setup-${{ env.VERSION }}-x64.exe.sha256
+            release/latest.json

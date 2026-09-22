@@ -2,7 +2,6 @@ const { spawn } = require('node:child_process')
 
 function stripAnsi(value) {
   return String(value).replace(
-    // eslint-disable-next-line no-control-regex
     /[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g,
     '',
   )
@@ -67,11 +66,13 @@ class ProcessRunner {
           resolve({ code, signal, taskId })
           return
         }
-        const error = new Error(`${scope} exited with code ${code ?? 'unknown'}`)
-        error.code = code
-        error.signal = signal
-        error.taskId = taskId
-        reject(error)
+        reject(
+          Object.assign(new Error(`${scope} exited with code ${code ?? 'unknown'}`), {
+            code,
+            signal,
+            taskId,
+          }),
+        )
       })
     })
   }
