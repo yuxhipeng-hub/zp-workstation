@@ -5,6 +5,7 @@ const { EventEmitter } = require('node:events')
 const { pipeline } = require('node:stream/promises')
 const { Readable, Transform } = require('node:stream')
 const semver = require('semver')
+const { DownloadAccelerator, MIN_ACCELERATED_DOWNLOAD_SIZE } = require('./download-accelerator.cjs')
 
 const DEFAULT_CHECK_TIMEOUT = 7000
 const DEFAULT_DOWNLOAD_TIMEOUT = 180000
@@ -489,6 +490,10 @@ class LauncherUpdater extends EventEmitter {
   }
 
   async performDownload(asset) {
+    if (Number(asset.size) >= MIN_ACCELERATED_DOWNLOAD_SIZE) {
+      return this.performAcceleratedDownload(asset)
+    }
+
     const downloadDir = path.join(this.app.getPath('temp'), 'ZP-Workbench-Launcher-Updates')
     fs.mkdirSync(downloadDir, { recursive: true })
     const safeName = path.basename(asset.name)
@@ -626,6 +631,117 @@ class LauncherUpdater extends EventEmitter {
       message,
     })
     throw new Error(message)
+  }
+
+  async performAcceleratedDownload(asset) {
+    const downloadDir = path.join(this.app.getPath('temp'), 'ZP-Workbench-Launcher-Updates')
+    fs.mkdirSync(downloadDir, { recursive: true })
+    const safeName = path.basename(asset.name)
+    const target = path.join(downloadDir, safeName)
+    const version = normalizeVersion(this.state.latestVersion) || this.currentVersion
+    const attempts = asset.downloadUrls.length
+
+    const reportProgress = (phase, source, extra = {}) => {
+      const payload = {
+        phase,
+        version,
+        fileName: safeName,
+        sourceId: source?.id || null,
+        sourceLabel: source?.label || null,
+        attempt: 1,
+        attempts,
+        at: new Date().toISOString(),
+        ...extra,
+      }
+      this.emit('download-progress', payload)
+      return payload
+    }
+
+    this.setState({
+      downloading: true,
+      downloaded: false,
+      error: null,
+      message: `正在测速并使用多线路下载 ZP Workbench ${version} 安装包。`,
+    })
+    reportProgress(
+      'starting',
+      { id: 'accelerated', label: '多线路分片加速' },
+      {
+        received: 0,
+        total: Number(asset.size) || 0,
+        percent: 0,
+        mode: 'segmented',
+      },
+    )
+
+    const accelerator = new DownloadAccelerator({
+      fetchImpl: this.fetchImpl,
+      logger: this.logger,
+      concurrency: this.config.downloadConcurrency,
+      segments: this.config.downloadSegments,
+      idleTimeoutMs: this.config.downloadIdleTimeoutMs,
+    })
+
+    try {
+      const result = await accelerator.download({
+        name: safeName,
+        size: Number(asset.size) || 0,
+        sha256: asset.sha256,
+        sources: asset.downloadUrls,
+        target,
+        onProgress: (progress) => {
+          if (progress.phase === 'completed') return
+          reportProgress(
+            progress.phase || 'downloading',
+            {
+              id: progress.sourceId || 'accelerated',
+              label: progress.sourceLabel || '多线路分片加速',
+            },
+            progress,
+          )
+        },
+      })
+      const completed = reportProgress(
+        'completed',
+        { id: result.sourceId, label: result.sourceLabel },
+        {
+          ...result,
+          received: Number(asset.size) || 0,
+          total: Number(asset.size) || 0,
+          percent: 100,
+        },
+      )
+      this.setState({
+        downloading: false,
+        downloaded: true,
+        sourceId: result.sourceId,
+        sourceLabel: result.sourceLabel,
+        message: `ZP Workbench ${version} 安装包已通过${result.sourceLabel}下载完成。`,
+      })
+      this.logger.info(
+        'launcher-update',
+        `安装包已保存到 ${target}，线路 ${result.sourceLabel}，${result.connections || 1} 路连接，SHA-256 ${result.sha256}`,
+      )
+      return { filePath: target, ...completed }
+    } catch (error) {
+      const message = `更新下载失败：${error.message}`
+      reportProgress(
+        'error',
+        { id: 'accelerated', label: '多线路分片加速' },
+        {
+          error: message,
+          received: 0,
+          total: Number(asset.size) || 0,
+        },
+      )
+      this.setState({
+        downloading: false,
+        downloaded: false,
+        error: message,
+        message,
+      })
+      throw new Error(message)
+    }
   }
 
   markOpening(filePath = '') {
