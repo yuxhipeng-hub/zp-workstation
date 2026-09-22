@@ -40,6 +40,7 @@ const state = {
   highlightAssignmentId: null,
   experimentDropActive: false,
   experimentImporting: false,
+  experimentSelectedGroup: null,
   scheduleDropActive: false,
   scheduleImporting: false,
   scheduleComposerOpen: false,
@@ -463,6 +464,12 @@ function renderToday() {
             ? `今天有 ${summaryParts.join('，')}。`
             : '今天没有安排课程、待办和到期复习，可以整理资料或提前准备。'
         }</p>
+        <div class="today-pulse" aria-label="今日学习概览">
+          <span><strong>${courses.length}</strong><small>今日课程</small></span>
+          <span><strong>${assignments.length}</strong><small>待交作业</small></span>
+          <span><strong>${knowledge.length}</strong><small>到期复习</small></span>
+          <span><strong>${experiments.length}</strong><small>最近资料</small></span>
+        </div>
       </div>
       <div class="today-hero-side">
         ${
@@ -506,7 +513,55 @@ function renderToday() {
     }
 
     <div class="today-grid">
-      <section class="today-panel">
+      <div class="today-grid-column today-grid-primary">
+        <section class="today-panel today-panel-primary">
+        <header class="today-panel-head today-panel-head-primary">
+          <div>
+            <span class="eyebrow">NEXT ACTIONS</span>
+            <h3>待交作业</h3>
+            <span>${assignments.length ? `${assignments.length} 项未完成` : '已清空'}</span>
+          </div>
+          <button class="button secondary" type="button" data-action="open-assignment-composer">
+            <i data-lucide="plus"></i><span>添加作业</span>
+          </button>
+        </header>
+        ${
+          assignments.length
+            ? `<div class="today-task-list">
+                ${assignments
+                  .slice(0, 5)
+                  .map((assignment) => {
+                    const due = dueDateMeta(assignment.dueAt)
+                    const priority =
+                      assignmentPriorityMeta[assignment.priority] || assignmentPriorityMeta.medium
+                    return `
+                      <button type="button" data-page-jump="assignments" data-focus-assignment="${escapeHtml(assignment.id)}">
+                        <span class="today-task-state status-${escapeHtml(assignment.status)}"></span>
+                        <span class="today-task-copy">
+                          <strong>${escapeHtml(assignment.title)}</strong>
+                          <small>${escapeHtml(assignment.course || '未分类')} · ${escapeHtml(priority.label)}</small>
+                        </span>
+                        <span class="badge ${due.tone}">${escapeHtml(due.label)}</span>
+                      </button>`
+                  })
+                  .join('')}
+              </div>
+              <button class="today-panel-foot" type="button" data-page-jump="assignments">
+                打开全部作业 <i data-lucide="arrow-right"></i>
+              </button>`
+            : `<div class="today-empty today-empty-primary">
+                <i data-lucide="circle-check"></i>
+                <span><strong>当前没有待处理作业</strong><small>可以提前整理资料，或为下一节课做准备。</small></span>
+              </div>
+              <button class="today-panel-foot" type="button" data-page-jump="assignments">
+                查看历史作业 <i data-lucide="arrow-right"></i>
+              </button>`
+        }
+        </section>
+      </div>
+
+      <div class="today-grid-column">
+        <section class="today-panel">
         <header class="today-panel-head">
           <div>
             <h3>今天的课</h3>
@@ -537,42 +592,9 @@ function renderToday() {
               </div>`
             : '<div class="today-empty"><i data-lucide="coffee"></i><span>今天没有需要上的课程。</span></div>'
         }
-      </section>
+        </section>
 
-      <section class="today-panel">
-        <header class="today-panel-head">
-          <div>
-            <h3>待交作业</h3>
-            <span>${assignments.length ? `${assignments.length} 项未完成` : '已清空'}</span>
-          </div>
-          <button class="text-button" type="button" data-page-jump="assignments">全部作业 <i data-lucide="chevron-right"></i></button>
-        </header>
-        ${
-          assignments.length
-            ? `<div class="today-task-list">
-                ${assignments
-                  .slice(0, 5)
-                  .map((assignment) => {
-                    const due = dueDateMeta(assignment.dueAt)
-                    const priority =
-                      assignmentPriorityMeta[assignment.priority] || assignmentPriorityMeta.medium
-                    return `
-                      <button type="button" data-page-jump="assignments" data-focus-assignment="${escapeHtml(assignment.id)}">
-                        <span class="today-task-state status-${escapeHtml(assignment.status)}"></span>
-                        <span class="today-task-copy">
-                          <strong>${escapeHtml(assignment.title)}</strong>
-                          <small>${escapeHtml(assignment.course || '未分类')} · ${escapeHtml(priority.label)}</small>
-                        </span>
-                        <span class="badge ${due.tone}">${escapeHtml(due.label)}</span>
-                      </button>`
-                  })
-                  .join('')}
-              </div>`
-            : '<div class="today-empty"><i data-lucide="circle-check"></i><span>当前没有待处理作业。</span></div>'
-        }
-      </section>
-
-      <section class="today-panel">
+        <section class="today-panel">
         <header class="today-panel-head">
           <div>
             <h3>到期复习</h3>
@@ -609,9 +631,9 @@ function renderToday() {
               </div>`
             : '<div class="today-empty"><i data-lucide="sparkles"></i><span>没有到期的知识点，继续按计划推进即可。</span></div>'
         }
-      </section>
+        </section>
 
-      <section class="today-panel">
+        <section class="today-panel">
         <header class="today-panel-head">
           <div>
             <h3>最近资料</h3>
@@ -637,7 +659,8 @@ function renderToday() {
               </div>`
             : '<div class="today-empty"><i data-lucide="folder-open"></i><span>拖入课程资料后会自动按课程归档。</span></div>'
         }
-      </section>
+        </section>
+      </div>
     </div>
 
     <section class="today-courses">
@@ -2636,6 +2659,11 @@ function renderExperiments() {
   }
   const totalSize = experiments.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
   const directory = state.settings?.experimentDir || '尚未设置'
+  const selectedGroup =
+    groups.find((group) => group.name === state.experimentSelectedGroup) || groups[0] || null
+  const selectedKnowledgeCount = selectedGroup
+    ? selectedGroup.items.reduce((sum, item) => sum + (knowledgeCounts.get(item.id) || 0), 0)
+    : 0
 
   return `
     <section class="page-intro action-intro">
@@ -2678,41 +2706,72 @@ function renderExperiments() {
 
     ${
       groups.length
-        ? `<div class="experiment-tree" role="tree" aria-label="课程资料文件夹">
-            <div class="experiment-root-row" role="treeitem" aria-selected="false">
-              <span class="experiment-tree-chevron"><i data-lucide="chevron-down"></i></span>
-              <i data-lucide="library"></i>
-              <strong>资料库</strong>
-              <span>${experiments.length} 个文件</span>
-            </div>
-            ${groups
-              .map(
-                (group) => `
-                  <details class="experiment-group" data-experiment-group="${escapeHtml(group.name)}">
-                    <summary class="experiment-group-head">
-                      <span class="experiment-tree-chevron"><i data-lucide="chevron-right"></i></span>
-                      <div class="experiment-folder">
-                        <i data-lucide="folder"></i>
-                        <span class="experiment-folder-count">${group.items.length}</span>
-                      </div>
-                      <div class="experiment-group-copy">
-                        <h3>${escapeHtml(group.name)}</h3>
-                        <p>${group.items.length} 个文件 · ${formatBytes(group.items.reduce((sum, item) => sum + (Number(item.size) || 0), 0))}</p>
-                      </div>
-                      <span class="experiment-group-actions">
-                        <button class="icon-button compact" type="button" data-action="rename-experiment-group" data-group="${escapeHtml(group.name)}" title="重命名课程文件夹">
-                          <i data-lucide="pencil"></i>
+        ? `<div class="experiment-explorer">
+            <aside class="experiment-explorer-sidebar" aria-label="课程资料文件夹">
+              <header class="experiment-explorer-sidebar-head">
+                <div>
+                  <span class="eyebrow">COURSE FOLDERS</span>
+                  <strong>课程文件夹</strong>
+                </div>
+                <span>${groups.length}</span>
+              </header>
+              <div class="experiment-root-row">
+                <span class="experiment-tree-chevron"><i data-lucide="library"></i></span>
+                <strong>资料库</strong>
+                <span>${experiments.length} 个文件</span>
+              </div>
+              <div class="experiment-group-list">
+                ${groups
+                  .map(
+                    (group) => `
+                      <div class="experiment-group ${group.name === selectedGroup?.name ? 'selected' : ''}" data-experiment-group="${escapeHtml(group.name)}">
+                        <button class="experiment-group-select" type="button" data-action="select-experiment-group" data-group="${escapeHtml(group.name)}">
+                          <span class="experiment-folder">
+                            <i data-lucide="folder"></i>
+                            <span class="experiment-folder-count">${group.items.length}</span>
+                          </span>
+                          <span class="experiment-group-copy">
+                            <strong>${escapeHtml(group.name)}</strong>
+                            <small>${formatBytes(group.items.reduce((sum, item) => sum + (Number(item.size) || 0), 0))}</small>
+                          </span>
+                          <i data-lucide="chevron-right"></i>
                         </button>
-                        <button class="icon-button compact" type="button" data-action="open-experiment-group" data-group="${escapeHtml(group.name)}" title="在资源管理器中打开课程文件夹">
-                          <i data-lucide="folder-open"></i>
+                        <span class="experiment-group-actions">
+                          <button class="icon-button compact" type="button" data-action="rename-experiment-group" data-group="${escapeHtml(group.name)}" title="重命名课程文件夹">
+                            <i data-lucide="pencil"></i>
+                          </button>
+                          <button class="icon-button compact" type="button" data-action="open-experiment-group" data-group="${escapeHtml(group.name)}" title="在资源管理器中打开课程文件夹">
+                            <i data-lucide="folder-open"></i>
+                          </button>
+                        </span>
+                      </div>`,
+                  )
+                  .join('')}
+              </div>
+            </aside>
+            <section class="experiment-explorer-main" aria-label="${escapeHtml(selectedGroup?.name || '资料文件')}">
+              ${
+                selectedGroup
+                  ? `<header class="experiment-explorer-head">
+                      <div>
+                        <span class="eyebrow">SELECTED FOLDER</span>
+                        <h3>${escapeHtml(selectedGroup.name)}</h3>
+                        <p>${selectedGroup.items.length} 个文件 · ${formatBytes(selectedGroup.items.reduce((sum, item) => sum + (Number(item.size) || 0), 0))}${selectedKnowledgeCount ? ` · ${selectedKnowledgeCount} 个知识点` : ''}</p>
+                      </div>
+                      <div class="experiment-explorer-head-actions">
+                        <button class="button secondary" type="button" data-action="open-experiment-group" data-group="${escapeHtml(selectedGroup.name)}">
+                          <i data-lucide="folder-open"></i><span>打开文件夹</span>
                         </button>
-                      </span>
-                    </summary>
+                        <button class="button secondary" type="button" data-action="rename-experiment-group" data-group="${escapeHtml(selectedGroup.name)}">
+                          <i data-lucide="pencil"></i><span>重命名</span>
+                        </button>
+                      </div>
+                    </header>
                     <div class="experiment-file-list" role="group">
-                      ${group.items
+                      ${selectedGroup.items
                         .map(
                           (item) => `
-                            <article class="experiment-file" data-experiment-id="${escapeHtml(item.id)}" role="treeitem">
+                            <article class="experiment-file" data-experiment-id="${escapeHtml(item.id)}">
                               <span class="file-sigil tone-${fileTone(item.originalName)}"><span>${escapeHtml(fileExtensionLabel(item.originalName))}</span></span>
                               <div class="experiment-file-copy">
                                 <strong title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</strong>
@@ -2738,10 +2797,10 @@ function renderExperiments() {
                             </article>`,
                         )
                         .join('')}
-                    </div>
-                  </details>`,
-              )
-              .join('')}
+                    </div>`
+                  : '<div class="empty-state"><span>这个文件夹里还没有文件。</span></div>'
+              }
+            </section>
           </div>`
         : `<div class="empty-state experiment-empty">
             <i data-lucide="file-stack"></i>
@@ -4473,6 +4532,10 @@ async function handleAction(action, element) {
     case 'reveal-schedule-source':
       await guard(() => api.revealScheduleSource(), '定位原始课表失败')
       break
+    case 'select-experiment-group':
+      state.experimentSelectedGroup = element.dataset.group || null
+      render()
+      break
     case 'rename-experiment-group': {
       const currentGroup = element.dataset.group || ''
       const nextGroup = await openTextDialog({
@@ -4489,6 +4552,9 @@ async function handleAction(action, element) {
         '重命名课程文件夹失败',
       )
       applyWorkspace(result.workspace)
+      if (state.experimentSelectedGroup === currentGroup) {
+        state.experimentSelectedGroup = result.group || nextGroup
+      }
       render()
       toast(`课程文件夹已改名为“${result.group}”，资料已同步搬迁。`, 'success')
       break
@@ -4522,6 +4588,7 @@ async function handleAction(action, element) {
         '修改实验分组失败',
       )
       applyWorkspace(result.workspace)
+      state.experimentSelectedGroup = result.experiment.group || group
       render()
       toast(`已移动到“${result.experiment.group}”分组。`, 'success')
       break
@@ -4923,11 +4990,20 @@ function updateClock() {
   }).format(new Date())
 }
 
+function closeTopbarStatusMenu() {
+  document.querySelector('.topbar-status-menu')?.removeAttribute('open')
+}
+
 systemThemeQuery.addEventListener('change', () => {
   if (state.settings?.theme === 'system') applyTheme('system')
 })
 
 document.addEventListener('click', async (event) => {
+  const openStatusMenu = document.querySelector('.topbar-status-menu[open]')
+  if (openStatusMenu && !event.target.closest('.topbar-status-menu')) {
+    openStatusMenu.removeAttribute('open')
+  }
+
   if (event.target.matches('[data-schedule-editor-layer]')) {
     state.scheduleComposerOpen = false
     state.editingScheduleCourseId = null
@@ -4950,6 +5026,7 @@ document.addEventListener('click', async (event) => {
 
   const pageJump = event.target.closest('[data-page-jump]')
   if (pageJump) {
+    closeTopbarStatusMenu()
     state.page = pageJump.dataset.pageJump
     if (pageJump.dataset.focusAssignment) {
       state.assignmentFilter = 'all'
@@ -5016,6 +5093,7 @@ document.addEventListener('click', async (event) => {
 
   const action = event.target.closest('[data-action]')
   if (action && !action.disabled) {
+    if (action.closest('.topbar-status-menu')) closeTopbarStatusMenu()
     if (action.closest('summary')) {
       event.preventDefault()
       event.stopPropagation()

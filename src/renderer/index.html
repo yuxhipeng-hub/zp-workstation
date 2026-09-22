@@ -181,13 +181,6 @@
             </div>
           </div>
           <div class="topbar-actions">
-            <div class="runtime-ribbon" id="runtimeRibbon">
-              <span class="runtime-ribbon-dot" id="topStatusDot" aria-hidden="true"></span>
-              <div>
-                <strong id="topStatusText">读取中</strong>
-                <span id="topVersionText">DSH --</span>
-              </div>
-            </div>
             <span class="local-time" id="localTime">--:--</span>
             <button
               class="icon-button"
@@ -198,12 +191,33 @@
             >
               <i data-lucide="sun-moon"></i>
             </button>
-            <button class="button secondary" type="button" data-page-jump="assignments">
-              <i data-lucide="notebook-pen"></i><span>处理作业</span>
-            </button>
-            <button class="button secondary" type="button" data-action="check-update">
-              <i data-lucide="refresh-cw"></i><span>检查更新</span>
-            </button>
+            <details class="topbar-status-menu" id="runtimeRibbon">
+              <summary class="runtime-ribbon">
+                <span class="runtime-ribbon-dot" id="topStatusDot" aria-hidden="true"></span>
+                <span class="runtime-ribbon-copy">
+                  <strong id="topStatusText">读取中</strong>
+                  <span id="topVersionText">DSH --</span>
+                </span>
+                <i class="runtime-ribbon-chevron" data-lucide="chevron-down"></i>
+              </summary>
+              <div class="topbar-status-panel">
+                <button class="status-action" type="button" data-page-jump="assignments">
+                  <span class="status-action-icon"><i data-lucide="notebook-pen"></i></span>
+                  <span><strong>处理作业</strong><small>进入作业收件箱</small></span>
+                  <i data-lucide="chevron-right"></i>
+                </button>
+                <button class="status-action" type="button" data-action="check-update">
+                  <span class="status-action-icon"><i data-lucide="refresh-cw"></i></span>
+                  <span><strong>检查 DSH 更新</strong><small>同步当前版本通道</small></span>
+                  <i data-lucide="chevron-right"></i>
+                </button>
+                <button class="status-action" type="button" data-page-jump="updates">
+                  <span class="status-action-icon"><i data-lucide="settings-2"></i></span>
+                  <span><strong>版本与更新</strong><small>管理安装和更新来源</small></span>
+                  <i data-lucide="chevron-right"></i>
+                </button>
+              </div>
+            </details>
             <button class="button primary" type="button" data-action="launch">
               <i data-lucide="play"></i><span>启动工作台</span>
             </button>
