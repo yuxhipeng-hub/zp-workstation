@@ -5390,6 +5390,80 @@ input::placeholder {
   font-size: 11px;
 }
 
+.dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(12px) saturate(72%);
+  animation: scrim-in var(--motion-fast) var(--ease-out) both;
+}
+
+.dialog-card {
+  position: relative;
+  width: min(430px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+  animation: welcome-card-in var(--motion-base) var(--ease-emphasized) both;
+}
+
+.dialog-card::before {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 42px;
+  height: 3px;
+  background: var(--ink);
+  content: '';
+}
+
+.dialog-eyebrow {
+  color: var(--text-tertiary);
+  font-family: 'Workstation Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.dialog-heading h2 {
+  margin: 9px 0 0;
+  color: var(--text);
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.dialog-heading p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.dialog-form .field {
+  margin-top: 20px;
+}
+
+.dialog-error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 10px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 20px;
+}
+
 .welcome-layer {
   position: fixed;
   inset: 0;

@@ -814,6 +814,87 @@ function syncOnboardingOverlay() {
   else if (!shouldShow && hasOverlay) root.innerHTML = ''
 }
 
+function openTextDialog({
+  title,
+  description = '',
+  label,
+  value = '',
+  confirmLabel = '保存',
+  maxLength = 100,
+}) {
+  const root = document.querySelector('#dialogRoot')
+  if (!root) return Promise.resolve(null)
+
+  return new Promise((resolve) => {
+    let settled = false
+
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      document.removeEventListener('keydown', handleKeydown)
+      root.innerHTML = ''
+      resolve(result)
+    }
+
+    const handleKeydown = (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      finish(null)
+    }
+
+    root.innerHTML = `
+      <div class="dialog-layer">
+        <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialogTitle" aria-describedby="dialogDescription">
+          <div class="dialog-heading">
+            <span class="dialog-eyebrow">LOCAL WORKSPACE</span>
+            <h2 id="dialogTitle">${escapeHtml(title)}</h2>
+            <p id="dialogDescription">${escapeHtml(description)}</p>
+          </div>
+          <form class="dialog-form">
+            <label class="field" for="dialogInput">
+              <span>${escapeHtml(label)}</span>
+              <input id="dialogInput" type="text" maxlength="${maxLength}" value="${escapeHtml(value)}" autocomplete="off" />
+            </label>
+            <p class="dialog-error hidden" role="alert"></p>
+            <div class="dialog-actions">
+              <button class="button secondary" type="button" data-dialog-cancel>取消</button>
+              <button class="button primary" type="submit">${escapeHtml(confirmLabel)}</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    `
+
+    const layer = root.querySelector('.dialog-layer')
+    const form = root.querySelector('.dialog-form')
+    const input = root.querySelector('#dialogInput')
+    const error = root.querySelector('.dialog-error')
+    const cancelButton = root.querySelector('[data-dialog-cancel]')
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault()
+      const next = input.value.trim()
+      if (!next) {
+        error.textContent = '名称不能为空。'
+        error.classList.remove('hidden')
+        input.focus()
+        return
+      }
+      finish(next)
+    })
+    cancelButton.addEventListener('click', () => finish(null))
+    layer.addEventListener('mousedown', (event) => {
+      if (event.target === layer) finish(null)
+    })
+    document.addEventListener('keydown', handleKeydown)
+
+    requestAnimationFrame(() => {
+      input.focus()
+      input.select()
+    })
+  })
+}
+
 function guideActionButton(action) {
   if (!action) return ''
   if (action.page) {
@@ -4393,10 +4474,17 @@ async function handleAction(action, element) {
       break
     case 'rename-experiment-group': {
       const currentGroup = element.dataset.group || ''
-      const nextGroup = window.prompt('输入新的课程文件夹名称：', currentGroup)
-      if (!nextGroup || nextGroup.trim() === currentGroup) return
+      const nextGroup = await openTextDialog({
+        title: '重命名课程文件夹',
+        description: '资料会同步移动到新的文件夹，原始文件不受影响。',
+        label: '课程文件夹名称',
+        value: currentGroup,
+        confirmLabel: '保存名称',
+        maxLength: 64,
+      })
+      if (!nextGroup || nextGroup === currentGroup) return
       const result = await guard(
-        () => api.renameExperimentGroup(currentGroup, nextGroup.trim()),
+        () => api.renameExperimentGroup(currentGroup, nextGroup),
         '重命名课程文件夹失败',
       )
       applyWorkspace(result.workspace)
@@ -4419,10 +4507,17 @@ async function handleAction(action, element) {
     case 'edit-experiment-group': {
       const experiment = state.workspace?.experiments.find((item) => item.id === element.dataset.id)
       if (!experiment) return
-      const group = window.prompt('输入新的课程分组名称：', experiment.group)
-      if (!group || group.trim() === experiment.group) return
+      const group = await openTextDialog({
+        title: '修改课程分组',
+        description: '这份资料会移动到这个分组，分组不存在时会自动创建。',
+        label: '课程分组名称',
+        value: experiment.group,
+        confirmLabel: '移动资料',
+        maxLength: 64,
+      })
+      if (!group || group === experiment.group) return
       const result = await guard(
-        () => api.updateExperiment(experiment.id, { group: group.trim() }),
+        () => api.updateExperiment(experiment.id, { group }),
         '修改实验分组失败',
       )
       applyWorkspace(result.workspace)
@@ -4455,9 +4550,14 @@ async function handleAction(action, element) {
       render()
       break
     case 'add-course': {
-      const name = window.prompt('输入新课程名称：')
-      if (!name?.trim()) break
-      const result = await guard(() => api.createCourse({ name: name.trim() }), '新建课程失败')
+      const name = await openTextDialog({
+        title: '新建课程',
+        description: '课程会作为课表、作业、资料和知识点的共同归档入口。',
+        label: '课程名称',
+        confirmLabel: '创建课程',
+      })
+      if (!name) break
+      const result = await guard(() => api.createCourse({ name }), '新建课程失败')
       applyWorkspace(result.workspace)
       render()
       toast(`课程“${result.course.name}”已创建。`, 'success')
@@ -4466,12 +4566,14 @@ async function handleAction(action, element) {
     case 'rename-course': {
       const course = state.workspace?.courses?.find((item) => item.id === element.dataset.id)
       if (!course) break
-      const name = window.prompt(
-        '输入新的课程名称。课表、作业、知识点和资料文件夹会一起更新：',
-        course.name,
-      )
-      if (!name?.trim() || name.trim() === course.name) break
-      const result = await guard(() => api.renameCourse(course.id, name.trim()), '重命名课程失败')
+      const name = await openTextDialog({
+        title: '重命名课程',
+        description: '课表、作业、知识点和资料文件夹会一起更新。',
+        label: '课程名称',
+        value: course.name,
+      })
+      if (!name || name === course.name) break
+      const result = await guard(() => api.renameCourse(course.id, name), '重命名课程失败')
       applyWorkspace(result.workspace)
       render()
       if (result.failures?.length) {
