@@ -1,6 +1,7 @@
 import { createIcons, FileCheck2, FolderOpen, icons, Upload } from 'lucide'
 import { defineMorphIcon } from 'morphicons/element'
 import './styles.css'
+import './design-system.css'
 
 defineMorphIcon()
 

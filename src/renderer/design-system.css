@@ -1,0 +1,731 @@
+/*
+ * ZP Workbench design system layer.
+ *
+ * This file intentionally loads after the legacy stylesheet. It keeps the
+ * existing feature markup and business behavior intact while normalizing
+ * surfaces, focus states, density, and motion across every page.
+ */
+
+:root {
+  --bg: #09090b;
+  --bg-elevated: #0d0d0f;
+  --rail: #0b0b0d;
+  --panel: #111113;
+  --panel-raised: #151517;
+  --panel-hover: #1a1a1d;
+  --panel-active: #202023;
+  --line: #26262a;
+  --line-strong: #3b3b41;
+  --text: #f7f7f8;
+  --text-secondary: #aaaaaf;
+  --text-tertiary: #797980;
+  --ink: #ffffff;
+  --ink-inverse: #09090b;
+  --focus: #ffffff;
+  --console-bg: #08080a;
+  --console-panel: #0d0d0f;
+  --console-line: #242429;
+  --console-text: #d4d4d8;
+  --surface-shadow: 0 1px 0 rgb(255 255 255 / 3%);
+  --surface-shadow-hover: 0 0 0 1px rgb(255 255 255 / 4%);
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 10px;
+  --control-height: 38px;
+  --motion-fast: 110ms;
+  --motion-base: 170ms;
+  --motion-slow: 240ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body[data-theme='light'] {
+  --bg: #f5f5f7;
+  --bg-elevated: #fafafa;
+  --rail: #fbfbfc;
+  --panel: #ffffff;
+  --panel-raised: #f6f6f8;
+  --panel-hover: #efeff2;
+  --panel-active: #e7e7eb;
+  --line: #e2e2e6;
+  --line-strong: #c5c5cb;
+  --text: #111114;
+  --text-secondary: #5e5e66;
+  --text-tertiary: #85858d;
+  --ink: #111114;
+  --ink-inverse: #ffffff;
+  --focus: #111114;
+  --console-bg: #f1f2f4;
+  --console-panel: #f8f8fa;
+  --console-line: #dcdde1;
+  --console-text: #29292e;
+  --surface-shadow: 0 1px 2px rgb(17 17 20 / 4%);
+  --surface-shadow-hover: 0 2px 8px rgb(17 17 20 / 7%);
+}
+
+html,
+body {
+  background: var(--bg);
+}
+
+body {
+  font-feature-settings:
+    'calt' 1,
+    'kern' 1,
+    'liga' 1;
+  letter-spacing: 0;
+}
+
+#app {
+  background:
+    radial-gradient(
+        circle at 1px 1px,
+        color-mix(in srgb, var(--text) 5%, transparent) 1px,
+        transparent 0
+      )
+      0 0 / 24px 24px,
+    var(--bg);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+input::selection,
+textarea::selection {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.sidebar {
+  background: var(--rail);
+}
+
+.topbar {
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  backdrop-filter: blur(16px) saturate(115%);
+}
+
+.brand {
+  min-height: var(--topbar-height);
+}
+
+.brand-copy strong {
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.brand-copy span,
+.nav-label,
+.eyebrow,
+.rail-footnote {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.nav {
+  padding: 14px 12px;
+}
+
+.nav-section {
+  gap: 3px;
+}
+
+.nav-section + .nav-section {
+  margin-top: 16px;
+  padding-top: 13px;
+}
+
+.nav-label {
+  margin: 0 11px 7px;
+}
+
+.nav-item {
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nav-item:hover {
+  border-color: color-mix(in srgb, var(--line-strong) 62%, transparent);
+  background: var(--panel-hover);
+}
+
+.nav-item.active {
+  border-color: color-mix(in srgb, var(--line-strong) 88%, transparent);
+  background: var(--panel-raised);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+body[data-theme='light'] .nav-item.active {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 72%);
+}
+
+.nav-item svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.85px;
+}
+
+.nav-item:hover svg {
+  transform: none;
+}
+
+.sidebar-foot {
+  padding: 12px;
+}
+
+.mini-status {
+  min-height: 60px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--surface-shadow);
+}
+
+.topbar {
+  padding-inline: 30px;
+}
+
+.topbar h1 {
+  font-size: 23px;
+  letter-spacing: -0.02em;
+}
+
+.page-summary {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.route-marker {
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.runtime-ribbon {
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.runtime-ribbon strong {
+  font-size: 10px;
+}
+
+.runtime-ribbon span:not(.runtime-ribbon-dot),
+.local-time {
+  font-size: 9px;
+}
+
+.button,
+.icon-button {
+  border-color: var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.button {
+  padding-inline: 14px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.button:hover:not(:disabled),
+.icon-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text) 62%, var(--line-strong));
+  background: var(--panel-hover);
+  transform: none;
+}
+
+.button:active:not(:disabled),
+.icon-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.button.primary {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--ink-inverse);
+  box-shadow: none;
+}
+
+.button.primary:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 90%, var(--bg));
+  color: var(--ink-inverse);
+}
+
+.button.secondary {
+  background: var(--panel);
+}
+
+.button.danger-outline {
+  background: color-mix(in srgb, var(--danger-soft) 24%, var(--panel));
+}
+
+.icon-button.compact {
+  width: 30px;
+  height: 30px;
+}
+
+.view {
+  padding: 28px 32px 104px;
+  scroll-padding-top: 22px;
+}
+
+.view > * {
+  animation-duration: 150ms;
+}
+
+.view > :nth-child(2) {
+  animation-delay: 4ms;
+}
+
+.view > :nth-child(3) {
+  animation-delay: 8ms;
+}
+
+.view > :nth-child(4) {
+  animation-delay: 12ms;
+}
+
+.view > :nth-child(5) {
+  animation-delay: 16ms;
+}
+
+:is(
+  .status-band,
+  .dashboard-columns > .section,
+  .focus-board,
+  .settings-group,
+  .today-hero-copy,
+  .today-hero-side,
+  .today-panel,
+  .today-courses,
+  .experiment-tree,
+  .schedule-board,
+  .knowledge-tree,
+  .table-wrap,
+  .config-list,
+  .skill-card,
+  .plugin-item,
+  .model-status-card,
+  .guide-hero,
+  .guide-section,
+  .ruka-guide,
+  .workspace-composer,
+  .schedule-source-bar,
+  .channel-item,
+  .log-console-shell
+) {
+  border-color: var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--surface-shadow);
+}
+
+:is(
+  .status-band,
+  .dashboard-columns > .section,
+  .focus-board,
+  .settings-group,
+  .today-hero-copy,
+  .today-hero-side,
+  .today-panel,
+  .today-courses,
+  .experiment-tree,
+  .schedule-board,
+  .knowledge-tree,
+  .table-wrap,
+  .config-list,
+  .skill-card,
+  .plugin-item,
+  .model-status-card,
+  .guide-hero,
+  .guide-section,
+  .ruka-guide,
+  .workspace-composer,
+  .schedule-source-bar,
+  .channel-item
+) {
+  transition:
+    background-color var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out);
+}
+
+:is(
+  .assignment-card,
+  .course-card,
+  .skill-card,
+  .knowledge-card,
+  .plugin-item,
+  .model-status-card,
+  .channel-item,
+  .guide-feature,
+  .ruka-route-options button
+):hover {
+  border-color: var(--line-strong);
+  background: var(--panel-hover);
+  box-shadow: var(--surface-shadow-hover);
+  transform: none;
+}
+
+:is(.status-band, .section, .focus-board, .settings-group) h2,
+:is(.page-intro, .guide-section) h2,
+.guide-section-head h3 {
+  letter-spacing: -0.012em;
+}
+
+.status-band p,
+.section-heading p,
+.page-intro p,
+.settings-group p,
+.api-callout p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.62;
+}
+
+.section {
+  padding: 24px 0;
+}
+
+.section-heading {
+  margin-bottom: 16px;
+}
+
+.environment-grid,
+.launch-summary,
+.update-source,
+.focus-metrics,
+.workspace-metrics,
+.experiment-metrics,
+.knowledge-metrics,
+.schedule-empty-notes {
+  border-color: var(--line);
+  border-radius: var(--radius);
+  background: var(--line);
+  box-shadow: none;
+}
+
+.metric,
+.launch-summary > div,
+.update-source > div,
+.focus-metrics > div,
+.workspace-metrics > div,
+.experiment-metrics > div,
+.knowledge-metrics > div,
+.schedule-empty-notes > div {
+  background: var(--panel);
+}
+
+.metric span,
+.launch-summary span,
+.update-source span,
+.focus-metrics span,
+.focus-metrics small,
+.workspace-metrics span,
+.experiment-metrics span,
+.knowledge-metrics span,
+.knowledge-metrics small {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.metric strong,
+.launch-summary strong,
+.update-source strong,
+.focus-quick strong,
+.experiment-path strong,
+.knowledge-metrics strong {
+  font-size: 11px;
+}
+
+.focus-metrics strong {
+  font-size: 27px;
+  letter-spacing: -0.025em;
+}
+
+.workspace-metrics strong,
+.experiment-metrics strong,
+.knowledge-metrics strong {
+  font-size: 20px;
+  letter-spacing: -0.018em;
+}
+
+.badge {
+  height: 23px;
+  border-color: var(--line-strong);
+  background: var(--panel-raised);
+  font-size: 9px;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+th,
+td {
+  padding: 12px 14px;
+}
+
+th {
+  background: var(--panel-raised);
+  font-size: 9px;
+}
+
+td {
+  font-size: 12px;
+}
+
+.text-button {
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  text-decoration-thickness: 1px;
+}
+
+.text-button:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+  text-decoration-color: transparent;
+}
+
+.input-shell,
+.field input,
+.field select,
+.field textarea {
+  border-color: var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+}
+
+.input-shell:focus-within,
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 12%, transparent);
+}
+
+.field > span,
+.toggle-row > span:first-child {
+  font-size: 10px;
+}
+
+.field small,
+.setting-hint {
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.segmented {
+  border-radius: var(--radius-sm);
+  background: var(--line);
+}
+
+.segmented button {
+  background: var(--panel);
+}
+
+.segmented button:hover {
+  background: var(--panel-hover);
+}
+
+.segmented button.active {
+  background: var(--panel-active);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.segmented button strong {
+  font-size: 12px;
+}
+
+.segmented button span {
+  font-size: 10px;
+}
+
+.toggle {
+  border-color: var(--line-strong);
+  background: var(--panel-raised);
+}
+
+.toggle-row input:checked + .toggle {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.settings-save {
+  border-radius: var(--radius);
+  box-shadow: var(--surface-shadow-hover);
+}
+
+.skill-card {
+  min-height: 200px;
+}
+
+.skill-card-title h3 {
+  font-size: 14px;
+}
+
+.skill-card-title span,
+.skill-card > p,
+.plugin-copy span {
+  font-size: 10px;
+}
+
+.plugin-item {
+  border-radius: var(--radius);
+}
+
+.api-callout {
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.model-status-card {
+  border-radius: var(--radius);
+}
+
+.today-hero-copy h2 {
+  letter-spacing: -0.02em;
+}
+
+.course-card,
+.assignment-card,
+.knowledge-card {
+  border-radius: var(--radius);
+}
+
+.assignment-card:hover {
+  border-color: var(--line-strong);
+  background: var(--panel-hover);
+  transform: none;
+}
+
+.schedule-grid {
+  background: var(--bg-elevated);
+}
+
+.schedule-course {
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+.schedule-course:hover {
+  transform: none;
+}
+
+.knowledge-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--surface-shadow-hover);
+  transform: none;
+}
+
+.dialog-layer,
+.welcome-layer {
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(14px) saturate(70%);
+}
+
+.dialog-card,
+.welcome-card {
+  border-color: var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: 0 24px 72px rgb(0 0 0 / 32%);
+}
+
+body[data-theme='light'] .dialog-card,
+body[data-theme='light'] .welcome-card {
+  box-shadow: 0 24px 72px rgb(17 17 20 / 14%);
+}
+
+.welcome-points > div,
+.guide-progress,
+.guide-feature,
+.ruka-guide-hero,
+.ruka-route-options button,
+.ai-system-map,
+.ai-concept-strip,
+.setting-block,
+.credential-refs,
+.health-report,
+.backup-row {
+  border-radius: var(--radius);
+}
+
+.welcome-points > div,
+.guide-progress,
+.guide-feature,
+.setting-block,
+.credential-refs,
+.health-report,
+.backup-row {
+  background: var(--panel-raised);
+}
+
+.guide-feature:hover {
+  background: var(--panel-hover);
+  transform: none;
+}
+
+.ruka-route-options button {
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+}
+
+.ruka-route-options button:hover,
+.ruka-route-options button.active {
+  background: var(--panel-hover);
+  transform: none;
+}
+
+.task-strip,
+.toast {
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--surface-shadow-hover);
+}
+
+@media (width <= 760px) {
+  .topbar {
+    padding-inline: 18px;
+  }
+
+  .view {
+    padding: 22px 18px 96px;
+  }
+}
+
+@media (width <= 520px) {
+  .view {
+    padding-inline: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view > *,
+  .toast,
+  .status-dot.running,
+  .brand-wordmark {
+    animation: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
