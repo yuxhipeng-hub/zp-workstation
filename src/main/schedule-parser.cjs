@@ -165,6 +165,79 @@ function parseTimeRange(value) {
   }
 }
 
+function normalizeTimeValue(value) {
+  const match = cleanText(value, 8).match(/^([01]?\d|2[0-3]):([0-5]\d)$/)
+  return match ? `${match[1].padStart(2, '0')}:${match[2]}` : ''
+}
+
+function mostFrequentTime(values) {
+  const counts = new Map()
+  for (const value of values.map(normalizeTimeValue).filter(Boolean)) {
+    counts.set(value, (counts.get(value) || 0) + 1)
+  }
+  return (
+    [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .at(0)?.[0] || ''
+  )
+}
+
+function inferPeriodTimes(courses, maxPeriod = 10) {
+  const slots = new Map()
+  const ensureSlot = (period) => {
+    const key = Math.max(1, Math.min(MAX_PERIODS, Number(period) || 1))
+    if (!slots.has(key)) slots.set(key, { starts: [], ends: [] })
+    return slots.get(key)
+  }
+
+  for (const course of courses || []) {
+    const startPeriod = Number(course?.startPeriod)
+    const endPeriod = Math.max(startPeriod, Number(course?.endPeriod) || startPeriod)
+    if (!Number.isInteger(startPeriod) || startPeriod < 1) continue
+    if (course.startTime) ensureSlot(startPeriod).starts.push(course.startTime)
+    if (course.endTime) ensureSlot(endPeriod).ends.push(course.endTime)
+  }
+
+  const highestPeriod = Math.min(
+    MAX_PERIODS,
+    Math.max(
+      1,
+      Number(maxPeriod) || 0,
+      ...(courses || []).map((course) => Number(course?.endPeriod) || 0),
+    ),
+  )
+  return Array.from({ length: highestPeriod }, (_item, index) => {
+    const period = index + 1
+    const slot = slots.get(period)
+    return {
+      period,
+      startTime: mostFrequentTime(slot?.starts || []),
+      endTime: mostFrequentTime(slot?.ends || []),
+    }
+  })
+}
+
+function normalizePeriodTimes(input, courses = [], maxPeriod = 10) {
+  const source = Array.isArray(input) ? input : []
+  const highestPeriod = Math.min(
+    MAX_PERIODS,
+    Math.max(
+      1,
+      Number(maxPeriod) || 0,
+      source.length,
+      ...(courses || []).map((course) => Number(course?.endPeriod) || 0),
+    ),
+  )
+  return Array.from({ length: highestPeriod }, (_item, index) => {
+    const entry = source[index] || {}
+    return {
+      period: index + 1,
+      startTime: normalizeTimeValue(entry.startTime),
+      endTime: normalizeTimeValue(entry.endTime),
+    }
+  })
+}
+
 function parsePeriodRange(value) {
   const source = String(value ?? '').normalize('NFKC')
   const english = source.match(/\bperiods?\s*(\d{1,2})(?:\s*(?:[-–—~～]|to)\s*(\d{1,2}))?/i)
@@ -421,7 +494,9 @@ function findPeriodColumn(rows, header) {
   for (let column = 0; column < firstDayColumn; column += 1) {
     let matches = 0
     for (let row = header.rowIndex + 1; row < rows.length; row += 1) {
-      if (parsePeriodRange(rows[row]?.[column])) matches += 1
+      if (parsePeriodRange(rows[row]?.[column]) || parseTimeRange(rows[row]?.[column])) {
+        matches += 1
+      }
     }
     if (matches && (!best || matches > best.matches)) best = { column, matches }
   }
@@ -433,12 +508,32 @@ function periodForRow(rows, rowIndex, headerRow, periodColumn, firstDayColumn) {
   for (let column = 0; column < firstDayColumn; column += 1) {
     if (!candidates.includes(column)) candidates.push(column)
   }
+  const fallbackPeriod = rowIndex - headerRow
+  const fallback =
+    fallbackPeriod >= 1 && fallbackPeriod <= MAX_PERIODS
+      ? { startPeriod: fallbackPeriod, endPeriod: fallbackPeriod }
+      : null
+  let detected = null
   for (const column of candidates) {
-    const parsed = parsePeriodRange(rows[rowIndex]?.[column])
-    if (parsed) return parsed
+    const period = parsePeriodRange(rows[rowIndex]?.[column])
+    const time = parseTimeRange(rows[rowIndex]?.[column])
+    if (period || time) {
+      detected = { ...(detected || {}), ...(time || {}), ...(period || {}) }
+      if (period) {
+        return {
+          ...(fallback || { startPeriod: 0, endPeriod: 0 }),
+          ...detected,
+        }
+      }
+    }
   }
-  const period = rowIndex - headerRow
-  return period >= 1 && period <= MAX_PERIODS ? { startPeriod: period, endPeriod: period } : null
+  if (detected) {
+    return {
+      ...(fallback || { startPeriod: 0, endPeriod: 0 }),
+      ...detected,
+    }
+  }
+  return fallback
 }
 
 /**
@@ -447,7 +542,7 @@ function periodForRow(rows, rowIndex, headerRow, periodColumn, firstDayColumn) {
  *   raw: string,
  *   startRow: number,
  *   endRow: number,
- *   period: { startPeriod: number, endPeriod: number },
+ *   period: { startPeriod: number, endPeriod: number, startTime?: string, endTime?: string },
  *   parsed?: ReturnType<typeof parseCourseCell>,
  *   courseIndex?: number | null
  * }} MatrixCourseGroup
@@ -472,11 +567,15 @@ function parseMatrixSheet(rows) {
       if (group && group.key === key && rowIndex === group.endRow + 1) {
         group.endRow = rowIndex
         group.period.endPeriod = Math.max(group.period.endPeriod, period.endPeriod)
+        group.period.startTime ||= period.startTime || ''
+        group.period.endTime ||= period.endTime || ''
         if (group.courseIndex !== null && courses[group.courseIndex]) {
           courses[group.courseIndex].endPeriod = Math.max(
             courses[group.courseIndex].endPeriod,
             period.endPeriod,
           )
+          courses[group.courseIndex].startTime ||= period.startTime || ''
+          courses[group.courseIndex].endTime ||= period.endTime || ''
         }
         continue
       }
@@ -496,6 +595,8 @@ function parseMatrixSheet(rows) {
           weekday: dayColumn.weekday,
           startPeriod,
           endPeriod,
+          startTime: parsed.startTime || group.period.startTime || '',
+          endTime: parsed.endTime || group.period.endTime || '',
         })
       }
       group.parsed = parsed
@@ -531,7 +632,7 @@ function findVerticalPeriodColumn(rows, weekdayColumn) {
   for (let column = weekdayColumn + 1; column < columnLimit; column += 1) {
     let matches = 0
     for (const row of rows) {
-      if (parsePeriodRange(row?.[column])) matches += 1
+      if (parsePeriodRange(row?.[column]) || parseTimeRange(row?.[column])) matches += 1
     }
     if (matches && (!best || matches > best.matches)) best = { columnIndex: column, matches }
   }
@@ -548,6 +649,7 @@ function parseVerticalMatrixSheet(rows) {
   const courses = []
   const recentByColumn = new Map()
   let currentWeekday = 0
+  let periodPosition = 0
 
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
     const row = rows[rowIndex] || []
@@ -556,8 +658,15 @@ function parseVerticalMatrixSheet(rows) {
     if (weekday && compactText(weekdayValue).length <= 8) currentWeekday = weekday
     if (!currentWeekday) continue
 
-    const period = parsePeriodRange(row[periodHeader.columnIndex])
-    if (!period) continue
+    const periodText = row[periodHeader.columnIndex]
+    const parsedPeriod = parsePeriodRange(periodText)
+    const parsedTime = parseTimeRange(periodText)
+    if (!parsedPeriod && !parsedTime) continue
+    periodPosition += 1
+    const period = parsedPeriod || {
+      startPeriod: periodPosition,
+      endPeriod: periodPosition,
+    }
 
     for (let column = firstCourseColumn; column < row.length; column += 1) {
       const raw = cleanText(row[column], 1000)
@@ -571,6 +680,8 @@ function parseVerticalMatrixSheet(rows) {
         recent.rowIndex === rowIndex - 1
       ) {
         recent.course.endPeriod = Math.max(recent.course.endPeriod, period.endPeriod)
+        recent.course.startTime ||= parsedTime?.startTime || ''
+        recent.course.endTime ||= parsedTime?.endTime || ''
         recent.rowIndex = rowIndex
         continue
       }
@@ -584,6 +695,8 @@ function parseVerticalMatrixSheet(rows) {
         weekday: currentWeekday,
         startPeriod,
         endPeriod,
+        startTime: parsed.startTime || parsedTime?.startTime || '',
+        endTime: parsed.endTime || parsedTime?.endTime || '',
       }
       courses.push(course)
       recentByColumn.set(column, {
@@ -664,11 +777,11 @@ function parseRecordSheet(rows) {
     const weekday = parseWeekday(weekdayText)
     if (!weekday) continue
 
+    const periodText =
+      valueAt(row, header.map.period) || findCell(row, (cell) => Boolean(parsePeriodRange(cell)))
     const timeText =
-      valueAt(row, header.map.period) ||
-      valueAt(row, header.map.time) ||
-      findCell(row, (cell) => Boolean(parsePeriodRange(cell) || parseTimeRange(cell)))
-    const period = parsePeriodRange(timeText)
+      valueAt(row, header.map.time) || findCell(row, (cell) => Boolean(parseTimeRange(cell)))
+    const period = parsePeriodRange(periodText)
     const time = parseTimeRange(timeText)
     const weeksText =
       valueAt(row, header.map.weeks) ||
@@ -1115,6 +1228,7 @@ function finalizeSchedule(rawCourses, { resolved, extension, stats }) {
     importedAt: new Date().toISOString(),
     maxWeek: Math.min(maxWeek, 30),
     maxPeriod: Math.min(maxPeriod, MAX_PERIODS),
+    periodTimes: inferPeriodTimes(courses, maxPeriod),
     courses,
   }
 }
@@ -1181,5 +1295,7 @@ module.exports = {
   parseTextSchedule,
   parseWeekday,
   parseWeeks,
+  inferPeriodTimes,
+  normalizePeriodTimes,
   normalizeCourses,
 }

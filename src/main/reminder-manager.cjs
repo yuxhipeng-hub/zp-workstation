@@ -46,6 +46,29 @@ function termWeekNumber(termStartDate, now) {
   return Math.min(30, Math.floor(days / 7) + 1)
 }
 
+function schedulePeriodTimes(schedule) {
+  const byPeriod = new Map()
+  for (const entry of schedule?.periodTimes || []) {
+    const period = Number(entry?.period)
+    if (Number.isInteger(period) && period >= 1) {
+      byPeriod.set(period, {
+        startTime: cleanText(entry.startTime, 5),
+        endTime: cleanText(entry.endTime, 5),
+      })
+    }
+  }
+  return byPeriod
+}
+
+function effectiveCourseTime(schedule, course, periodTimes) {
+  const startPeriod = Math.max(1, Number(course.startPeriod) || 1)
+  const endPeriod = Math.max(startPeriod, Number(course.endPeriod) || startPeriod)
+  return {
+    startTime: course.startTime || periodTimes.get(startPeriod)?.startTime || '',
+    endTime: course.endTime || periodTimes.get(endPeriod)?.endTime || '',
+  }
+}
+
 class ReminderManager {
   constructor({ settings, workspace, logger, onReminder }) {
     this.settings = settings
@@ -93,13 +116,18 @@ class ReminderManager {
     const settings = this.settings.get()
     const weekNumber = termWeekNumber(settings.termStartDate, now)
     const weekday = isoWeekday(now)
+    const periodTimes = schedulePeriodTimes(schedule)
     return schedule.courses
       .filter((course) => course.weekday === weekday && this.courseVisible(course, weekNumber))
-      .map((course) => ({
-        ...course,
-        startMinutes: minutesOfDay(course.startTime),
-        endMinutes: minutesOfDay(course.endTime),
-      }))
+      .map((course) => {
+        const times = effectiveCourseTime(schedule, course, periodTimes)
+        return {
+          ...course,
+          ...times,
+          startMinutes: minutesOfDay(times.startTime),
+          endMinutes: minutesOfDay(times.endTime),
+        }
+      })
       .filter((course) => course.startMinutes !== null)
       .sort((left, right) => left.startMinutes - right.startMinutes)
   }

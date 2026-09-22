@@ -28,6 +28,7 @@ function registerIpc({
   settings,
   workspace,
   experimentLibrary,
+  jevManager,
   scheduleManager,
   logger,
   dshManager,
@@ -53,6 +54,7 @@ function registerIpc({
   dshManager.on('update-state', (state) => send('update:state', state))
   dshManager.on('process-state', (state) => send('process:state', state))
   dshManager.on('process-log', (payload) => send('process:log', payload))
+  jevManager.on('state', (state) => send('jev:state', state))
   if (reminderManager) {
     const forwardReminder = reminderManager.onReminder
     reminderManager.onReminder = (reminder) => {
@@ -75,6 +77,7 @@ function registerIpc({
       logs: logger.list(160),
       history: dshManager.history(),
       modelConfig: dshManager.getModelConfig(),
+      jev: jevManager.status(),
       workspace: workspace.get(),
     }
   })
@@ -89,6 +92,9 @@ function registerIpc({
     dshManager.managePlugin(profile, action, spec),
   )
   ipcMain.handle('dsh:model-config', () => dshManager.getModelConfig())
+  ipcMain.handle('dsh:model-state', (_event, options = {}) => dshManager.getDshModelState(options))
+  ipcMain.handle('dsh:set-deepseek-key', (_event, value) => dshManager.setDeepseekApiKey(value))
+  ipcMain.handle('dsh:clear-deepseek-key', () => dshManager.clearDeepseekApiKey())
   ipcMain.handle('skills:list', (_event, options = {}) => skillsManager.list(options))
   ipcMain.handle('skills:search', (_event, query) => skillsManager.searchGithub(query))
   ipcMain.handle('skills:install', (_event, spec) => skillsManager.installFromGithub(spec))
@@ -187,6 +193,9 @@ function registerIpc({
   ipcMain.handle('workspace:knowledge-review', (_event, id, rating) =>
     knowledgeManager.reviewKnowledge(id, rating),
   )
+  ipcMain.handle('workspace:experiments-suggest', (_event, entries) =>
+    experimentLibrary.suggestEntries(entries),
+  )
   ipcMain.handle('workspace:experiments-import', (_event, entries) =>
     experimentLibrary.importEntries(entries),
   )
@@ -205,6 +214,9 @@ function registerIpc({
     scheduleManager.updateCourse(id, patch),
   )
   ipcMain.handle('schedule:course-delete', (_event, id) => scheduleManager.deleteCourse(id))
+  ipcMain.handle('schedule:period-times-update', (_event, periodTimes) =>
+    scheduleManager.updatePeriodTimes(periodTimes),
+  )
   ipcMain.handle('schedule:clear', () => scheduleManager.clear())
   ipcMain.handle('clipboard:write', (_event, value) => {
     clipboard.writeText(String(value ?? ''))
@@ -230,7 +242,26 @@ function registerIpc({
   ipcMain.handle('file:resolve-drop-references', (_event, values) => resolveDropReferences(values))
 
   ipcMain.handle('settings:get', () => settings.get())
+  ipcMain.handle('jev:status', () => jevManager.status())
+  ipcMain.handle('jev:config', (_event, patch = {}) => {
+    const status = jevManager.patchConfig(patch)
+    send('settings:changed', settings.get())
+    return status
+  })
+  ipcMain.handle('jev:set-key', (_event, value) => jevManager.setApiKey(value))
+  ipcMain.handle('jev:clear-key', () => jevManager.clearApiKey())
+  ipcMain.handle('jev:test', () => jevManager.testConnection())
   ipcMain.handle('settings:patch', (_event, patch) => {
+    const jevPatch = {}
+    for (const key of [
+      'jevEnabled',
+      'jevAutoClassify',
+      'jevIncludeText',
+      'jevApiBaseUrl',
+      'jevModel',
+    ]) {
+      if (Object.hasOwn(patch || {}, key)) jevPatch[key] = patch[key]
+    }
     const allowed = {}
     const keys = [
       'channel',
@@ -325,10 +356,12 @@ function registerIpc({
       }
     }
     const updated = settings.patch(allowed)
+    if (Object.keys(jevPatch).length) jevManager.patchConfig(jevPatch)
+    const current = settings.get()
     if (allowed.dshHome !== undefined) skillsManager.setDshHome(updated.dshHome)
     if (allowed.theme) nativeTheme.themeSource = allowed.theme
-    send('settings:changed', updated)
-    return updated
+    send('settings:changed', current)
+    return current
   })
 
   ipcMain.handle('dialog:choose-dsh-home', async () => {

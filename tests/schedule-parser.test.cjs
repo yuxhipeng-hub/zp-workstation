@@ -94,6 +94,29 @@ test('parses a matrix timetable and expands merged class rows', (t) => {
   assert.equal(schedule.maxPeriod >= 10, true)
 })
 
+test('captures explicit row times and infers editable period times', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-schedule-times-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const filePath = path.join(directory, 'times.xlsx')
+  writeWorkbook(filePath, [
+    ['节次', '星期一', '星期二', '星期三'],
+    ['08:00-09:40', '高等数学\n张老师\nA101\n第1-2节\n1-16周', '', ''],
+    ['10:00-11:40', '', '线性代数\n赵老师\nB203\n第3-4节\n1-16周', ''],
+  ])
+
+  const schedule = parseScheduleFile(filePath)
+  const math = schedule.courses.find((course) => course.name === '高等数学')
+  const algebra = schedule.courses.find((course) => course.name === '线性代数')
+  assert.equal(math.startTime, '08:00')
+  assert.equal(math.endTime, '09:40')
+  assert.equal(algebra.startTime, '10:00')
+  assert.equal(algebra.endTime, '11:40')
+  assert.equal(schedule.periodTimes[0].startTime, '08:00')
+  assert.equal(schedule.periodTimes[1].endTime, '09:40')
+  assert.equal(schedule.periodTimes[2].startTime, '10:00')
+  assert.equal(schedule.periodTimes[3].endTime, '11:40')
+})
+
 test('parses a record-list timetable from Excel', (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-schedule-list-'))
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
@@ -316,6 +339,10 @@ test('stores and clears a parsed schedule without touching other workspace data'
     source: { name: '课表.xlsx', path: 'C:\\课表.xlsx' },
     maxPeriod: 10,
     maxWeek: 16,
+    periodTimes: [
+      { period: 1, startTime: '08:00', endTime: '08:45' },
+      { period: 2, startTime: '08:55', endTime: '09:40' },
+    ],
     courses: [
       {
         name: '高等数学',
@@ -328,6 +355,8 @@ test('stores and clears a parsed schedule without touching other workspace data'
   })
 
   assert.equal(workspace.schedule.courses.length, 1)
+  assert.equal(workspace.schedule.periodTimes[0].startTime, '08:00')
+  assert.equal(workspace.schedule.periodTimes[1].endTime, '09:40')
   assert.equal(workspace.assignments.length, 1)
   const cleared = store.clearSchedule()
   assert.equal(cleared.schedule, null)
@@ -357,6 +386,8 @@ test('creates, updates, and deletes manually maintained schedule courses', (t) =
     created.workspace.schedule.courses[0].weeks,
     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
   )
+  assert.equal(created.workspace.schedule.periodTimes[0].startTime, '08:00')
+  assert.equal(created.workspace.schedule.periodTimes[1].endTime, '09:40')
 
   const id = created.course.id
   const updated = manager.updateCourse(id, {
@@ -371,6 +402,13 @@ test('creates, updates, and deletes manually maintained schedule courses', (t) =
   assert.equal(course.weekday, 2)
   assert.equal(course.startPeriod, 3)
   assert.deepEqual(course.weeks, [1, 3, 5, 7])
+
+  const periodTimes = created.workspace.schedule.periodTimes.map((entry) => ({ ...entry }))
+  periodTimes[2] = { period: 3, startTime: '10:10', endTime: '10:55' }
+  periodTimes[3] = { period: 4, startTime: '11:05', endTime: '11:50' }
+  const timeUpdate = manager.updatePeriodTimes(periodTimes)
+  assert.equal(timeUpdate.workspace.schedule.periodTimes[2].startTime, '10:10')
+  assert.equal(timeUpdate.workspace.schedule.periodTimes[3].endTime, '11:50')
 
   const deleted = manager.deleteCourse(id)
   assert.equal(deleted.schedule, null)

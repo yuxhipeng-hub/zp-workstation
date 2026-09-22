@@ -38,15 +38,6 @@
             <button
               class="nav-item"
               type="button"
-              data-page="overview"
-              aria-label="总览"
-              title="总览"
-            >
-              <i data-lucide="layout-dashboard"></i><span>总览</span>
-            </button>
-            <button
-              class="nav-item"
-              type="button"
               data-page="schedule"
               aria-label="课表"
               title="课表"
@@ -116,23 +107,17 @@
               class="nav-item"
               type="button"
               data-page="models"
-              aria-label="模型与 API"
-              title="模型与 API"
+              aria-label="模型连接"
+              title="模型连接"
             >
-              <i data-lucide="key-round"></i><span>模型与 API</span>
+              <i data-lucide="key-round"></i><span>模型连接</span>
             </button>
           </div>
 
           <div class="nav-section nav-section-help">
             <p class="nav-label">帮助</p>
-            <button
-              class="nav-item"
-              type="button"
-              data-page="guide"
-              aria-label="看这，Ruka！"
-              title="看这，Ruka！"
-            >
-              <i data-lucide="compass"></i><span>看这，Ruka！</span>
+            <button class="nav-item" type="button" data-page="guide" aria-label="指南" title="指南">
+              <i data-lucide="compass"></i><span>指南</span>
             </button>
           </div>
 
@@ -184,9 +169,11 @@
           <div class="topbar-heading">
             <div class="route-marker" aria-hidden="true"><span></span></div>
             <div>
-              <p class="eyebrow" id="pageEyebrow">控制台</p>
-              <h1 id="pageTitle">总览</h1>
-              <p class="page-summary" id="pageSummary">运行时状态、更新和工作台入口集中在这里。</p>
+              <p class="eyebrow" id="pageEyebrow">今天</p>
+              <h1 id="pageTitle">今日</h1>
+              <p class="page-summary" id="pageSummary">
+                把今天要上的课、要交的作业和要复习的知识点集中在一页。
+              </p>
             </div>
           </div>
           <div class="topbar-actions">
@@ -210,9 +197,40 @@
                 <i class="runtime-ribbon-chevron" data-lucide="chevron-down"></i>
               </summary>
               <div class="topbar-status-panel">
-                <button class="status-action" type="button" data-page-jump="assignments">
-                  <span class="status-action-icon"><i data-lucide="notebook-pen"></i></span>
-                  <span><strong>处理作业</strong><small>进入作业收件箱</small></span>
+                <button
+                  class="status-action"
+                  id="runtimeLaunchAction"
+                  type="button"
+                  data-action="launch"
+                >
+                  <span class="status-action-icon"><i data-lucide="play"></i></span>
+                  <span
+                    ><strong id="runtimeLaunchLabel">启动工作台</strong
+                    ><small id="runtimeLaunchDetail">启动本地 DeepSeek Harness</small></span
+                  >
+                  <i data-lucide="chevron-right"></i>
+                </button>
+                <button
+                  class="status-action"
+                  id="runtimeStopAction"
+                  type="button"
+                  data-action="stop"
+                  disabled
+                >
+                  <span class="status-action-icon"><i data-lucide="square"></i></span>
+                  <span><strong>停止工作台</strong><small>结束当前 DSH 进程</small></span>
+                  <i data-lucide="chevron-right"></i>
+                </button>
+                <button
+                  class="status-action"
+                  id="runtimeOpenDshHomeAction"
+                  type="button"
+                  data-action="open-dsh-home"
+                >
+                  <span class="status-action-icon"><i data-lucide="folder-open"></i></span>
+                  <span
+                    ><strong>打开 DSH 数据目录</strong><small>查看会话、配置和本地数据</small></span
+                  >
                   <i data-lucide="chevron-right"></i>
                 </button>
                 <button class="status-action" type="button" data-action="check-update">
@@ -227,8 +245,8 @@
                 </button>
               </div>
             </details>
-            <button class="button primary" type="button" data-action="launch">
-              <i data-lucide="play"></i><span>启动工作台</span>
+            <button class="button primary" id="topLaunchButton" type="button" data-action="launch">
+              <i data-lucide="play"></i><span id="topLaunchLabel">启动工作台</span>
             </button>
           </div>
         </header>
@@ -265,7 +283,12 @@
           </div>
         </section>
 
-        <main class="view" id="view" tabindex="-1"></main>
+        <main class="view" id="view" tabindex="-1">
+          <section class="loading-panel boot-loading">
+            <i data-lucide="loader"></i>
+            <span>正在启动 ZP Workbench，并读取本地工作区…</span>
+          </section>
+        </main>
       </div>
     </div>
 
@@ -293,6 +316,7 @@
     <div class="toast-stack" id="toasts" aria-live="polite" aria-atomic="false"></div>
     <div id="overlayRoot"></div>
     <div id="dialogRoot"></div>
+    <div class="quick-tooltip" id="quickTooltip" role="tooltip" hidden></div>
 
     <script type="module" src="/main.js"></script>
   </body>

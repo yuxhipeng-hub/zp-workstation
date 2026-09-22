@@ -11,6 +11,7 @@ const allowedEvents = new Set([
   'reminder:due',
   'launcher:update-state',
   'launcher:download-progress',
+  'jev:state',
 ])
 
 contextBridge.exposeInMainWorld('launcher', {
@@ -25,7 +26,15 @@ contextBridge.exposeInMainWorld('launcher', {
     ipcRenderer.invoke('dsh:plugin-action', profile, action, spec),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   patchSettings: (patch) => ipcRenderer.invoke('settings:patch', patch),
+  getJevStatus: () => ipcRenderer.invoke('jev:status'),
+  patchJevConfig: (patch) => ipcRenderer.invoke('jev:config', patch),
+  setJevApiKey: (value) => ipcRenderer.invoke('jev:set-key', value),
+  clearJevApiKey: () => ipcRenderer.invoke('jev:clear-key'),
+  testJev: () => ipcRenderer.invoke('jev:test'),
   getModelConfig: () => ipcRenderer.invoke('dsh:model-config'),
+  getDshModelState: (options) => ipcRenderer.invoke('dsh:model-state', options),
+  setDeepseekApiKey: (value) => ipcRenderer.invoke('dsh:set-deepseek-key', value),
+  clearDeepseekApiKey: () => ipcRenderer.invoke('dsh:clear-deepseek-key'),
   listSkills: (options) => ipcRenderer.invoke('skills:list', options),
   searchSkills: (query) => ipcRenderer.invoke('skills:search', query),
   installSkill: (spec) => ipcRenderer.invoke('skills:install', spec),
@@ -67,6 +76,8 @@ contextBridge.exposeInMainWorld('launcher', {
   generateKnowledge: (experimentId) =>
     ipcRenderer.invoke('workspace:knowledge-generate', experimentId),
   reviewKnowledge: (id, rating) => ipcRenderer.invoke('workspace:knowledge-review', id, rating),
+  suggestExperimentGroups: (entries) =>
+    ipcRenderer.invoke('workspace:experiments-suggest', entries),
   importExperiments: (entries) => ipcRenderer.invoke('workspace:experiments-import', entries),
   updateExperiment: (id, patch) => ipcRenderer.invoke('workspace:experiment-update', id, patch),
   renameExperimentGroup: (currentGroup, nextGroup) =>
@@ -76,6 +87,8 @@ contextBridge.exposeInMainWorld('launcher', {
   createScheduleCourse: (input) => ipcRenderer.invoke('schedule:course-create', input),
   updateScheduleCourse: (id, patch) => ipcRenderer.invoke('schedule:course-update', id, patch),
   deleteScheduleCourse: (id) => ipcRenderer.invoke('schedule:course-delete', id),
+  updateSchedulePeriodTimes: (periodTimes) =>
+    ipcRenderer.invoke('schedule:period-times-update', periodTimes),
   clearSchedule: () => ipcRenderer.invoke('schedule:clear'),
   copyText: (value) => ipcRenderer.invoke('clipboard:write', value),
   stageDroppedFile: (payload) => ipcRenderer.invoke('file:stage-drop', payload),

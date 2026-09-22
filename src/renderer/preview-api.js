@@ -73,6 +73,47 @@ function previewWeekText(weeks) {
   return `${ranges.join(',')}周`
 }
 
+function normalizePreviewPeriodTimes(input, maxPeriod = 10, courses = []) {
+  const source = Array.isArray(input) ? input : []
+  const highestPeriod = Math.min(
+    20,
+    Math.max(
+      1,
+      Number(maxPeriod) || 0,
+      source.length,
+      ...courses.map((course) => Number(course?.endPeriod) || 0),
+    ),
+  )
+  return Array.from({ length: highestPeriod }, (_item, index) => {
+    const entry = source[index] || {}
+    const normalize = (value) => {
+      const match = String(value || '')
+        .trim()
+        .match(/^([01]?\d|2[0-3]):([0-5]\d)$/)
+      return match ? `${match[1].padStart(2, '0')}:${match[2]}` : ''
+    }
+    return {
+      period: index + 1,
+      startTime: normalize(entry.startTime),
+      endTime: normalize(entry.endTime),
+    }
+  })
+}
+
+function syncPreviewCourseTime(schedule, course) {
+  schedule.periodTimes = normalizePreviewPeriodTimes(
+    schedule.periodTimes,
+    schedule.maxPeriod,
+    schedule.courses,
+  )
+  if (course.startTime) {
+    schedule.periodTimes[course.startPeriod - 1].startTime = course.startTime
+  }
+  if (course.endTime) {
+    schedule.periodTimes[course.endPeriod - 1].endTime = course.endTime
+  }
+}
+
 function normalizePreviewCourse(input = {}, existing = {}) {
   const merged = { ...existing, ...input }
   const weeks = Array.isArray(input.weeks)
@@ -318,6 +359,17 @@ function createPreviewState() {
       reviewReminderEnabled: true,
       dailyDigestTime: '08:00',
       reviewReminderTime: '19:00',
+      jevEnabled: true,
+      jevAutoClassify: true,
+      jevIncludeText: true,
+      jevApiBaseUrl: 'https://api.typesafe.ai/v1',
+      jevModel: 'jev-latest',
+      jevLastModel: '',
+      jevLastAlias: '',
+      jevLatestReleaseDate: '',
+      jevLastCheckedAt: '',
+      jevLastError: '',
+      jevCompatibilityPassed: false,
       backupEnabled: true,
       backupIntervalHours: 24,
       backupRetention: 20,
@@ -339,6 +391,23 @@ function createPreviewState() {
         completedAt: null,
       },
       updateHistory: [],
+    },
+    jev: {
+      enabled: true,
+      autoClassify: true,
+      includeText: true,
+      apiBaseUrl: 'https://api.typesafe.ai/v1',
+      model: 'jev-latest',
+      hasApiKey: false,
+      safeStorageAvailable: true,
+      lastModel: '',
+      lastAlias: '',
+      latestReleaseDate: '',
+      lastCheckedAt: '',
+      lastError: '',
+      compatibilityPassed: false,
+      checking: false,
+      cacheEntries: 0,
     },
     backups: [
       {
@@ -904,6 +973,23 @@ function createPreviewState() {
         importedAt: new Date(now - 1000 * 60 * 60 * 18).toISOString(),
         maxPeriod: 12,
         maxWeek: 18,
+        periodTimes: normalizePreviewPeriodTimes(
+          [
+            { startTime: '08:00', endTime: '08:45' },
+            { startTime: '08:55', endTime: '09:40' },
+            { startTime: '10:00', endTime: '10:45' },
+            { startTime: '10:55', endTime: '11:40' },
+            { startTime: '14:00', endTime: '14:45' },
+            { startTime: '14:55', endTime: '15:40' },
+            { startTime: '16:00', endTime: '16:45' },
+            { startTime: '16:55', endTime: '17:40' },
+            { startTime: '19:00', endTime: '19:45' },
+            { startTime: '19:55', endTime: '20:40' },
+            { startTime: '20:50', endTime: '21:35' },
+            { startTime: '', endTime: '' },
+          ],
+          12,
+        ),
         courses: [
           {
             id: 'preview-schedule-1',
@@ -1029,11 +1115,66 @@ export function createPreviewLauncherApi() {
     },
     async patchSettings(patch) {
       state.settings = { ...state.settings, ...patch }
+      for (const key of [
+        'jevEnabled',
+        'jevAutoClassify',
+        'jevIncludeText',
+        'jevApiBaseUrl',
+        'jevModel',
+      ]) {
+        if (!Object.hasOwn(patch || {}, key)) continue
+        if (key === 'jevEnabled') state.jev.enabled = Boolean(patch[key])
+        else if (key === 'jevAutoClassify') state.jev.autoClassify = Boolean(patch[key])
+        else if (key === 'jevIncludeText') state.jev.includeText = Boolean(patch[key])
+        else state.jev[key === 'jevModel' ? 'model' : 'apiBaseUrl'] = patch[key]
+      }
       if (patch?.onboarding && Object.hasOwn(patch.onboarding, 'welcomeSeen')) {
         writePreviewWelcomeSeen(patch.onboarding.welcomeSeen)
       }
       emit('settings:changed', state.settings)
       return clone(state.settings)
+    },
+    async getJevStatus() {
+      return clone(state.jev)
+    },
+    async patchJevConfig(patch = {}) {
+      if (Object.hasOwn(patch, 'jevEnabled')) state.jev.enabled = Boolean(patch.jevEnabled)
+      if (Object.hasOwn(patch, 'jevAutoClassify')) {
+        state.jev.autoClassify = Boolean(patch.jevAutoClassify)
+      }
+      if (Object.hasOwn(patch, 'jevIncludeText')) {
+        state.jev.includeText = Boolean(patch.jevIncludeText)
+      }
+      if (Object.hasOwn(patch, 'jevApiBaseUrl')) state.jev.apiBaseUrl = patch.jevApiBaseUrl
+      return clone(state.jev)
+    },
+    async setJevApiKey() {
+      state.jev.hasApiKey = true
+      state.jev.lastError = ''
+      return clone(state.jev)
+    },
+    async clearJevApiKey() {
+      state.jev.hasApiKey = false
+      state.jev.lastModel = ''
+      state.jev.compatibilityPassed = false
+      state.jev.lastError = ''
+      return clone(state.jev)
+    },
+    async testJev() {
+      if (!state.jev.hasApiKey) throw new Error('请先保存 TypeSafe API Key。')
+      state.jev.checking = true
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      state.jev = {
+        ...state.jev,
+        checking: false,
+        lastModel: 'jev-1.13.0',
+        lastAlias: 'jev-latest',
+        latestReleaseDate: '2026-09-01',
+        lastCheckedAt: new Date().toISOString(),
+        lastError: '',
+        compatibilityPassed: true,
+      }
+      return clone(state.jev)
     },
     async checkUpdate() {
       state.status.updateState = 'current'
@@ -1101,6 +1242,39 @@ export function createPreviewLauncherApi() {
     },
     async getModelConfig() {
       return clone(state.modelConfig)
+    },
+    async getDshModelState({ autoStart = false } = {}) {
+      return {
+        available: Boolean(autoStart || state.status.process.running),
+        credential: {
+          configured: Boolean(state.modelConfig.credentials.deepseekStored),
+          writable: true,
+          source: state.modelConfig.credentials.deepseekStored ? 'file' : undefined,
+        },
+        defaultModel: clone(state.modelConfig.defaultModel),
+        writable: true,
+        error: null,
+      }
+    },
+    async setDeepseekApiKey(value) {
+      const key = String(value || '').trim()
+      if (key.length < 16 || !key.startsWith('sk-')) {
+        throw new Error('请输入以 sk- 开头的有效 DeepSeek API Key。')
+      }
+      state.status.process = {
+        running: true,
+        pid: 24816,
+        url: `${state.settings.host}:${state.settings.port}`,
+      }
+      state.modelConfig.credentials.exists = true
+      state.modelConfig.credentials.deepseekStored = true
+      state.modelConfig.credentials.refs = ['DEEPSEEK_API_KEY']
+      return this.getDshModelState({ autoStart: true })
+    },
+    async clearDeepseekApiKey() {
+      state.modelConfig.credentials.deepseekStored = false
+      state.modelConfig.credentials.refs = []
+      return this.getDshModelState({ autoStart: true })
     },
     async listSkills() {
       return clone(state.skills)
@@ -1589,6 +1763,7 @@ export function createPreviewLauncherApi() {
           continue
         }
         const group =
+          String(entry?.group || '').trim() ||
           resolvePreviewExperimentGroup(originalName, existingGroups) ||
           inferPreviewExperimentGroup(originalName)
         if (!existingGroups.has(group)) {
@@ -1613,6 +1788,46 @@ export function createPreviewLauncherApi() {
         imported: imported.length,
         rejected,
         createdGroups,
+      }
+    },
+    async suggestExperimentGroups(entries) {
+      await new Promise((resolve) => setTimeout(resolve, 650))
+      const existingGroups = [
+        ...new Set([
+          ...state.workspace.experiments.map((item) => item.group).filter(Boolean),
+          ...(state.workspace.schedule?.courses || []).map((item) => item.name).filter(Boolean),
+        ]),
+      ]
+      const suggestions = entries.map((entry) => {
+        const fileName = String(entry?.name || entry?.path?.split(/[\\/]/).pop() || '').trim()
+        const matched = existingGroups.find((group) => {
+          const key = String(group).replace(/实验|课程/g, '')
+          return key && fileName.includes(key)
+        })
+        const localGroup = inferPreviewExperimentGroup(fileName)
+        const jevSuggestion = state.jev.hasApiKey && state.jev.enabled && state.jev.autoClassify
+        return {
+          ...entry,
+          name: fileName,
+          suggestion: {
+            group: matched || localGroup,
+            confidence: matched ? 0.86 : 0.38,
+            source: jevSuggestion && matched ? 'jev' : 'local',
+            reason: matched
+              ? jevSuggestion
+                ? `Jev 根据文件名和片段判断它更接近“${matched}”。`
+                : `匹配到了已有的“${matched}”文件夹。`
+              : '没有匹配到已有文件夹，建议新建这个分类。',
+            model: jevSuggestion && matched ? 'jev-1.13.0' : '',
+            lowConfidence: !matched,
+          },
+        }
+      })
+      return {
+        suggestions,
+        usedJev: suggestions.some((item) => item.suggestion.source === 'jev'),
+        mode: suggestions.some((item) => item.suggestion.source === 'jev') ? 'jev' : 'local',
+        model: suggestions.some((item) => item.suggestion.source === 'jev') ? 'jev-1.13.0' : '',
       }
     },
     async updateExperiment(id, patch) {
@@ -1742,14 +1957,20 @@ export function createPreviewLauncherApi() {
           importedAt: now,
           maxPeriod: 10,
           maxWeek: 16,
+          periodTimes: normalizePreviewPeriodTimes([], 10),
           courses: [],
         }
       }
       const course = normalizePreviewCourse(input)
       state.workspace.schedule.courses.push(course)
+      syncPreviewCourseTime(state.workspace.schedule, course)
       state.workspace.schedule.maxPeriod = Math.min(
         20,
-        Math.max(10, ...state.workspace.schedule.courses.map((item) => item.endPeriod)),
+        Math.max(
+          1,
+          ...state.workspace.schedule.courses.map((item) => item.endPeriod),
+          state.workspace.schedule.periodTimes.length,
+        ),
       )
       state.workspace.schedule.maxWeek = Math.min(
         30,
@@ -1763,9 +1984,10 @@ export function createPreviewLauncherApi() {
       if (index === -1) throw new Error('没有找到这门课程。')
       const course = normalizePreviewCourse(patch, schedule.courses[index])
       schedule.courses[index] = course
+      syncPreviewCourseTime(schedule, course)
       schedule.maxPeriod = Math.min(
         20,
-        Math.max(10, ...schedule.courses.map((item) => item.endPeriod)),
+        Math.max(1, ...schedule.courses.map((item) => item.endPeriod), schedule.periodTimes.length),
       )
       schedule.maxWeek = Math.min(
         30,
@@ -1784,7 +2006,11 @@ export function createPreviewLauncherApi() {
       } else {
         schedule.maxPeriod = Math.min(
           20,
-          Math.max(10, ...schedule.courses.map((item) => item.endPeriod)),
+          Math.max(
+            1,
+            ...schedule.courses.map((item) => item.endPeriod),
+            schedule.periodTimes?.length || 0,
+          ),
         )
         schedule.maxWeek = Math.min(
           30,
@@ -1792,6 +2018,20 @@ export function createPreviewLauncherApi() {
         )
       }
       return clone(state.workspace)
+    },
+    async updateSchedulePeriodTimes(periodTimes) {
+      const schedule = state.workspace.schedule
+      if (!schedule?.courses?.length) throw new Error('请先创建或导入课程。')
+      schedule.periodTimes = normalizePreviewPeriodTimes(
+        periodTimes,
+        Array.isArray(periodTimes) ? periodTimes.length : 0,
+        schedule.courses,
+      )
+      schedule.maxPeriod = Math.min(
+        20,
+        Math.max(1, ...schedule.courses.map((item) => item.endPeriod), schedule.periodTimes.length),
+      )
+      return clone({ workspace: state.workspace, periodTimes: schedule.periodTimes })
     },
     async clearSchedule() {
       state.workspace.schedule = null
