@@ -1,5 +1,14 @@
 const path = require('node:path')
-const { app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, shell } = require('electron')
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  Tray,
+  nativeImage,
+  nativeTheme,
+  safeStorage,
+  shell,
+} = require('electron')
 const { APP_ID, APP_NAME } = require('./constants.cjs')
 const { SettingsStore } = require('./settings-store.cjs')
 const { WorkspaceStore } = require('./workspace-store.cjs')
@@ -9,6 +18,7 @@ const { Logger } = require('./logger.cjs')
 const { DshManager } = require('./dsh-manager.cjs')
 const { LauncherUpdater } = require('./launcher-updater.cjs')
 const { SkillsManager } = require('./skills-manager.cjs')
+const { BackupManager } = require('./backup-manager.cjs')
 const { KnowledgeManager } = require('./knowledge-manager.cjs')
 const { ReminderManager } = require('./reminder-manager.cjs')
 const { registerIpc } = require('./ipc.cjs')
@@ -43,6 +53,7 @@ let logger
 let dshManager
 let launcherUpdater
 let skillsManager
+let backupManager
 let knowledgeManager
 let reminderManager
 
@@ -182,7 +193,21 @@ async function bootstrap() {
   nativeTheme.themeSource = settings.get().theme || 'system'
   logger = new Logger(userData)
   dshManager = new DshManager({ app, settings, logger })
-  skillsManager = new SkillsManager({ dshHome: settings.get().dshHome })
+  const skillRegistryFile = path.join(userData, 'skill-registry.json')
+  skillsManager = new SkillsManager({
+    dshHome: settings.get().dshHome,
+    registryFile: skillRegistryFile,
+    backupRoot: path.join(userData, 'skill-backups'),
+  })
+  backupManager = new BackupManager({
+    userDataDir: userData,
+    appVersion: app.getVersion(),
+    settings,
+    workspace,
+    safeStorage,
+    logger,
+    skillRegistryFile,
+  })
   knowledgeManager = new KnowledgeManager({ app, workspace, dshManager, logger })
   reminderManager = new ReminderManager({
     settings,
@@ -214,6 +239,7 @@ async function bootstrap() {
     dshManager,
     launcherUpdater,
     skillsManager,
+    backupManager,
     knowledgeManager,
     reminderManager,
     getMainWindow: () => mainWindow,
@@ -221,6 +247,7 @@ async function bootstrap() {
   createMainWindow()
   createTray()
   reminderManager.start()
+  backupManager.startAuto()
 
   mainWindow.webContents.once('did-finish-load', () => {
     if (!settings.get().autoCheckLauncher) return
@@ -255,6 +282,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', async (event) => {
   quitting = true
+  backupManager?.stopAuto()
   if (dshManager) {
     event.preventDefault()
     try {

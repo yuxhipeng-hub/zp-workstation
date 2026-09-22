@@ -3,6 +3,7 @@ const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = require('electron')
 const { CHANNELS, DOCS_URL, RELEASE_URL, THEME_VALUES } = require('./constants.cjs')
+const { resolveDropReferences } = require('./drop-reference.cjs')
 
 function isSafeExternalUrl(value) {
   try {
@@ -32,6 +33,7 @@ function registerIpc({
   dshManager,
   launcherUpdater,
   skillsManager,
+  backupManager,
   knowledgeManager,
   reminderManager,
   getMainWindow,
@@ -88,6 +90,14 @@ function registerIpc({
   )
   ipcMain.handle('dsh:model-config', () => dshManager.getModelConfig())
   ipcMain.handle('skills:list', (_event, options = {}) => skillsManager.list(options))
+  ipcMain.handle('skills:search', (_event, query) => skillsManager.searchGithub(query))
+  ipcMain.handle('skills:install', (_event, spec) => skillsManager.installFromGithub(spec))
+  ipcMain.handle('skills:set-enabled', (_event, id, enabled) =>
+    skillsManager.setEnabled(id, enabled),
+  )
+  ipcMain.handle('skills:check-updates', () => skillsManager.checkUpdates())
+  ipcMain.handle('skills:update', (_event, id) => skillsManager.updateFromGithub(id))
+  ipcMain.handle('skills:uninstall', (_event, id) => skillsManager.uninstall(id))
   ipcMain.handle('skills:open-directory', async (_event, id) => {
     const directory = await skillsManager.getDirectory(id)
     const error = await shell.openPath(directory)
@@ -121,6 +131,35 @@ function registerIpc({
   ipcMain.handle('workspace:backup-restore', (_event, fileName) =>
     workspace.restoreBackup(fileName),
   )
+  ipcMain.handle('backup:archives', () => backupManager.listArchives())
+  ipcMain.handle('backup:create', (_event, options = {}) => backupManager.createArchive(options))
+  ipcMain.handle('backup:restore', (_event, fileName, password) =>
+    backupManager.restoreArchive(fileName, password),
+  )
+  ipcMain.handle('backup:status', () => backupManager.status())
+  ipcMain.handle('backup:sync-config', (_event, payload = {}) => {
+    const webdavPassword = Object.hasOwn(payload, 'webdavPassword')
+      ? payload.webdavPassword
+      : Object.hasOwn(payload, 'password')
+        ? payload.password
+        : undefined
+    if (webdavPassword !== undefined) {
+      backupManager.setSecret('webdavPassword', webdavPassword || '')
+    }
+    if (Object.hasOwn(payload, 'syncPassword')) {
+      const syncPassword = String(payload.syncPassword || '')
+      if (syncPassword && syncPassword.length < 8) {
+        throw new Error('同步密码至少需要 8 位。')
+      }
+      backupManager.setSecret('syncPassword', syncPassword)
+    }
+    const status = backupManager.patchConfig(payload.config || {})
+    send('settings:changed', settings.get())
+    return status
+  })
+  ipcMain.handle('backup:sync-test', () => backupManager.testSyncTarget())
+  ipcMain.handle('backup:sync-upload', () => backupManager.uploadLatest())
+  ipcMain.handle('backup:sync-download', () => backupManager.downloadLatest())
   ipcMain.handle('workspace:health-check', () => workspace.healthCheck())
   ipcMain.handle('workspace:reminders', () => ({
     enabled: settings.get().notificationsEnabled !== false,
@@ -188,6 +227,7 @@ function registerIpc({
     await fsp.writeFile(filePath, buffer)
     return { path: filePath, name: safeName, size: buffer.length }
   })
+  ipcMain.handle('file:resolve-drop-references', (_event, values) => resolveDropReferences(values))
 
   ipcMain.handle('settings:get', () => settings.get())
   ipcMain.handle('settings:patch', (_event, patch) => {
@@ -333,6 +373,35 @@ function registerIpc({
     return { ...exported, workspace: undefined }
   })
 
+  ipcMain.handle('dialog:export-backup', async (_event, options = {}) => {
+    const result = await dialog.showSaveDialog(getMainWindow(), {
+      title: '导出完整工作站备份',
+      defaultPath: `ZP-Workbench-${new Date().toISOString().slice(0, 10)}.zpbackup`,
+      filters: [{ name: 'ZP Workbench 备份', extensions: ['zpbackup'] }],
+    })
+    if (result.canceled || !result.filePath) return null
+    return backupManager.exportArchive(result.filePath, options)
+  })
+
+  ipcMain.handle('dialog:import-backup', async (_event, password = '') => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      title: '导入完整工作站备份',
+      properties: ['openFile'],
+      filters: [{ name: 'ZP Workbench 备份', extensions: ['zpbackup'] }],
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    return backupManager.restoreArchiveSource(result.filePaths[0], password)
+  })
+
+  ipcMain.handle('dialog:choose-sync-dir', async () => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      title: '选择同步文件夹',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: settings.get().syncLocalDir || undefined,
+    })
+    return result.canceled ? null : result.filePaths[0] || null
+  })
+
   ipcMain.handle('dialog:import-snapshot', async () => {
     const result = await dialog.showOpenDialog(getMainWindow(), {
       title: '导入工作站快照',
@@ -413,9 +482,11 @@ function registerIpc({
       logs: dshManager.paths().logsDir,
       experiments: settings.get().experimentDir,
       userData: app.getPath('userData'),
+      backups: backupManager.backupRoot,
     }
     const resolved = allowed[target]
     if (!resolved) throw new Error('不允许打开该路径。')
+    await fsp.mkdir(resolved, { recursive: true })
     const error = await shell.openPath(resolved)
     if (error) throw new Error(error)
     return true

@@ -751,6 +751,16 @@ class WorkspaceStore {
     return this.get()
   }
 
+  importWorkspaceData(source) {
+    if (!source || typeof source !== 'object' || !Array.isArray(source.assignments)) {
+      throw new Error('备份中的工作站数据无效。')
+    }
+    this.autoBackup()
+    this.data = this.normalizeData(source)
+    this.save()
+    return this.get()
+  }
+
   healthCheck() {
     const missing = []
     for (const item of this.data.experiments) {
