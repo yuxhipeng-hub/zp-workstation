@@ -4,6 +4,8 @@ release/
 app-extracted/
 vendor/
 coverage/
+test-results/
+playwright-report/
 .vite/
 .env
 .env.*

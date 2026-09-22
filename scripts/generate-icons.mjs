@@ -14,10 +14,7 @@ const pngPaths = []
 
 for (const size of sizes) {
   const target = resolve(buildDir, `icon-${size}.png`)
-  await sharp(source, { density: 384 })
-    .resize(size, size, { fit: 'contain' })
-    .png()
-    .toFile(target)
+  await sharp(source, { density: 384 }).resize(size, size, { fit: 'contain' }).png().toFile(target)
   pngPaths.push(target)
 }
 

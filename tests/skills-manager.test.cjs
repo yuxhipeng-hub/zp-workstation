@@ -3,10 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const {
-  SkillsManager,
-  parseSkillDocument,
-} = require('../src/main/skills-manager.cjs')
+const { SkillsManager, parseSkillDocument } = require('../src/main/skills-manager.cjs')
 
 test('parses DSH skill metadata and invocation flags', () => {
   const parsed = parseSkillDocument(`---

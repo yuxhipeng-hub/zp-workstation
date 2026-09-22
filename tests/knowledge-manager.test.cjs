@@ -39,10 +39,7 @@ test('normalizes aliases and rejects incomplete generated points', () => {
   assert.equal(normalizeKnowledgeType('易错点'), 'pitfall')
   assert.equal(normalizeKnowledgeType('formula'), 'formula')
   assert.equal(normalizeKnowledgeType('unknown'), 'concept')
-  assert.equal(
-    parseKnowledgeResponse('{"knowledgePoints":[{"title":"只有标题"}]}').length,
-    0,
-  )
+  assert.equal(parseKnowledgeResponse('{"knowledgePoints":[{"title":"只有标题"}]}').length, 0)
 })
 
 test('repairs common model JSON variants and missing array commas', () => {

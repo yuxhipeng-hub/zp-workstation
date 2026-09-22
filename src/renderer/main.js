@@ -147,7 +147,24 @@ function fileTone(fileName) {
   if (['ppt', 'pptx', 'odp'].includes(extension)) return 'slides'
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(extension)) return 'image'
   if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) return 'archive'
-  if (['js', 'ts', 'py', 'java', 'c', 'cpp', 'h', 'cs', 'go', 'rs', 'json', 'xml', 'html', 'css'].includes(extension)) {
+  if (
+    [
+      'js',
+      'ts',
+      'py',
+      'java',
+      'c',
+      'cpp',
+      'h',
+      'cs',
+      'go',
+      'rs',
+      'json',
+      'xml',
+      'html',
+      'css',
+    ].includes(extension)
+  ) {
     return 'code'
   }
   return 'generic'
@@ -265,8 +282,9 @@ function scheduleCourseVisible(course, week) {
 
 function scheduleWeekText(course) {
   if (course?.weekText) return course.weekText
-  const weeks = [...new Set((course?.weeks || []).map(Number).filter(Number.isInteger))]
-    .sort((left, right) => left - right)
+  const weeks = [...new Set((course?.weeks || []).map(Number).filter(Number.isInteger))].sort(
+    (left, right) => left - right,
+  )
   if (!weeks.length) return ''
   const ranges = []
   let start = weeks[0]
@@ -383,18 +401,13 @@ function courseOverview() {
   return (workspace.courses || [])
     .map((course) => {
       const counts = {
-        schedule: (workspace.schedule?.courses || []).filter(
-          (item) => item.courseId === course.id,
-        ).length,
-        assignments: (workspace.assignments || []).filter(
-          (item) => item.courseId === course.id,
-        ).length,
-        knowledge: (workspace.knowledge || []).filter(
-          (item) => item.courseId === course.id,
-        ).length,
-        experiments: (workspace.experiments || []).filter(
-          (item) => item.courseId === course.id,
-        ).length,
+        schedule: (workspace.schedule?.courses || []).filter((item) => item.courseId === course.id)
+          .length,
+        assignments: (workspace.assignments || []).filter((item) => item.courseId === course.id)
+          .length,
+        knowledge: (workspace.knowledge || []).filter((item) => item.courseId === course.id).length,
+        experiments: (workspace.experiments || []).filter((item) => item.courseId === course.id)
+          .length,
       }
       return {
         ...course,
@@ -701,9 +714,7 @@ function guideSteps() {
       id: 'api',
       title: '接入你自己的模型 API',
       body: '密钥由 DSH 保存在本机凭据文件里，工作站不读取也不上传。启动工作台后，打开左下角「设置 → 模型」填写。',
-      done: Boolean(
-        credentials.exists && (credentials.refs?.length || credentials.deepseekStored),
-      ),
+      done: Boolean(credentials.exists && (credentials.refs?.length || credentials.deepseekStored)),
       action: { label: '启动并配置', action: 'launch-models' },
     },
     {
@@ -973,7 +984,7 @@ function renderRukaGuide() {
               </div>
               <div class="ruka-desktop-step">
                 <span>02</span>
-                <div><strong>先打开一次</strong><p>无论使用哪种模型，都先启动 Codex，让本机生成 <code>%USERPROFILE%\.codex</code>。</p></div>
+                <div><strong>先打开一次</strong><p>无论使用哪种模型，都先启动 Codex，让本机生成 <code>%USERPROFILE%\\.codex</code>。</p></div>
               </div>
             </div>
             <div class="ruka-choice-grid">
@@ -1090,7 +1101,7 @@ codex doctor</code></div>
                 <span>准备</span>
                 <div>
                   <strong>先准备 Codex 和 DeepSeek API Key</strong>
-                  <p>先安装 Codex CLI 或桌面端，并至少运行一次，让本机生成 <code>%USERPROFILE%\.codex</code>。然后到 DeepSeek Platform 创建以 <code>sk-</code> 开头的 API Key。</p>
+                  <p>先安装 Codex CLI 或桌面端，并至少运行一次，让本机生成 <code>%USERPROFILE%\\.codex</code>。然后到 DeepSeek Platform 创建以 <code>sk-</code> 开头的 API Key。</p>
                 </div>
               </div>
               <div class="ruka-links">
@@ -1268,7 +1279,7 @@ codex</code></div>
             <p>Skill 是告诉 agent「遇到什么任务、按什么步骤做」的可复用工作流。Plugin 通常是一个更大的安装包，里面可以包含 Skill、工具、命令、配置或其他资源。</p>
             <ol class="ruka-steps">
               <li>从可信 GitHub 仓库下载 Skill，先阅读 <code>SKILL.md</code>。</li>
-              <li>把 Skill 文件夹放入 <code>%USERPROFILE%\.codex\skills</code>，或者在 Codex 中按当前版本支持的方式安装插件。</li>
+              <li>把 Skill 文件夹放入 <code>%USERPROFILE%\\.codex\\skills</code>，或者在 Codex 中按当前版本支持的方式安装插件。</li>
               <li>重启 Codex，使用 <code>$skill-name</code> 或直接描述任务来调用。</li>
               <li>在 ZP Workbench 的 <code>运行时 → Skills</code> 查看本地实际识别结果。</li>
               <li>安装前检查脚本、网络请求、环境变量和文件访问范围。要求读取密钥、上传整个目录或执行未知 PowerShell 的 Skill 默认不要运行。</li>
@@ -1315,9 +1326,7 @@ function openRukaDeepseekGuide({ behavior = 'smooth' } = {}) {
     const body = document.querySelector('#rukaDeepseekCodex')
     if (!body) return
     body.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? 'auto'
-        : behavior,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : behavior,
       block: 'start',
     })
   })
@@ -1692,16 +1701,15 @@ function syncLauncherUpdateBanner() {
   const progress = state.launcherUpdateProgress
   const visible = Boolean(
     update?.supported &&
-      update.updateAvailable &&
-      update.latestVersion &&
-      update.latestVersion !== state.launcherUpdateDismissedVersion,
+    update.updateAvailable &&
+    update.latestVersion &&
+    update.latestVersion !== state.launcherUpdateDismissedVersion,
   )
   banner.classList.toggle('hidden', !visible)
   if (!visible) return
 
   const downloading = Boolean(
-    update.downloading ||
-      ['starting', 'downloading', 'retrying'].includes(progress?.phase),
+    update.downloading || ['starting', 'downloading', 'retrying'].includes(progress?.phase),
   )
   const opening = progress?.phase === 'opening'
   const title = opening
@@ -1754,8 +1762,7 @@ function syncLauncherUpdateAbout() {
   const downloadButton = document.querySelector('#launcherAboutDownloadButton')
   const downloadLabel = document.querySelector('#launcherAboutDownloadLabel')
   const downloading = Boolean(
-    launcher?.downloading ||
-      ['starting', 'downloading', 'retrying'].includes(progress?.phase),
+    launcher?.downloading || ['starting', 'downloading', 'retrying'].includes(progress?.phase),
   )
   const opening = progress?.phase === 'opening'
 
@@ -1771,7 +1778,8 @@ function syncLauncherUpdateAbout() {
       : launcher?.message || ''
   }
   if (downloadButton) {
-    downloadButton.disabled = !launcher?.updateAvailable || !launcher?.asset || downloading || opening
+    downloadButton.disabled =
+      !launcher?.updateAvailable || !launcher?.asset || downloading || opening
   }
   if (downloadLabel) {
     downloadLabel.textContent = opening
@@ -1788,9 +1796,7 @@ function render(options = {}) {
   const view = document.querySelector('#view')
   const samePage = view.dataset.page === state.page
   const settingsDraft =
-    !options.ignoreSettingsDraft &&
-    state.page === 'settings' &&
-    view.dataset.page === 'settings'
+    !options.ignoreSettingsDraft && state.page === 'settings' && view.dataset.page === 'settings'
       ? collectSettings()
       : null
   view.classList.toggle('is-settled', samePage)
@@ -1860,7 +1866,8 @@ function render(options = {}) {
 
 function renderOverview() {
   const status = state.status
-  if (!status) return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取本地状态</span></div>'
+  if (!status)
+    return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取本地状态</span></div>'
   const version = versionState(status)
   const processTone = status.process?.running ? 'running' : 'stopped'
   const installed = status.installedVersion || '未安装'
@@ -2459,8 +2466,10 @@ function renderAssignments() {
               ${assignments
                 .map((assignment) => {
                   const due = dueDateMeta(assignment.dueAt)
-                  const priority = assignmentPriorityMeta[assignment.priority] || assignmentPriorityMeta.medium
-                  const status = assignmentStatusMeta[assignment.status] || assignmentStatusMeta.inbox
+                  const priority =
+                    assignmentPriorityMeta[assignment.priority] || assignmentPriorityMeta.medium
+                  const status =
+                    assignmentStatusMeta[assignment.status] || assignmentStatusMeta.inbox
                   return `
                     <article class="assignment-card status-${escapeHtml(assignment.status)} ${state.highlightAssignmentId === assignment.id ? 'highlight' : ''}" data-assignment-id="${escapeHtml(assignment.id)}">
                       <button class="assignment-state" type="button" data-action="cycle-assignment" data-id="${escapeHtml(assignment.id)}" title="切换到${assignmentStatusMeta[status.next].label}">
@@ -2501,7 +2510,11 @@ function renderAssignments() {
 }
 
 function fileNameFromPath(value) {
-  return String(value || '').split(/[\\/]/).pop() || ''
+  return (
+    String(value || '')
+      .split(/[\\/]/)
+      .pop() || ''
+  )
 }
 
 function experimentGroups(experiments) {
@@ -2710,9 +2723,8 @@ function knowledgeGroups(cards) {
   return [...groups.entries()]
     .map(([name, items]) => {
       const masteryTotal = items.reduce((sum, item) => sum + (Number(item.mastery) || 0), 0)
-      const sourceCount = new Set(
-        items.map((item) => item.source?.experimentId).filter(Boolean),
-      ).size
+      const sourceCount = new Set(items.map((item) => item.source?.experimentId).filter(Boolean))
+        .size
       return {
         name,
         items: items.sort((left, right) =>
@@ -2896,7 +2908,8 @@ function renderActivityTable(entries) {
 
 function renderUpdates() {
   const status = state.status
-  if (!status) return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在检查版本</span></div>'
+  if (!status)
+    return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在检查版本</span></div>'
   const version = versionState(status)
   const channels = Object.values(state.channels)
   return `
@@ -3305,7 +3318,10 @@ function renderLogs() {
       </div>
       <pre class="log-console" id="logConsole">${escapeHtml(
         state.logs
-          .map((entry) => `${entry.at} [${entry.level.toUpperCase()}] [${entry.scope}] ${entry.message}`)
+          .map(
+            (entry) =>
+              `${entry.at} [${entry.level.toUpperCase()}] [${entry.scope}] ${entry.message}`,
+          )
           .join('\n'),
       )}</pre>
     </section>
@@ -3564,8 +3580,7 @@ function renderAbout() {
   const progress = state.launcherUpdateProgress
   const progressView = launcherProgressView(progress)
   const downloading = Boolean(
-    launcher?.downloading ||
-      ['starting', 'downloading', 'retrying'].includes(progress?.phase),
+    launcher?.downloading || ['starting', 'downloading', 'retrying'].includes(progress?.phase),
   )
   const opening = progress?.phase === 'opening'
   const downloadLabel = opening
@@ -3821,19 +3836,6 @@ function applyWorkspace(workspace) {
   state.workspace = workspace
 }
 
-async function loadWorkspace() {
-  applyWorkspace(await guard(() => api.getWorkspace(), '读取学习工作区失败'))
-  if (
-    state.page === 'today' ||
-    state.page === 'overview' ||
-    state.page === 'assignments' ||
-    state.page === 'knowledge' ||
-    state.page === 'guide'
-  ) {
-    render()
-  }
-}
-
 async function loadMaintenanceData({ refresh = false } = {}) {
   if (refresh || !state.backups) {
     try {
@@ -3901,9 +3903,7 @@ function scrollToHighlightedScheduleCourse() {
   if (!state.highlightScheduleCourseId) return
   requestAnimationFrame(() => {
     document
-      .querySelector(
-        `[data-schedule-course-id="${CSS.escape(state.highlightScheduleCourseId)}"]`,
-      )
+      .querySelector(`[data-schedule-course-id="${CSS.escape(state.highlightScheduleCourseId)}"]`)
       ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   })
 }
@@ -4153,7 +4153,10 @@ async function handleAction(action, element) {
     case 'copy-assignment-prompt': {
       const assignment = state.workspace?.assignments.find((item) => item.id === element.dataset.id)
       if (!assignment) return
-      await copyPromptAndLaunch(assignmentPrompt(assignment), `已准备“${assignment.title}”的处理提示词`)
+      await copyPromptAndLaunch(
+        assignmentPrompt(assignment),
+        `已准备“${assignment.title}”的处理提示词`,
+      )
       break
     }
     case 'copy-focus-prompt': {
@@ -4183,11 +4186,7 @@ async function handleAction(action, element) {
       try {
         const result = await api.generateKnowledge(experimentId)
         applyWorkspace(result.workspace)
-        toast(
-          `已从 ${result.source.fileName} 生成 ${result.generated} 个知识点。`,
-          'success',
-          6000,
-        )
+        toast(`已从 ${result.source.fileName} 生成 ${result.generated} 个知识点。`, 'success', 6000)
       } catch (error) {
         toast(`生成知识点失败：${error.message}`, 'error', 9000)
       } finally {
@@ -4197,10 +4196,7 @@ async function handleAction(action, element) {
       break
     }
     case 'open-knowledge-source':
-      await guard(
-        () => api.openExperimentFile(element.dataset.id),
-        '打开来源文件失败',
-      )
+      await guard(() => api.openExperimentFile(element.dataset.id), '打开来源文件失败')
       break
     case 'review-knowledge': {
       const workspace = await guard(
@@ -4415,21 +4411,13 @@ async function handleAction(action, element) {
       )
       break
     case 'open-experiment-file':
-      await guard(
-        () => api.openExperimentFile(element.dataset.id),
-        '打开文件失败',
-      )
+      await guard(() => api.openExperimentFile(element.dataset.id), '打开文件失败')
       break
     case 'reveal-experiment-file':
-      await guard(
-        () => api.revealExperimentFile(element.dataset.id),
-        '定位文件失败',
-      )
+      await guard(() => api.revealExperimentFile(element.dataset.id), '定位文件失败')
       break
     case 'edit-experiment-group': {
-      const experiment = state.workspace?.experiments.find(
-        (item) => item.id === element.dataset.id,
-      )
+      const experiment = state.workspace?.experiments.find((item) => item.id === element.dataset.id)
       if (!experiment) return
       const group = window.prompt('输入新的课程分组名称：', experiment.group)
       if (!group || group.trim() === experiment.group) return
@@ -4443,9 +4431,7 @@ async function handleAction(action, element) {
       break
     }
     case 'delete-experiment': {
-      const experiment = state.workspace?.experiments.find(
-        (item) => item.id === element.dataset.id,
-      )
+      const experiment = state.workspace?.experiments.find((item) => item.id === element.dataset.id)
       if (
         !experiment ||
         !window.confirm(`从工作站移除“${experiment.title}”吗？原文件不会被删除。`)
@@ -4458,7 +4444,7 @@ async function handleAction(action, element) {
       break
     }
     case 'choose-experiment-files': {
-      const paths = await api.chooseExperimentFiles?.() || await api.chooseExperimentPdfs()
+      const paths = (await api.chooseExperimentFiles?.()) || (await api.chooseExperimentPdfs())
       if (paths?.length) await importExperimentEntries(paths)
       break
     }
@@ -4471,10 +4457,7 @@ async function handleAction(action, element) {
     case 'add-course': {
       const name = window.prompt('输入新课程名称：')
       if (!name?.trim()) break
-      const result = await guard(
-        () => api.createCourse({ name: name.trim() }),
-        '新建课程失败',
-      )
+      const result = await guard(() => api.createCourse({ name: name.trim() }), '新建课程失败')
       applyWorkspace(result.workspace)
       render()
       toast(`课程“${result.course.name}”已创建。`, 'success')
@@ -4488,10 +4471,7 @@ async function handleAction(action, element) {
         course.name,
       )
       if (!name?.trim() || name.trim() === course.name) break
-      const result = await guard(
-        () => api.renameCourse(course.id, name.trim()),
-        '重命名课程失败',
-      )
+      const result = await guard(() => api.renameCourse(course.id, name.trim()), '重命名课程失败')
       applyWorkspace(result.workspace)
       render()
       if (result.failures?.length) {
@@ -4502,9 +4482,7 @@ async function handleAction(action, element) {
         )
       } else {
         toast(
-          result.groupRenames?.length
-            ? '课程已改名，资料文件夹已同步搬迁。'
-            : '课程已改名。',
+          result.groupRenames?.length ? '课程已改名，资料文件夹已同步搬迁。' : '课程已改名。',
           'success',
         )
       }
@@ -4519,10 +4497,7 @@ async function handleAction(action, element) {
     }
     case 'restore-backup': {
       if (!window.confirm('用这个备份覆盖当前工作站数据吗？当前数据会先自动备份一份。')) break
-      const workspace = await guard(
-        () => api.restoreBackup(element.dataset.file),
-        '恢复备份失败',
-      )
+      const workspace = await guard(() => api.restoreBackup(element.dataset.file), '恢复备份失败')
       applyWorkspace(workspace)
       state.backups = await api.listBackups()
       render()
@@ -4545,10 +4520,7 @@ async function handleAction(action, element) {
       break
     }
     case 'check-workspace-health': {
-      state.workspaceHealth = await guard(
-        () => api.checkWorkspaceHealth(),
-        '校验资料文件失败',
-      )
+      state.workspaceHealth = await guard(() => api.checkWorkspaceHealth(), '校验资料文件失败')
       render()
       const missing = state.workspaceHealth?.missing?.length || 0
       toast(
@@ -4614,10 +4586,7 @@ async function handleAction(action, element) {
       await guard(() => api.openSkillsRoot(), '打开 Skills 目录失败')
       break
     case 'open-skill-directory':
-      await guard(
-        () => api.openSkillDirectory(element.dataset.id),
-        '打开 Skill 目录失败',
-      )
+      await guard(() => api.openSkillDirectory(element.dataset.id), '打开 Skill 目录失败')
       break
     case 'copy-ruka-code': {
       const code = element.closest('.ruka-code-shell')?.querySelector('.ruka-code code')
@@ -4795,10 +4764,7 @@ async function handleAction(action, element) {
       break
     case 'reset-guide':
       if (!window.confirm('重置新手教程的进度吗？已完成的配置不会被修改。')) break
-      await guard(
-        () => patchOnboarding({ completedSteps: [], completedAt: null }),
-        '重置教程失败',
-      )
+      await guard(() => patchOnboarding({ completedSteps: [], completedAt: null }), '重置教程失败')
       render()
       toast('教程进度已重置。', 'success')
       break
@@ -5086,7 +5052,7 @@ document.addEventListener('dragover', (event) => {
   event.dataTransfer.dropEffect = 'copy'
 })
 
-document.addEventListener('dragleave', (event) => {
+document.addEventListener('dragleave', () => {
   if (state.page === 'schedule') {
     scheduleDragDepth = Math.max(0, scheduleDragDepth - 1)
     if (scheduleDragDepth === 0) setScheduleDropActive(false)

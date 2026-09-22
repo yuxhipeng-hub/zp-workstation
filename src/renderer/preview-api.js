@@ -43,9 +43,9 @@ function parsePreviewWeeks(value) {
       weeks.push(Number(token))
     }
   }
-  weeks = [...new Set(weeks.filter((week) => Number.isInteger(week) && week >= 1 && week <= 30))].sort(
-    (left, right) => left - right,
-  )
+  weeks = [
+    ...new Set(weeks.filter((week) => Number.isInteger(week) && week >= 1 && week <= 30)),
+  ].sort((left, right) => left - right)
   if (/单周|周\s*[（(]?\s*单/i.test(source)) {
     weeks = weeks.filter((week) => week % 2 === 1)
   }
@@ -99,9 +99,7 @@ function normalizePreviewCourse(input = {}, existing = {}) {
   }
   const normalizedWeeks = [
     ...new Set(
-      weeks
-        .map(Number)
-        .filter((week) => Number.isInteger(week) && week >= 1 && week <= 30),
+      weeks.map(Number).filter((week) => Number.isInteger(week) && week >= 1 && week <= 30),
     ),
   ].sort((left, right) => left - right)
   return {
@@ -110,13 +108,21 @@ function normalizePreviewCourse(input = {}, existing = {}) {
       globalThis.crypto?.randomUUID?.() ||
       `preview-course-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     name: name.slice(0, 100),
-    teacher: String(merged.teacher || '').trim().slice(0, 40),
-    location: String(merged.location || '').trim().slice(0, 80),
+    teacher: String(merged.teacher || '')
+      .trim()
+      .slice(0, 40),
+    location: String(merged.location || '')
+      .trim()
+      .slice(0, 80),
     weekday,
     startPeriod,
     endPeriod: Math.min(endPeriod, 20),
-    startTime: String(merged.startTime || '').trim().slice(0, 8),
-    endTime: String(merged.endTime || '').trim().slice(0, 8),
+    startTime: String(merged.startTime || '')
+      .trim()
+      .slice(0, 8),
+    endTime: String(merged.endTime || '')
+      .trim()
+      .slice(0, 8),
     weeks: normalizedWeeks,
     weekText: String(merged.weekText || previewWeekText(normalizedWeeks))
       .trim()
@@ -147,7 +153,9 @@ function linkPreviewCourses(state) {
     if (key && !byKey.has(key)) byKey.set(key, course)
   }
   const ensure = (rawName) => {
-    const name = String(rawName || '').trim().slice(0, 100)
+    const name = String(rawName || '')
+      .trim()
+      .slice(0, 100)
     if (previewUnclassified(name)) return null
     const key = previewCourseKey(name)
     let course = byKey.get(key)
@@ -287,8 +295,7 @@ function createPreviewState() {
   const dshHome = 'C:\\Users\\小zp\\.dsh'
   const previewParams = new URLSearchParams(window.location.search)
   const requestedTheme = previewParams.get('theme')
-  const previewWelcomeSeen =
-    previewParams.get('welcome') === 'seen' || readPreviewWelcomeSeen()
+  const previewWelcomeSeen = previewParams.get('welcome') === 'seen' || readPreviewWelcomeSeen()
   const theme = ['system', 'dark', 'light'].includes(requestedTheme) ? requestedTheme : 'dark'
   return {
     settings: {
@@ -928,7 +935,8 @@ export function createPreviewLauncherApi() {
   const state = createPreviewState()
   linkPreviewCourses(state)
   const createId = () =>
-    globalThis.crypto?.randomUUID?.() || `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    globalThis.crypto?.randomUUID?.() ||
+    `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
   return {
     on: subscribe,
@@ -1269,9 +1277,7 @@ export function createPreviewLauncherApi() {
       }))
       state.workspace.knowledge = [
         ...generated,
-        ...state.workspace.knowledge.filter(
-          (item) => item.source?.experimentId !== experimentId,
-        ),
+        ...state.workspace.knowledge.filter((item) => item.source?.experimentId !== experimentId),
       ]
       return {
         workspace: clone(state.workspace),
@@ -1295,7 +1301,8 @@ export function createPreviewLauncherApi() {
             : rating === 'known'
               ? Math.min(5, currentStage + 2)
               : Math.min(5, currentStage + 1)
-        const mastery = rating === 'forgot' ? 0 : rating === 'known' ? 3 : Math.max(1, item.mastery || 0)
+        const mastery =
+          rating === 'forgot' ? 0 : rating === 'known' ? 3 : Math.max(1, item.mastery || 0)
         return {
           ...item,
           mastery,
@@ -1430,7 +1437,10 @@ export function createPreviewLauncherApi() {
       return 'C:\\Users\\小zp\\Downloads\\2026秋季学期课表.xlsx'
     },
     async importSchedule(filePath) {
-      const name = String(filePath || '').split(/[\\/]/).pop() || '课表.xlsx'
+      const name =
+        String(filePath || '')
+          .split(/[\\/]/)
+          .pop() || '课表.xlsx'
       state.workspace.schedule.source = {
         ...state.workspace.schedule.source,
         name,

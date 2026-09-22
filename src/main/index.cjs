@@ -146,8 +146,10 @@ function createTray() {
         click: async () => {
           try {
             const processState = await dshManager.startWeb()
-            if (processState.url && settings.get().openMode === 'embedded') openWorkbench(processState.url)
-            if (processState.url && settings.get().openMode === 'browser') shell.openExternal(processState.url)
+            if (processState.url && settings.get().openMode === 'embedded')
+              openWorkbench(processState.url)
+            if (processState.url && settings.get().openMode === 'browser')
+              shell.openExternal(processState.url)
           } catch (error) {
             logger.error('launch', error.message)
             createMainWindow()
@@ -223,15 +225,15 @@ async function bootstrap() {
   mainWindow.webContents.once('did-finish-load', () => {
     if (!settings.get().autoCheckLauncher) return
     setTimeout(() => {
-      launcherUpdater
-        .check()
-        .catch((error) => logger.warn('launcher-update', error.message))
+      launcherUpdater.check().catch((error) => logger.warn('launcher-update', error.message))
     }, 1000)
   })
 
   if (settings.get().autoCheckDsh) {
     setTimeout(() => {
-      dshManager.checkForUpdate({ silent: true }).catch((error) => logger.warn('update', error.message))
+      dshManager
+        .checkForUpdate({ silent: true })
+        .catch((error) => logger.warn('update', error.message))
     }, 1200)
   }
 }

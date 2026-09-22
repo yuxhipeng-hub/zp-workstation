@@ -1,10 +1,6 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
-const {
-  ReminderManager,
-  isoWeekday,
-  termWeekNumber,
-} = require('../src/main/reminder-manager.cjs')
+const { ReminderManager, isoWeekday, termWeekNumber } = require('../src/main/reminder-manager.cjs')
 
 function createManager({ settings = {}, workspace = {} } = {}) {
   const settingsData = {
@@ -106,20 +102,35 @@ test('fires class, assignment, and review reminders once per period', () => {
         ],
       },
       assignments: [
-        { id: 'task-1', title: '实验报告', course: '大学物理', dueAt: '2026-09-21', status: 'inbox' },
+        {
+          id: 'task-1',
+          title: '实验报告',
+          course: '大学物理',
+          dueAt: '2026-09-21',
+          status: 'inbox',
+        },
       ],
       knowledge: [{ id: 'card-1', title: '矩阵的秩', dueAt: '2026-09-20T10:00:00.000Z' }],
     },
   })
   const beforeClass = new Date(2026, 8, 21, 7, 50, 0)
   const classFired = manager.tick(beforeClass)
-  assert.equal(classFired.some((key) => key.startsWith('class:')), true)
+  assert.equal(
+    classFired.some((key) => key.startsWith('class:')),
+    true,
+  )
   assert.equal(classFired.includes('review:2026-09-21'), false)
 
   const morning = new Date(2026, 8, 21, 8, 5, 0)
   const assignmentFired = manager.tick(morning)
-  assert.equal(assignmentFired.some((key) => key.startsWith('assignment:')), true)
-  assert.equal(assignmentFired.some((key) => key.startsWith('class:')), false)
+  assert.equal(
+    assignmentFired.some((key) => key.startsWith('assignment:')),
+    true,
+  )
+  assert.equal(
+    assignmentFired.some((key) => key.startsWith('class:')),
+    false,
+  )
 
   const evening = new Date(2026, 8, 21, 19, 30, 0)
   const eveningFired = manager.tick(evening)
@@ -133,9 +144,7 @@ test('skips every reminder when notifications are disabled', () => {
   const manager = createManager({
     settings: { notificationsEnabled: false },
     workspace: {
-      assignments: [
-        { id: 'task-1', title: '逾期作业', dueAt: '2026-09-20', status: 'inbox' },
-      ],
+      assignments: [{ id: 'task-1', title: '逾期作业', dueAt: '2026-09-20', status: 'inbox' }],
     },
   })
   assert.deepEqual(manager.tick(new Date(2026, 8, 21, 10, 0, 0)), [])

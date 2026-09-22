@@ -249,14 +249,12 @@ async function extractDocumentText(filePath, { maxChars = MAX_EXTRACTED_CHARS } 
 
   const limited = truncatePages(pages, maxChars)
   const text = limited.pages
-    .map((page) =>
-      page.page
-        ? `[PAGE ${page.page}]\n${page.text}`
-        : page.text,
-    )
+    .map((page) => (page.page ? `[PAGE ${page.page}]\n${page.text}` : page.text))
     .join('\n\n')
   if (text.replace(/\[PAGE \d+\]/g, '').trim().length < 20) {
-    throw new Error('没有提取到足够的文字。扫描版文件需要先做 OCR，图片型资料暂不能直接生成知识点。')
+    throw new Error(
+      '没有提取到足够的文字。扫描版文件需要先做 OCR，图片型资料暂不能直接生成知识点。',
+    )
   }
   return {
     filePath: resolved,

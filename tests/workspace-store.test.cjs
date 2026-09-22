@@ -227,5 +227,8 @@ test('exports and imports a portable snapshot', (t) => {
   const imported = other.importSnapshot(target)
   assert.equal(imported.assignments.length, 1)
   assert.equal(imported.assignments[0].title, '快照作业')
-  assert.equal(imported.courses.some((item) => item.name === '数据结构'), true)
+  assert.equal(
+    imported.courses.some((item) => item.name === '数据结构'),
+    true,
+  )
 })

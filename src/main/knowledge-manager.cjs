@@ -22,7 +22,9 @@ const KNOWLEDGE_TYPE_ALIASES = new Map([
 ])
 
 function cleanText(value, maxLength) {
-  return String(value ?? '').trim().slice(0, maxLength)
+  return String(value ?? '')
+    .trim()
+    .slice(0, maxLength)
 }
 
 function normalizeKnowledgeType(value) {
@@ -45,7 +47,10 @@ function normalizeKnowledgePoints(points) {
       const pageStart = Number(point?.pageStart)
       const pageEnd = Number(point?.pageEnd)
       const tags = Array.isArray(point?.tags)
-        ? point.tags.map((tag) => cleanText(tag, 24)).filter(Boolean).slice(0, 12)
+        ? point.tags
+            .map((tag) => cleanText(tag, 24))
+            .filter(Boolean)
+            .slice(0, 12)
         : []
       return {
         title,
@@ -54,9 +59,7 @@ function normalizeKnowledgePoints(points) {
         tags,
         pageStart: Number.isInteger(pageStart) && pageStart > 0 ? pageStart : null,
         pageEnd:
-          Number.isInteger(pageEnd) && pageEnd > 0
-            ? Math.max(pageStart || pageEnd, pageEnd)
-            : null,
+          Number.isInteger(pageEnd) && pageEnd > 0 ? Math.max(pageStart || pageEnd, pageEnd) : null,
         excerpt: cleanText(point?.excerpt || point?.sourceQuote, 1000),
       }
     })
@@ -121,7 +124,10 @@ function repairJsonSyntax(value) {
         escaped = true
         continue
       }
-      if ((stringOpener === '"' && character === '"') || (stringOpener === '“' && character === '”')) {
+      if (
+        (stringOpener === '"' && character === '"') ||
+        (stringOpener === '“' && character === '”')
+      ) {
         output += '"'
         inString = false
         continue
@@ -200,12 +206,8 @@ function parseKnowledgeResponse(value) {
   const arrayEnd = text.lastIndexOf(']')
   const candidates = [
     text,
-    objectStart !== -1 && objectEnd > objectStart
-      ? text.slice(objectStart, objectEnd + 1)
-      : '',
-    arrayStart !== -1 && arrayEnd > arrayStart
-      ? text.slice(arrayStart, arrayEnd + 1)
-      : '',
+    objectStart !== -1 && objectEnd > objectStart ? text.slice(objectStart, objectEnd + 1) : '',
+    arrayStart !== -1 && arrayEnd > arrayStart ? text.slice(arrayStart, arrayEnd + 1) : '',
     knowledgeArrayCandidate(text),
     ...text
       .split(/\r?\n/)
@@ -232,9 +234,7 @@ function parseKnowledgeResponse(value) {
   const loosePoints = extractLooseKnowledgeObjects(text)
   if (loosePoints.length) return normalizeKnowledgePoints(loosePoints)
 
-  throw new Error(
-    `DSH 返回的知识点格式无法解析：${lastError?.message || '没有找到有效 JSON 对象'}`,
-  )
+  throw new Error(`DSH 返回的知识点格式无法解析：${lastError?.message || '没有找到有效 JSON 对象'}`)
 }
 
 function buildKnowledgePrompt(experiment, extraction, inputFileName) {
@@ -273,11 +273,7 @@ class KnowledgeManager {
   async generateFromExperiment(experimentId) {
     const experiment = this.workspace.getExperiment(experimentId)
     const extraction = await extractDocumentText(experiment.filePath)
-    const jobDirectory = path.join(
-      this.app.getPath('temp'),
-      'zp-workbench-knowledge',
-      randomUUID(),
-    )
+    const jobDirectory = path.join(this.app.getPath('temp'), 'zp-workbench-knowledge', randomUUID())
     const inputFileName = 'source.txt'
     const inputFilePath = path.join(jobDirectory, inputFileName)
     await fsp.mkdir(jobDirectory, { recursive: true })

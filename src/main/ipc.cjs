@@ -118,7 +118,9 @@ function registerIpc({
   })
   ipcMain.handle('workspace:backup-list', () => workspace.listBackups())
   ipcMain.handle('workspace:backup-create', (_event, label) => workspace.createBackup(label))
-  ipcMain.handle('workspace:backup-restore', (_event, fileName) => workspace.restoreBackup(fileName))
+  ipcMain.handle('workspace:backup-restore', (_event, fileName) =>
+    workspace.restoreBackup(fileName),
+  )
   ipcMain.handle('workspace:health-check', () => workspace.healthCheck())
   ipcMain.handle('workspace:reminders', () => ({
     enabled: settings.get().notificationsEnabled !== false,
@@ -128,7 +130,9 @@ function registerIpc({
     reminderManager?.testNotification()
     return true
   })
-  ipcMain.handle('workspace:assignment-create', (_event, input) => workspace.createAssignment(input))
+  ipcMain.handle('workspace:assignment-create', (_event, input) =>
+    workspace.createAssignment(input),
+  )
   ipcMain.handle('workspace:assignment-update', (_event, id, patch) =>
     workspace.updateAssignment(id, patch),
   )
@@ -157,15 +161,11 @@ function registerIpc({
     experimentLibrary.removeExperiment(id),
   )
   ipcMain.handle('schedule:import', (_event, filePath) => scheduleManager.importFile(filePath))
-  ipcMain.handle('schedule:course-create', (_event, input) =>
-    scheduleManager.createCourse(input),
-  )
+  ipcMain.handle('schedule:course-create', (_event, input) => scheduleManager.createCourse(input))
   ipcMain.handle('schedule:course-update', (_event, id, patch) =>
     scheduleManager.updateCourse(id, patch),
   )
-  ipcMain.handle('schedule:course-delete', (_event, id) =>
-    scheduleManager.deleteCourse(id),
-  )
+  ipcMain.handle('schedule:course-delete', (_event, id) => scheduleManager.deleteCourse(id))
   ipcMain.handle('schedule:clear', () => scheduleManager.clear())
   ipcMain.handle('clipboard:write', (_event, value) => {
     clipboard.writeText(String(value ?? ''))
@@ -174,8 +174,7 @@ function registerIpc({
   ipcMain.handle('file:stage-drop', async (_event, payload = {}) => {
     const originalName = path.basename(String(payload.name || '').trim())
     const safeName =
-      originalName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 160) ||
-      'dropped-file'
+      originalName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 160) || 'dropped-file'
     const data = payload.data
     if (!data) throw new Error('拖入的文件没有可读取的内容。')
     const buffer = Buffer.from(data)
@@ -260,7 +259,11 @@ function registerIpc({
         welcomeSeen: Boolean(source.welcomeSeen),
         guideVersion: Number.isInteger(guideVersion) && guideVersion > 0 ? guideVersion : 1,
         completedSteps: (Array.isArray(source.completedSteps) ? source.completedSteps : [])
-          .map((step) => String(step ?? '').trim().slice(0, 40))
+          .map((step) =>
+            String(step ?? '')
+              .trim()
+              .slice(0, 40),
+          )
           .filter(Boolean)
           .slice(0, 30),
         dismissedAt: source.dismissedAt ? String(source.dismissedAt).slice(0, 40) : null,
@@ -397,7 +400,8 @@ function registerIpc({
 
   ipcMain.handle('schedule:reveal-source', async () => {
     const sourcePath = workspace.get().schedule?.source?.path
-    if (!sourcePath || !(await pathExists(sourcePath))) throw new Error('原始课表文件已不在原位置。')
+    if (!sourcePath || !(await pathExists(sourcePath)))
+      throw new Error('原始课表文件已不在原位置。')
     shell.showItemInFolder(sourcePath)
     return true
   })

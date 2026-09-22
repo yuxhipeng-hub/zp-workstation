@@ -18,18 +18,8 @@ const WORKBOOK_EXTENSIONS = new Set([
   '.html',
   '.htm',
 ])
-const DOCUMENT_EXTENSIONS = new Set([
-  '.pdf',
-  '.docx',
-  '.pptx',
-  '.rtf',
-  '.md',
-  '.markdown',
-])
-const SUPPORTED_EXTENSIONS = new Set([
-  ...WORKBOOK_EXTENSIONS,
-  ...DOCUMENT_EXTENSIONS,
-])
+const DOCUMENT_EXTENSIONS = new Set(['.pdf', '.docx', '.pptx', '.rtf', '.md', '.markdown'])
+const SUPPORTED_EXTENSIONS = new Set([...WORKBOOK_EXTENSIONS, ...DOCUMENT_EXTENSIONS])
 const MAX_COURSES = 500
 const MAX_PERIODS = 20
 const TEXT_WORKBOOK_EXTENSIONS = new Set(['.csv', '.tsv', '.txt', '.html', '.htm'])
@@ -55,7 +45,9 @@ function compactText(value) {
 }
 
 function uniqueNumbers(values, max = 30) {
-  return [...new Set(values)].filter((value) => Number.isInteger(value) && value >= 1 && value <= max).sort((a, b) => a - b)
+  return [...new Set(values)]
+    .filter((value) => Number.isInteger(value) && value >= 1 && value <= max)
+    .sort((a, b) => a - b)
 }
 
 function parseWeekday(value) {
@@ -175,9 +167,7 @@ function parseTimeRange(value) {
 
 function parsePeriodRange(value) {
   const source = String(value ?? '').normalize('NFKC')
-  const english = source.match(
-    /\bperiods?\s*(\d{1,2})(?:\s*(?:[-–—~～]|to)\s*(\d{1,2}))?/i,
-  )
+  const english = source.match(/\bperiods?\s*(\d{1,2})(?:\s*(?:[-–—~～]|to)\s*(\d{1,2}))?/i)
   if (english) {
     const startPeriod = Math.max(1, Number(english[1]))
     const endPeriod = Math.max(startPeriod, Number(english[2] || english[1]))
@@ -212,7 +202,9 @@ function extractLabeledMetadata(source, labelPattern) {
   )
   const match = String(source ?? '').match(regex)
   return match
-    ? cleanText(match[1].replace(/\r?\n/g, ''), 160).replace(/[\\/|]+$/, '').trim()
+    ? cleanText(match[1].replace(/\r?\n/g, ''), 160)
+        .replace(/[\\/|]+$/, '')
+        .trim()
     : ''
 }
 
@@ -228,9 +220,15 @@ function stripCourseMetadata(value) {
   const withoutLabeledMetadata = stripLabeledMetadata(value)
   return cleanText(
     withoutLabeledMetadata
-      .replace(/(?:第\s*)?\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?(?:\s*[,，、;；]\s*\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?)*\s*周/g, ' ')
+      .replace(
+        /(?:第\s*)?\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?(?:\s*[,，、;；]\s*\d{1,2}(?:\s*[-—–~～至]\s*\d{1,2})?)*\s*周/g,
+        ' ',
+      )
       .replace(/第?\s*\d{1,2}\s*(?:[-—–~～至]\s*\d{1,2})?\s*节/g, ' ')
-      .replace(/([01]?\d|2[0-3])\s*[:：]\s*[0-5]\d\s*[-—–~～至]\s*([01]?\d|2[0-3])\s*[:：]\s*[0-5]\d/g, ' ')
+      .replace(
+        /([01]?\d|2[0-3])\s*[:：]\s*[0-5]\d\s*[-—–~～至]\s*([01]?\d|2[0-3])\s*[:：]\s*[0-5]\d/g,
+        ' ',
+      )
       .replace(/(?:任课)?(?:教师|老师)\s*[:：]?\s*/g, ' ')
       .replace(/(?:上课)?(?:地点|教室|场地)\s*[:：]?\s*/g, ' '),
     160,
@@ -262,16 +260,6 @@ function looksLikeTeacher(value) {
   return /^[\p{Script=Han}·,，、]{2,16}$/u.test(text)
 }
 
-function inferTextPeriod(value) {
-  const period = parsePeriodRange(value)
-  const time = parseTimeRange(value)
-  return {
-    weeks: parseWeeks(value),
-    period,
-    time,
-  }
-}
-
 function parseCourseCell(value) {
   const raw = cleanText(value, 1000)
   if (!raw) return null
@@ -290,13 +278,13 @@ function parseCourseCell(value) {
   const cleanedLines = []
 
   for (const line of lines) {
-    const labeledTeacher = line.match(
-      /(?:^|[/\s])(?:任课)?(?:教师|老师)\s*[:：]\s*(.+)$/,
-    )
+    const labeledTeacher = line.match(/(?:^|[/\s])(?:任课)?(?:教师|老师)\s*[:：]\s*(.+)$/)
     if (labeledTeacher) {
       teacher ||= cleanText(labeledTeacher[1], 40)
-      const locationPrefix = cleanText(line.slice(0, labeledTeacher.index), 80)
-        .replace(/[\/\s]+$/g, '')
+      const locationPrefix = cleanText(line.slice(0, labeledTeacher.index), 80).replace(
+        /[/\s]+$/g,
+        '',
+      )
       if (
         locationPrefix &&
         !/节|周|课程|科目/.test(locationPrefix) &&
@@ -315,9 +303,7 @@ function parseCourseCell(value) {
       teacher ||= cleanText(namedTeacher[0], 40)
       continue
     }
-    const labeledLocation = line.match(
-      /(?:^|[/\s])(?:上课)?(?:地点|教室|场地)\s*[:：]\s*(.+)$/,
-    )
+    const labeledLocation = line.match(/(?:^|[/\s])(?:上课)?(?:地点|教室|场地)\s*[:：]\s*(.+)$/)
     if (labeledLocation) {
       location ||= cleanText(labeledLocation[1], 80)
       continue
@@ -452,10 +438,20 @@ function periodForRow(rows, rowIndex, headerRow, periodColumn, firstDayColumn) {
     if (parsed) return parsed
   }
   const period = rowIndex - headerRow
-  return period >= 1 && period <= MAX_PERIODS
-    ? { startPeriod: period, endPeriod: period }
-    : null
+  return period >= 1 && period <= MAX_PERIODS ? { startPeriod: period, endPeriod: period } : null
 }
+
+/**
+ * @typedef {{
+ *   key: string,
+ *   raw: string,
+ *   startRow: number,
+ *   endRow: number,
+ *   period: { startPeriod: number, endPeriod: number },
+ *   parsed?: ReturnType<typeof parseCourseCell>,
+ *   courseIndex?: number | null
+ * }} MatrixCourseGroup
+ */
 
 function parseMatrixSheet(rows) {
   const header = findMatrixHeader(rows)
@@ -465,6 +461,7 @@ function parseMatrixSheet(rows) {
   const courses = []
 
   for (const dayColumn of header.columns) {
+    /** @type {MatrixCourseGroup | null} */
     let group = null
     for (let rowIndex = header.rowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
       const raw = cleanText(rows[rowIndex]?.[dayColumn.columnIndex], 1000)
@@ -674,7 +671,8 @@ function parseRecordSheet(rows) {
     const period = parsePeriodRange(timeText)
     const time = parseTimeRange(timeText)
     const weeksText =
-      valueAt(row, header.map.weeks) || findCell(row, (cell) => /周/.test(cell) && parseWeeks(cell).length > 0)
+      valueAt(row, header.map.weeks) ||
+      findCell(row, (cell) => /周/.test(cell) && parseWeeks(cell).length > 0)
     const weeks = parseWeeks(weeksText || parsed.raw)
     const teacher = valueAt(row, header.map.teacher) || parsed.teacher
     const location = valueAt(row, header.map.location) || parsed.location
@@ -799,10 +797,7 @@ function formatWeeksCompact(weeks) {
 
 function stripWeekdayTokens(value) {
   return cleanText(
-    String(value ?? '').replace(
-      /(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/gi,
-      ' ',
-    ),
+    String(value ?? '').replace(/(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/gi, ' '),
     1000,
   )
 }
@@ -844,16 +839,12 @@ function parseTextLines(value) {
     const line = cleanText(rawLine, 1000)
     if (!line || /^\[PAGE\s+\d+\]$/i.test(line)) continue
     if (/课程名称|上课时间|节次|周次|任课教师|上课地点/.test(line)) {
-      const weekdayCount = (
-        line.match(/(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/g) || []
-      ).length
+      const weekdayCount = (line.match(/(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/g) || []).length
       if (!parsePeriodRange(line) && !parseTimeRange(line) && weekdayCount <= 1) continue
     }
 
     const directWeekday = parseWeekday(line)
-    const weekdayTokenCount = (
-      line.match(/(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/g) || []
-    ).length
+    const weekdayTokenCount = (line.match(/(?:星期|周|礼拜)\s*[一二三四五六日天1-7]/g) || []).length
     if (directWeekday && weekdayTokenCount <= 1 && compactText(line).length <= 8) {
       currentWeekday = directWeekday
       continue
@@ -881,10 +872,7 @@ function isPdfCourseMetadata(value) {
   return (
     /^(?:[（(]?\s*(?:第\s*)?\d{1,2}\s*(?:[-—–~～至]\s*\d{1,2})?\s*(?:节|周)|[（(]?\s*\d{1,2}\s*[-—–~～至]\s*\d{1,2}\s*节)/.test(
       text,
-    ) ||
-    /(?:\/场地|\/地点|\/教室|\/教师|\/老师|(?:场地|地点|教室|教师|老师)\s*[:：])/.test(
-      text,
-    )
+    ) || /(?:\/场地|\/地点|\/教室|\/教师|\/老师|(?:场地|地点|教室|教师|老师)\s*[:：])/.test(text)
   )
 }
 
@@ -965,9 +953,7 @@ function parsePdfLayout(pages) {
         const current = clusters.at(-1)
         const gap = current ? item.y - current.lastY : Number.POSITIVE_INFINITY
         const hasPeriod = current ? /节|period/i.test(current.text) : false
-        const hasContact = current
-          ? /(?:场地|地点|教室|教师|老师)/.test(current.text)
-          : false
+        const hasContact = current ? /(?:场地|地点|教室|教师|老师)/.test(current.text) : false
         const startsNew =
           !current ||
           gap > 55 ||
@@ -1052,6 +1038,7 @@ function parseIcs(content) {
   const unfolded = String(content ?? '').replace(/\r?\n[ \t]/g, '')
   const lines = unfolded.split(/\r?\n/)
   const courses = []
+  /** @type {Record<string, string> | null} */
   let event = null
 
   for (const line of lines) {
@@ -1169,9 +1156,7 @@ async function parseScheduleFileAsync(filePath) {
         rawCourses = parseWorkbook(file.resolved)
       } catch {
         if (!TEXT_WORKBOOK_EXTENSIONS.has(file.extension)) {
-          throw new Error(
-            'WPS 表格格式无法解析。请在 WPS 中另存为 Excel 工作簿（.xlsx）后重试。',
-          )
+          throw new Error('WPS 表格格式无法解析。请在 WPS 中另存为 Excel 工作簿（.xlsx）后重试。')
         }
         rawCourses = parseTextSchedule(await fs.promises.readFile(file.resolved, 'utf8'))
       }

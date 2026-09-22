@@ -11,7 +11,9 @@ function resolveNotificationClass() {
 }
 
 function cleanText(value, maxLength = 120) {
-  return String(value ?? '').trim().slice(0, maxLength)
+  return String(value ?? '')
+    .trim()
+    .slice(0, maxLength)
 }
 
 function toDateKey(value) {
@@ -31,12 +33,6 @@ function minutesOfDay(value) {
   const match = cleanText(value, 8).match(/^([01]?\d|2[0-3]):([0-5]\d)$/)
   if (!match) return null
   return Number(match[1]) * 60 + Number(match[2])
-}
-
-function dateAtMinutes(baseDate, minutes) {
-  const date = new Date(baseDate)
-  date.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
-  return date
 }
 
 function termWeekNumber(termStartDate, now) {
@@ -118,13 +114,14 @@ class ReminderManager {
       .map((item) => {
         const due = new Date(`${item.dueAt}T23:59:59`)
         const days = Math.round(
-          (new Date(`${item.dueAt}T00:00:00`).getTime() -
-            new Date(toDateKey(now)).getTime()) /
+          (new Date(`${item.dueAt}T00:00:00`).getTime() - new Date(toDateKey(now)).getTime()) /
             86400000,
         )
         return { ...item, due, days }
       })
-      .filter((item) => !Number.isNaN(item.due.getTime()) && item.due.getTime() <= horizon.getTime())
+      .filter(
+        (item) => !Number.isNaN(item.due.getTime()) && item.due.getTime() <= horizon.getTime(),
+      )
       .sort((left, right) => left.due.getTime() - right.due.getTime())
   }
 
@@ -203,7 +200,13 @@ class ReminderManager {
       ]
         .filter(Boolean)
         .join(' · ')
-      if (this.notifyOnce(key, `${delta <= 1 ? '马上上课' : `${delta} 分钟后上课`}：${course.name}`, body)) {
+      if (
+        this.notifyOnce(
+          key,
+          `${delta <= 1 ? '马上上课' : `${delta} 分钟后上课`}：${course.name}`,
+          body,
+        )
+      ) {
         fired.push(key)
       }
     }

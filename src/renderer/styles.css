@@ -1,24 +1,16 @@
 @font-face {
-  font-family: "Workstation UI";
-  src:
-    local("Microsoft YaHei UI"),
-    local("Segoe UI Variable Text"),
-    local("Segoe UI");
+  font-family: 'Workstation UI';
+  src: local('Microsoft YaHei UI'), local('Segoe UI Variable Text'), local('Segoe UI');
 }
 
 @font-face {
-  font-family: "Workstation Display";
-  src:
-    local("Microsoft YaHei UI"),
-    local("Segoe UI Variable Display"),
-    local("Segoe UI");
+  font-family: 'Workstation Display';
+  src: local('Microsoft YaHei UI'), local('Segoe UI Variable Display'), local('Segoe UI');
 }
 
 @font-face {
-  font-family: "Workstation Mono";
-  src:
-    local("Cascadia Mono"),
-    local("Consolas");
+  font-family: 'Workstation Mono';
+  src: local('Cascadia Mono'), local('Consolas');
 }
 
 :root {
@@ -66,12 +58,12 @@
   --ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.12, 0.64, 1);
   interpolate-size: allow-keywords;
-  font-family: "Workstation UI", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation UI', 'Microsoft YaHei UI', sans-serif;
   font-size: 14px;
   font-synthesis: none;
 }
 
-body[data-theme="light"] {
+body[data-theme='light'] {
   color-scheme: light;
   --bg: #f3f3f5;
   --bg-elevated: #eeeeef;
@@ -211,7 +203,11 @@ button:disabled {
   width: 100%;
   height: 100%;
   background:
-    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 0)
+    radial-gradient(
+        circle at 1px 1px,
+        color-mix(in srgb, var(--text) 6%, transparent) 1px,
+        transparent 0
+      )
       0 0 / 24px 24px,
     var(--bg);
 }
@@ -232,7 +228,7 @@ button:disabled {
   inset: 0 0 auto;
   height: 1px;
   background: var(--line);
-  content: "";
+  content: '';
   pointer-events: none;
 }
 
@@ -263,7 +259,7 @@ button:disabled {
   background-clip: text;
   background-size: 320% 100%;
   color: transparent;
-  font-family: "Segoe UI Variable Display", "Bahnschrift", "Segoe UI", sans-serif;
+  font-family: 'Segoe UI Variable Display', 'Bahnschrift', 'Segoe UI', sans-serif;
   font-size: 27px;
   font-weight: 800;
   font-synthesis: weight;
@@ -285,7 +281,7 @@ button:disabled {
 
 .brand-copy strong {
   overflow: hidden;
-  font-family: "Segoe UI Variable Display", "Bahnschrift", "Segoe UI", sans-serif;
+  font-family: 'Segoe UI Variable Display', 'Bahnschrift', 'Segoe UI', sans-serif;
   font-size: 15px;
   font-weight: 700;
   font-synthesis: weight;
@@ -297,7 +293,7 @@ button:disabled {
 .brand-copy span {
   margin-top: 6px;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.13em;
@@ -331,7 +327,7 @@ button:disabled {
 .nav-label {
   margin: 0 11px 6px;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.13em;
@@ -380,7 +376,7 @@ button:disabled {
     0 8px 22px rgb(0 0 0 / 12%);
 }
 
-body[data-theme="light"] .nav-item.active {
+body[data-theme='light'] .nav-item.active {
   box-shadow:
     0 1px 0 rgb(255 255 255 / 72%) inset,
     0 8px 20px rgb(17 21 26 / 7%);
@@ -393,7 +389,7 @@ body[data-theme="light"] .nav-item.active {
   height: 20px;
   border-radius: 0 4px 4px 0;
   background: var(--text);
-  content: "";
+  content: '';
   opacity: 0;
   transform: scaleY(0.35);
   transform-origin: 50% 50%;
@@ -471,7 +467,7 @@ body[data-theme="light"] .nav-item.active {
   inset: 4px;
   border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: inherit;
-  content: "";
+  content: '';
 }
 
 .status-beacon::before {
@@ -479,7 +475,7 @@ body[data-theme="light"] .nav-item.active {
   inset: 4px;
   border: 1px solid var(--success);
   border-radius: inherit;
-  content: "";
+  content: '';
   opacity: 0;
   pointer-events: none;
   transform: scale(0.7);
@@ -511,7 +507,7 @@ body[data-theme="light"] .nav-item.active {
 .mini-status span:not(.status-dot):not(.status-beacon) {
   margin-top: 4px;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
@@ -543,7 +539,7 @@ body[data-theme="light"] .nav-item.active {
 .rail-footnote {
   margin: 10px 3px 2px;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 7px;
   letter-spacing: 0.12em;
   text-align: center;
@@ -574,7 +570,7 @@ body[data-theme="light"] .nav-item.active {
   inset: auto 0 -1px;
   height: 1px;
   background: var(--line);
-  content: "";
+  content: '';
   pointer-events: none;
 }
 
@@ -608,7 +604,7 @@ body[data-theme="light"] .nav-item.active {
 .topbar h1 {
   margin: 3px 0 0;
   overflow: hidden;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -620,7 +616,7 @@ body[data-theme="light"] .nav-item.active {
 .eyebrow {
   margin: 0;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -692,7 +688,7 @@ body[data-theme="light"] .nav-item.active {
 .launcher-update-copy span {
   flex: none;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
@@ -813,14 +809,14 @@ body[data-theme="light"] .nav-item.active {
 .runtime-ribbon span:not(.runtime-ribbon-dot) {
   margin-top: 3px;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
 .local-time {
   min-width: 48px;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1007,7 +1003,7 @@ body[data-theme="light"] .nav-item.active {
   inset: 0 auto 0 0;
   width: 3px;
   background: var(--state);
-  content: "";
+  content: '';
 }
 
 .status-band.success {
@@ -1087,7 +1083,7 @@ body[data-theme="light"] .nav-item.active {
 .settings-group h2,
 .api-callout h2 {
   margin: 0;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.018em;
@@ -1125,7 +1121,7 @@ body[data-theme="light"] .nav-item.active {
   border-radius: 999px;
   background: color-mix(in srgb, var(--panel) 76%, transparent);
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -1274,7 +1270,7 @@ body[data-theme="light"] .nav-item.active {
 .launch-summary strong,
 .update-source strong {
   overflow: hidden;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -1321,7 +1317,7 @@ body[data-theme="light"] .nav-item.active {
 .launcher-source-item > span:first-child {
   overflow: hidden;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1349,7 +1345,7 @@ body[data-theme="light"] .nav-item.active {
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   font-weight: 700;
   white-space: nowrap;
@@ -1399,7 +1395,7 @@ body[data-theme="light"] .nav-item.active {
 
 .version-flow strong {
   overflow: hidden;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1465,7 +1461,7 @@ td {
 th {
   background: var(--panel-raised);
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1510,7 +1506,7 @@ code {
   border-radius: 4px;
   background: var(--panel-raised);
   color: var(--text);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
 }
 
@@ -1526,7 +1522,7 @@ code {
 .level {
   display: inline-block;
   min-width: 38px;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1604,7 +1600,7 @@ code {
 .focus-board h2,
 .workspace-composer h2 {
   margin: 5px 0 0;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.018em;
@@ -1654,7 +1650,7 @@ code {
 
 .focus-metrics strong {
   margin: 5px 0 3px;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.04em;
@@ -1797,7 +1793,7 @@ code {
 }
 
 .workspace-metrics strong {
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 21px;
   font-weight: 600;
 }
@@ -1877,7 +1873,7 @@ code {
   inset: 0 auto 0 0;
   width: 3px;
   background: transparent;
-  content: "";
+  content: '';
 }
 
 .assignment-card::after {
@@ -1885,7 +1881,7 @@ code {
   inset: 0;
   border: 1px solid var(--focus);
   border-radius: inherit;
-  content: "";
+  content: '';
   opacity: 0;
   pointer-events: none;
 }
@@ -1977,7 +1973,7 @@ code {
 .assignment-status-label::before {
   margin-right: 6px;
   color: var(--line-strong);
-  content: "·";
+  content: '·';
 }
 
 .assignment-main h3 {
@@ -2031,7 +2027,7 @@ code {
 }
 
 .experiment-metrics strong {
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 19px;
   font-weight: 600;
 }
@@ -2044,7 +2040,7 @@ code {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   text-align: left;
   text-overflow: ellipsis;
@@ -2127,7 +2123,7 @@ code {
 }
 
 .experiment-dropzone-copy strong {
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 15px;
   font-weight: 600;
 }
@@ -2297,7 +2293,7 @@ code {
   border-radius: 9px;
   background: var(--ink);
   color: var(--ink-inverse);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 7px;
   font-weight: 700;
 }
@@ -2334,7 +2330,7 @@ code {
   overflow: hidden;
   background: var(--panel-raised);
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 6px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -2347,7 +2343,7 @@ code {
   width: 12px;
   height: 12px;
   background: color-mix(in srgb, currentcolor 18%, var(--panel));
-  content: "";
+  content: '';
   clip-path: polygon(0 0, 100% 100%, 100% 0);
 }
 
@@ -2531,7 +2527,7 @@ code {
 
 .schedule-dropzone h2 {
   margin: 0;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 20px;
   font-weight: 600;
 }
@@ -2612,7 +2608,7 @@ code {
 
 .schedule-source-file span {
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
 }
 
@@ -2643,7 +2639,7 @@ code {
 
 .schedule-board-head h2 {
   margin: 5px 0 0;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 18px;
   font-weight: 600;
 }
@@ -2729,13 +2725,13 @@ code {
 
 .schedule-time-cell strong {
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 10px;
   font-weight: 500;
 }
 
 .schedule-time-cell span {
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
@@ -2755,7 +2751,9 @@ code {
   grid-template-rows: repeat(var(--schedule-periods), var(--schedule-row));
   grid-template-columns: repeat(var(--schedule-lanes), minmax(0, 1fr));
   gap: 4px 3px;
-  min-height: calc(var(--schedule-periods) * var(--schedule-row) + (var(--schedule-periods) - 1) * 4px);
+  min-height: calc(
+    var(--schedule-periods) * var(--schedule-row) + (var(--schedule-periods) - 1) * 4px
+  );
 }
 
 .schedule-course {
@@ -2797,7 +2795,7 @@ code {
   inset: 0;
   border: 1px solid var(--text);
   border-radius: inherit;
-  content: "";
+  content: '';
   opacity: 0;
   pointer-events: none;
   transform: scale(0.98);
@@ -2821,7 +2819,7 @@ code {
 
 .schedule-course-period {
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
@@ -2889,7 +2887,7 @@ code {
 .knowledge-toolbar > span {
   flex: none;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
 }
 
@@ -2918,7 +2916,7 @@ code {
 }
 
 .knowledge-metrics strong {
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 21px;
   font-weight: 600;
 }
@@ -3084,7 +3082,7 @@ code {
   margin-top: auto;
   padding-top: 12px;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
@@ -3197,7 +3195,7 @@ code {
 .knowledge-card-foot small {
   flex: none;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
@@ -3259,7 +3257,7 @@ code {
 
 .segmented button span {
   overflow: hidden;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3367,7 +3365,7 @@ code {
 
 .channel-item strong {
   overflow: hidden;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3547,7 +3545,7 @@ input::placeholder {
   margin-top: 10px;
   overflow: hidden;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3614,7 +3612,7 @@ input::placeholder {
 
 .plugin-copy span {
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
 }
 
@@ -3687,7 +3685,7 @@ input::placeholder {
 
 .model-status-card strong {
   overflow: hidden;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3741,7 +3739,7 @@ input::placeholder {
 .config-row span:not(.badge) {
   overflow: hidden;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3827,7 +3825,7 @@ input::placeholder {
   border-bottom: 1px solid var(--console-line);
   background: var(--console-panel);
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
 }
 
@@ -3848,7 +3846,7 @@ input::placeholder {
   padding: 18px;
   overflow: auto;
   color: var(--console-text);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 10px;
   line-height: 1.75;
   white-space: pre-wrap;
@@ -3987,7 +3985,7 @@ input::placeholder {
   border-radius: 50%;
   background: var(--text-secondary);
   box-shadow: 0 2px 5px rgb(0 0 0 / 26%);
-  content: "";
+  content: '';
   transition:
     background-color var(--motion-base) var(--ease-out),
     transform var(--motion-base) var(--ease-emphasized);
@@ -4050,7 +4048,7 @@ input::placeholder {
 .path-list small {
   overflow: hidden;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4197,7 +4195,7 @@ input::placeholder {
   box-shadow:
     0 0 0 22px color-mix(in srgb, var(--text) 2%, transparent),
     0 0 0 44px color-mix(in srgb, var(--text) 2%, transparent);
-  content: "";
+  content: '';
   pointer-events: none;
 }
 
@@ -4240,7 +4238,7 @@ input::placeholder {
 
 .about-version strong {
   color: var(--text);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
 }
 
 .legal-note {
@@ -4274,7 +4272,7 @@ input::placeholder {
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius);
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 10px;
 }
 
@@ -4325,11 +4323,11 @@ input::placeholder {
   box-shadow: var(--shadow-lg);
 }
 
-.task-strip[data-state="error"] {
+.task-strip[data-state='error'] {
   border-color: var(--danger);
 }
 
-.task-strip[data-state="success"] {
+.task-strip[data-state='success'] {
   border-color: color-mix(in srgb, var(--success) 64%, var(--line));
 }
 
@@ -4342,8 +4340,8 @@ input::placeholder {
   animation: spin 1s linear infinite;
 }
 
-.task-strip[data-state="success"] .task-spinner svg,
-.task-strip[data-state="error"] .task-spinner svg {
+.task-strip[data-state='success'] .task-spinner svg,
+.task-strip[data-state='error'] .task-spinner svg {
   animation: none;
 }
 
@@ -4363,7 +4361,7 @@ input::placeholder {
 
 .task-copy span {
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
 }
 
@@ -4469,7 +4467,9 @@ input::placeholder {
   }
   32% {
     border-color: var(--text);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 8%, transparent), var(--shadow-sm);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--text) 8%, transparent),
+      var(--shadow-sm);
   }
 }
 
@@ -4933,11 +4933,11 @@ input::placeholder {
     gap: 6px;
   }
 
-  .topbar-actions [data-action="check-update"] {
+  .topbar-actions [data-action='check-update'] {
     display: none;
   }
 
-  .topbar-actions [data-action="launch"] {
+  .topbar-actions [data-action='launch'] {
     width: var(--control-height);
     padding: 0;
   }
@@ -5036,7 +5036,7 @@ input::placeholder {
 
 .today-hero-copy h2 {
   margin: 6px 0 10px;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 30px;
   font-weight: 700;
   letter-spacing: 0;
@@ -5166,7 +5166,7 @@ input::placeholder {
 .today-timeline-time {
   min-width: 56px;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 11px;
 }
 
@@ -5422,14 +5422,14 @@ input::placeholder {
   width: 46px;
   height: 3px;
   background: var(--ink);
-  content: "";
+  content: '';
 }
 
 .welcome-eyebrow,
 .guide-hero .eyebrow {
   display: inline-block;
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -5437,7 +5437,7 @@ input::placeholder {
 
 .welcome-card h2 {
   margin: 12px 0 0;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: clamp(26px, 3vw, 36px);
   font-weight: 700;
   letter-spacing: -0.035em;
@@ -5523,7 +5523,7 @@ input::placeholder {
 
 .guide-hero h2 {
   margin: 9px 0 0;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.035em;
@@ -5547,7 +5547,7 @@ input::placeholder {
 }
 
 .guide-progress strong {
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 25px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -5595,7 +5595,7 @@ input::placeholder {
 
 .guide-section-head h3 {
   margin: 0;
-  font-family: "Workstation Display", "Microsoft YaHei UI", sans-serif;
+  font-family: 'Workstation Display', 'Microsoft YaHei UI', sans-serif;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.018em;
@@ -5731,7 +5731,7 @@ input::placeholder {
 
 .ai-system-step > span {
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
@@ -5960,7 +5960,7 @@ input::placeholder {
   place-items: center;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8.5px;
 }
 
@@ -5988,7 +5988,7 @@ input::placeholder {
 
 .ruka-choice-tag {
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8.5px;
 }
 
@@ -6144,7 +6144,7 @@ input::placeholder {
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8.5px;
 }
 
@@ -6177,7 +6177,7 @@ input::placeholder {
   border-radius: 4px;
   background: var(--panel-raised);
   color: var(--text);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9.5px;
   line-height: 1.45;
   white-space: normal;
@@ -6190,7 +6190,7 @@ input::placeholder {
 }
 
 .ai-route-how code {
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 0.96em;
 }
 
@@ -6294,7 +6294,7 @@ input::placeholder {
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   font-weight: 700;
 }
@@ -6389,7 +6389,7 @@ input::placeholder {
   color: var(--text-tertiary);
   content: counter(ruka-step);
   counter-increment: ruka-step;
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 7px;
 }
 
@@ -6401,7 +6401,7 @@ input::placeholder {
   height: 5px;
   border-radius: 50%;
   background: var(--text-tertiary);
-  content: "";
+  content: '';
 }
 
 .ruka-steps strong,
@@ -6428,7 +6428,7 @@ input::placeholder {
   border-radius: var(--radius-sm);
   background: var(--console-bg);
   color: var(--console-text);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   line-height: 1.7;
   white-space: pre;
@@ -6470,7 +6470,7 @@ input::placeholder {
 
 .ruka-source-tag {
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
   letter-spacing: 0.08em;
 }
@@ -6535,7 +6535,7 @@ input::placeholder {
   padding: 5px 8px 5px 12px;
   border-bottom: 1px solid var(--line);
   color: var(--text-tertiary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 8px;
 }
 
@@ -6627,7 +6627,7 @@ input::placeholder {
 .ruka-field-row > code {
   align-self: start;
   color: var(--text);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 9px;
   word-break: normal;
   overflow-wrap: anywhere;
@@ -6683,7 +6683,7 @@ input::placeholder {
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   color: var(--text-secondary);
-  font-family: "Workstation Mono", monospace;
+  font-family: 'Workstation Mono', monospace;
   font-size: 10px;
   font-weight: 700;
 }
@@ -6774,7 +6774,7 @@ input::placeholder {
   height: 7px;
   border-right: 1px solid currentcolor;
   border-bottom: 1px solid currentcolor;
-  content: "";
+  content: '';
   transform: translateY(-65%) rotate(45deg);
   transition: transform var(--motion-base) var(--ease-emphasized);
 }

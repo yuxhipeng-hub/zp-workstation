@@ -7,7 +7,9 @@ const {
 } = require('./schedule-parser.cjs')
 
 function cleanText(value, maxLength = 120) {
-  return String(value ?? '').trim().slice(0, maxLength)
+  return String(value ?? '')
+    .trim()
+    .slice(0, maxLength)
 }
 
 function normalizeTime(value) {
@@ -15,6 +17,10 @@ function normalizeTime(value) {
   return match ? `${match[1].padStart(2, '0')}:${match[2]}` : ''
 }
 
+/**
+ * @param {Record<string, any>} input
+ * @param {Record<string, any>} existing
+ */
 function normalizeCourse(input = {}, existing = {}) {
   const merged = { ...existing, ...input }
   const weeks = Array.isArray(input.weeks)

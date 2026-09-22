@@ -36,10 +36,7 @@ test('infers known and unknown experiment groups from Chinese PDF names', () => 
   assert.equal(inferExperimentGroup('数据结构实验报告1.pdf'), '数据结构')
   assert.equal(sanitizePathSegment('算法/实验:一'), '算法 实验 一')
   assert.equal(resolveExperimentGroup('数据结构实验报告.pdf', ['数据结构课程']), '数据结构课程')
-  assert.equal(
-    resolveExperimentGroup('算法设计与分析实验报告.pdf', ['算法设计']),
-    '算法设计',
-  )
+  assert.equal(resolveExperimentGroup('算法设计与分析实验报告.pdf', ['算法设计']), '算法设计')
 })
 
 test('copies files into inferred group folders without moving originals', async (t) => {
@@ -132,7 +129,7 @@ test('matches an existing course folder before creating a new group', async (t) 
 })
 
 test('renames a course folder and moves every tracked PDF into it', async (t) => {
-  const { directory, sourceDirectory, libraryDirectory, workspace, library } = createLibrary()
+  const { directory, sourceDirectory, libraryDirectory, library } = createLibrary()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
 
   const first = path.join(sourceDirectory, '数据结构实验报告1.pdf')
@@ -144,10 +141,15 @@ test('renames a course folder and moves every tracked PDF into it', async (t) =>
   const result = await library.renameGroup('数据结构', '数据结构课程')
   assert.equal(result.renamed, 2)
   assert.equal(result.group, '数据结构课程')
-  assert.equal(result.workspace.experiments.every((item) => item.group === '数据结构课程'), true)
   assert.equal(
-    result.workspace.experiments.every((item) =>
-      fs.existsSync(item.filePath) && item.filePath.includes(`${path.sep}数据结构课程${path.sep}`),
+    result.workspace.experiments.every((item) => item.group === '数据结构课程'),
+    true,
+  )
+  assert.equal(
+    result.workspace.experiments.every(
+      (item) =>
+        fs.existsSync(item.filePath) &&
+        item.filePath.includes(`${path.sep}数据结构课程${path.sep}`),
     ),
     true,
   )

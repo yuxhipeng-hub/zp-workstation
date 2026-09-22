@@ -5,9 +5,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const packageJson = JSON.parse(
-  fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'),
-)
+const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'))
 
 function parseArgs(argv) {
   const values = {}
@@ -22,7 +20,9 @@ function parseArgs(argv) {
 }
 
 function normalizeVersion(value) {
-  const version = String(value || '').trim().replace(/^v/, '')
+  const version = String(value || '')
+    .trim()
+    .replace(/^v/, '')
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     throw new Error(`版本号格式无效：${value}`)
   }
@@ -72,8 +72,7 @@ const releaseUrl = `https://github.com/${owner}/${repo}/releases/download/${tag}
 const urls = []
 
 for (const [index, mirrorValue] of (releaseConfig.downloadMirrors || []).entries()) {
-  const mirror =
-    typeof mirrorValue === 'string' ? { prefix: mirrorValue } : mirrorValue || {}
+  const mirror = typeof mirrorValue === 'string' ? { prefix: mirrorValue } : mirrorValue || {}
   if (!mirror.prefix) continue
   urls.push({
     id: String(mirror.id || `download-mirror-${index + 1}`),

@@ -66,9 +66,7 @@ function inferExperimentGroup(fileName) {
   )
   if (builtin) return builtin.name
 
-  const marker = baseName.search(
-    /实验报告|实验|作业|报告|lab|experiment|assignment|homework/i,
-  )
+  const marker = baseName.search(/实验报告|实验|作业|报告|lab|experiment|assignment|homework/i)
   let candidate = marker > 1 ? baseName.slice(0, marker) : baseName
   candidate = candidate
     .replace(/[（(][^()（）]+[)）]/g, ' ')
@@ -105,10 +103,8 @@ function groupMatchScore(left, right) {
   if (!normalizedLeft || !normalizedRight) return 0
   if (normalizedLeft === normalizedRight) return 1
 
-  const shorter =
-    normalizedLeft.length <= normalizedRight.length ? normalizedLeft : normalizedRight
-  const longer =
-    normalizedLeft.length > normalizedRight.length ? normalizedLeft : normalizedRight
+  const shorter = normalizedLeft.length <= normalizedRight.length ? normalizedLeft : normalizedRight
+  const longer = normalizedLeft.length > normalizedRight.length ? normalizedLeft : normalizedRight
   if (longer.includes(shorter)) {
     return 0.25 + shorter.length / longer.length
   }
@@ -253,14 +249,19 @@ class ExperimentLibrary {
       }
     }
 
-    const workspace = imported.length ? this.workspace.addExperiments(imported) : this.workspace.get()
+    const workspace = imported.length
+      ? this.workspace.addExperiments(imported)
+      : this.workspace.get()
     return { workspace, imported: imported.length, rejected, createdGroups }
   }
 
   async updateExperiment(id, patch = {}) {
     const existing = this.workspace.getExperiment(id)
     const nextGroup = patch.group ? sanitizePathSegment(patch.group) : existing.group
-    const nextTitle = String(patch.title ?? existing.title).trim().slice(0, 160) || existing.title
+    const nextTitle =
+      String(patch.title ?? existing.title)
+        .trim()
+        .slice(0, 160) || existing.title
     let filePath = existing.filePath
 
     if (nextGroup !== existing.group && fs.existsSync(existing.filePath)) {
@@ -299,7 +300,6 @@ class ExperimentLibrary {
       return { workspace: this.workspace.get(), renamed: 0, group: current }
     }
 
-    const root = this.getRoot()
     const oldDirectory = this.groupDirectory(current)
     const nextDirectory = this.groupDirectory(next)
     const items = this.workspace

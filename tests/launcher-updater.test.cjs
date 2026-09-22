@@ -103,10 +103,7 @@ test('launcher updater falls back to the GitHub API mirror', async (t) => {
   assert.equal(result.latestVersion, '0.3.1')
   assert.equal(result.sourceId, 'github-api-gh-proxy')
   assert.equal(requests.length, 2)
-  assert.match(
-    requests[1],
-    /^https:\/\/gh-proxy\.com\/https:\/\/api\.github\.com\/repos\//,
-  )
+  assert.match(requests[1], /^https:\/\/gh-proxy\.com\/https:\/\/api\.github\.com\/repos\//)
 })
 
 test('launcher updater compares all routes and selects the highest version', async (t) => {

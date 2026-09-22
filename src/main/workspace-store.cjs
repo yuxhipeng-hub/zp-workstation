@@ -30,7 +30,9 @@ const MAX_AUTO_BACKUPS = 20
 const UNCLASSIFIED_COURSE_KEYS = new Set(['未分类', '未分类实验', '未分类课程', 'uncategorized'])
 
 function cleanString(value, maxLength) {
-  return String(value ?? '').trim().slice(0, maxLength)
+  return String(value ?? '')
+    .trim()
+    .slice(0, maxLength)
 }
 
 function cleanDate(value) {
@@ -85,9 +87,7 @@ function cleanKnowledgeSource(input = {}) {
     group: cleanString(input.group, 64),
     pageStart: Number.isInteger(pageStart) && pageStart > 0 ? pageStart : null,
     pageEnd:
-      Number.isInteger(pageEnd) && pageEnd > 0
-        ? Math.max(pageStart || pageEnd, pageEnd)
-        : null,
+      Number.isInteger(pageEnd) && pageEnd > 0 ? Math.max(pageStart || pageEnd, pageEnd) : null,
     excerpt: cleanString(input.excerpt, 1000),
   }
 }
@@ -150,8 +150,7 @@ function cleanKnowledge(input, existing = {}) {
           : 0,
     dueAt: cleanString(input.dueAt || existing.dueAt, 40) || now,
     lastReviewedAt: cleanString(input.lastReviewedAt || existing.lastReviewedAt, 40),
-    generatedBy:
-      input.generatedBy || existing.generatedBy || (input.source ? 'dsh' : 'manual'),
+    generatedBy: input.generatedBy || existing.generatedBy || (input.source ? 'dsh' : 'manual'),
     createdAt: existing.createdAt || now,
     updatedAt: now,
   }
@@ -322,8 +321,7 @@ class WorkspaceStore {
           const candidateKey = courseKey(candidate.name)
           if (!candidateKey) return false
           const ratio =
-            Math.min(candidateKey.length, key.length) /
-            Math.max(candidateKey.length, key.length)
+            Math.min(candidateKey.length, key.length) / Math.max(candidateKey.length, key.length)
           return ratio >= 0.6 && (candidateKey.includes(key) || key.includes(candidateKey))
         })
       }
@@ -567,9 +565,8 @@ class WorkspaceStore {
     return (this.data.courses || []).map((course) => ({
       ...structuredClone(course),
       counts: {
-        schedule: (this.data.schedule?.courses || []).filter(
-          (item) => item.courseId === course.id,
-        ).length,
+        schedule: (this.data.schedule?.courses || []).filter((item) => item.courseId === course.id)
+          .length,
         assignments: this.data.assignments.filter((item) => item.courseId === course.id).length,
         knowledge: this.data.knowledge.filter((item) => item.courseId === course.id).length,
         experiments: this.data.experiments.filter((item) => item.courseId === course.id).length,
@@ -595,9 +592,7 @@ class WorkspaceStore {
     const name = cleanString(nextName, 100)
     if (!name) throw new Error('课程名称不能为空。')
     if (
-      this.data.courses.some(
-        (item) => item.id !== id && courseKey(item.name) === courseKey(name),
-      )
+      this.data.courses.some((item) => item.id !== id && courseKey(item.name) === courseKey(name))
     ) {
       throw new Error('已有同名课程，请使用同一个名称或先合并数据。')
     }

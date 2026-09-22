@@ -21,7 +21,8 @@ contextBridge.exposeInMainWorld('launcher', {
   launch: () => ipcRenderer.invoke('dsh:launch'),
   stop: () => ipcRenderer.invoke('dsh:stop'),
   listPlugins: (profile) => ipcRenderer.invoke('dsh:plugins', profile),
-  pluginAction: (profile, action, spec) => ipcRenderer.invoke('dsh:plugin-action', profile, action, spec),
+  pluginAction: (profile, action, spec) =>
+    ipcRenderer.invoke('dsh:plugin-action', profile, action, spec),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   patchSettings: (patch) => ipcRenderer.invoke('settings:patch', patch),
   getModelConfig: () => ipcRenderer.invoke('dsh:model-config'),
@@ -56,8 +57,7 @@ contextBridge.exposeInMainWorld('launcher', {
   deleteExperiment: (id) => ipcRenderer.invoke('workspace:experiment-delete', id),
   importSchedule: (filePath) => ipcRenderer.invoke('schedule:import', filePath),
   createScheduleCourse: (input) => ipcRenderer.invoke('schedule:course-create', input),
-  updateScheduleCourse: (id, patch) =>
-    ipcRenderer.invoke('schedule:course-update', id, patch),
+  updateScheduleCourse: (id, patch) => ipcRenderer.invoke('schedule:course-update', id, patch),
   deleteScheduleCourse: (id) => ipcRenderer.invoke('schedule:course-delete', id),
   clearSchedule: () => ipcRenderer.invoke('schedule:clear'),
   copyText: (value) => ipcRenderer.invoke('clipboard:write', value),

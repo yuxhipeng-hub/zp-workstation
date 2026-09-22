@@ -11,7 +11,9 @@ const DEFAULT_DOWNLOAD_TIMEOUT = 180000
 const CHECKSUM_TIMEOUT = 5000
 
 function normalizeVersion(value) {
-  const clean = String(value || '').trim().replace(/^v/, '')
+  const clean = String(value || '')
+    .trim()
+    .replace(/^v/, '')
   return semver.valid(clean) ? clean : null
 }
 
@@ -189,10 +191,7 @@ class LauncherUpdater extends EventEmitter {
   async parseGithubRelease(payload, source) {
     const latestVersion = normalizeVersion(payload.tag_name)
     if (!latestVersion) throw new Error('GitHub Release 的版本号格式无法识别。')
-    const expectedName = String(this.config.assetPattern || '').replace(
-      '${version}',
-      latestVersion,
-    )
+    const expectedName = String(this.config.assetPattern || '').replace('${version}', latestVersion)
     const rawAsset = (payload.assets || []).find((candidate) => candidate.name === expectedName)
     if (!rawAsset) {
       return {
@@ -243,10 +242,7 @@ class LauncherUpdater extends EventEmitter {
       payload.version || payload.tag_name || payload.tag || payload.name,
     )
     if (!latestVersion) throw new Error('更新清单中的版本号格式无法识别。')
-    const expectedName = String(this.config.assetPattern || '').replace(
-      '${version}',
-      latestVersion,
-    )
+    const expectedName = String(this.config.assetPattern || '').replace('${version}', latestVersion)
     const rawAsset = (payload.assets || []).find((candidate) => candidate.name === expectedName)
     if (!rawAsset) {
       return {
@@ -348,8 +344,7 @@ class LauncherUpdater extends EventEmitter {
       .map((item, index) => normalizeDownloadUrl(item, index, '下载线路'))
       .filter((item) => item.url)
     return all.filter(
-      (item, index) =>
-        all.findIndex((candidate) => candidate.url === item.url) === index,
+      (item, index) => all.findIndex((candidate) => candidate.url === item.url) === index,
     )
   }
 

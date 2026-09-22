@@ -17,7 +17,13 @@ function readJson(filePath) {
 }
 
 function uniqueVersionList(versions) {
-  return [...new Set(versions.filter((version) => semver.valid(version) || semver.valid(version.replace(/^v/, ''))))]
+  return [
+    ...new Set(
+      versions.filter(
+        (version) => semver.valid(version) || semver.valid(version.replace(/^v/, '')),
+      ),
+    ),
+  ]
 }
 
 function extractDshWebUrl(value) {
@@ -221,7 +227,9 @@ class DshManager extends EventEmitter {
     env.npm_config_prefix = paths.runtimeDir
     env.PNPM_HOME = paths.shimDir
     env.PNPM_STORE_DIR = paths.pnpmStore
-    env.PATH = [paths.shimDir, path.dirname(nodeExecutable), env.PATH].filter(Boolean).join(path.delimiter)
+    env.PATH = [paths.shimDir, path.dirname(nodeExecutable), env.PATH]
+      .filter(Boolean)
+      .join(path.delimiter)
     return env
   }
 
@@ -229,11 +237,7 @@ class DshManager extends EventEmitter {
     const paths = this.paths()
     await fsp.mkdir(paths.shimDir, { recursive: true })
     const pnpmExecutable = this.pnpmExecutablePath()
-    const command = [
-      '@ECHO OFF',
-      `"${pnpmExecutable}" %*`,
-      '',
-    ].join('\r\n')
+    const command = ['@ECHO OFF', `"${pnpmExecutable}" %*`, ''].join('\r\n')
     await fsp.writeFile(path.join(paths.shimDir, 'pnpm.cmd'), command, 'utf8')
   }
 
@@ -310,7 +314,11 @@ class DshManager extends EventEmitter {
       signal: AbortSignal.timeout(15000),
     })
     if (!response.ok) throw new Error(`npm Registry 请求失败：HTTP ${response.status}`)
-    const data = await response.json()
+    const data = /** @type {{
+      'dist-tags'?: Record<string, string>,
+      versions?: Record<string, unknown>,
+      time?: Record<string, string>
+    }} */ (await response.json())
     const channels = {}
     for (const [id, channel] of Object.entries(CHANNELS)) {
       const version = data['dist-tags']?.[channel.registryTag]
@@ -335,7 +343,8 @@ class DshManager extends EventEmitter {
     try {
       return readJson(dshPackageJson).version || null
     } catch (error) {
-      if (error.code !== 'ENOENT') this.logger.warn('runtime', `读取已安装版本失败：${error.message}`)
+      if (error.code !== 'ENOENT')
+        this.logger.warn('runtime', `读取已安装版本失败：${error.message}`)
       return null
     }
   }
@@ -410,13 +419,23 @@ class DshManager extends EventEmitter {
     const installedVersion = this.getInstalledVersion()
     if (installedVersion && !options.force && !semver.gt(targetVersion, installedVersion)) {
       if (semver.eq(targetVersion, installedVersion)) {
-        return { success: true, skipped: true, version: installedVersion, message: '当前已经是最新版本。' }
+        return {
+          success: true,
+          skipped: true,
+          version: installedVersion,
+          message: '当前已经是最新版本。',
+        }
       }
-      throw new Error(`目标版本 ${targetVersion} 低于当前版本 ${installedVersion}，请明确使用切换版本操作。`)
+      throw new Error(
+        `目标版本 ${targetVersion} 低于当前版本 ${installedVersion}，请明确使用切换版本操作。`,
+      )
     }
 
     const taskId = `dsh-install-${Date.now()}`
-    this.busyTask = { taskId, label: installedVersion ? '更新 DeepSeek Harness' : '安装 DeepSeek Harness' }
+    this.busyTask = {
+      taskId,
+      label: installedVersion ? '更新 DeepSeek Harness' : '安装 DeepSeek Harness',
+    }
     this.taskState(taskId, 'running', this.busyTask.label, targetVersion)
 
     try {
@@ -559,7 +578,8 @@ class DshManager extends EventEmitter {
     const startedAt = Date.now()
     let readyAt = null
     while (Date.now() - startedAt < timeoutMs) {
-      if (!this.webProcess || this.webProcess.killed) throw new Error('DeepSeek Harness 进程已退出。')
+      if (!this.webProcess || this.webProcess.killed)
+        throw new Error('DeepSeek Harness 进程已退出。')
       const url = typeof getUrl === 'function' ? getUrl() : getUrl
       if (!url) {
         await new Promise((resolve) => setTimeout(resolve, 250))
@@ -689,7 +709,10 @@ class DshManager extends EventEmitter {
     return { success: true, stopped: true }
   }
 
-  async runHeadlessTask(task, { taskId = `dsh-headless-${Date.now()}`, cwd = '', timeoutMs = 300_000 } = {}) {
+  async runHeadlessTask(
+    task,
+    { taskId = `dsh-headless-${Date.now()}`, cwd = '', timeoutMs = 300_000 } = {},
+  ) {
     const text = String(task || '').trim()
     if (!text) throw new Error('一次性任务内容不能为空。')
     if (!this.getInstalledVersion()) throw new Error('还没有安装 DeepSeek Harness。')

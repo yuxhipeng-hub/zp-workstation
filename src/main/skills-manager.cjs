@@ -75,7 +75,10 @@ function parseSkillDocument(text) {
   const name = String(metadata.name || '').trim()
   const description = String(metadata.description || '').trim()
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || !description) return null
-  if (Object.hasOwn(metadata, 'disableModelInvocation') || Object.hasOwn(metadata, 'userInvocable')) {
+  if (
+    Object.hasOwn(metadata, 'disableModelInvocation') ||
+    Object.hasOwn(metadata, 'userInvocable')
+  ) {
     return null
   }
 
