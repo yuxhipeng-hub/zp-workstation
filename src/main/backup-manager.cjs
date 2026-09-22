@@ -34,6 +34,13 @@ const MACHINE_SETTING_KEYS = new Set([
   'syncWebdavUsername',
   'syncAutoUpload',
   'syncLastAt',
+  'jevApiBaseUrl',
+  'jevLastModel',
+  'jevLastAlias',
+  'jevLatestReleaseDate',
+  'jevLastCheckedAt',
+  'jevLastError',
+  'jevCompatibilityPassed',
 ])
 
 function cleanText(value, maxLength = 500) {

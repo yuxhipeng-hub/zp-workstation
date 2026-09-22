@@ -84,6 +84,35 @@ test('collects today courses using single and double week rules', () => {
   assert.deepEqual(titles, ['单周课', '每周课'])
 })
 
+test('uses editable period times when a course does not override them', () => {
+  const manager = createManager({
+    workspace: {
+      schedule: {
+        periodTimes: [
+          { period: 1, startTime: '09:10', endTime: '09:55' },
+          { period: 2, startTime: '10:05', endTime: '10:50' },
+        ],
+        courses: [
+          {
+            id: 'a',
+            name: '数据结构',
+            weekday: 1,
+            startPeriod: 1,
+            endPeriod: 2,
+            startTime: '',
+            endTime: '',
+            weeks: [],
+          },
+        ],
+      },
+    },
+  })
+  const courses = manager.todaysCourses(new Date(2026, 8, 21, 9, 0, 0))
+  assert.equal(courses.length, 1)
+  assert.equal(courses[0].startTime, '09:10')
+  assert.equal(courses[0].endTime, '10:50')
+})
+
 test('fires class, assignment, and review reminders once per period', () => {
   const manager = createManager({
     workspace: {

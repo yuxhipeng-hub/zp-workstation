@@ -128,6 +128,23 @@ test('matches an existing course folder before creating a new group', async (t) 
   assert.equal(fs.existsSync(path.join(existingGroup, path.basename(source))), true)
 })
 
+test('uses an explicitly selected existing course folder for dropped files', async (t) => {
+  const { directory, sourceDirectory, libraryDirectory, workspace, library } = createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const targetGroup = '计算机系统基础'
+  fs.mkdirSync(path.join(libraryDirectory, targetGroup), { recursive: true })
+  const source = path.join(sourceDirectory, '算法设计与分析实验报告.pdf')
+  fs.writeFileSync(source, '%PDF explicit group', 'utf8')
+
+  const result = await library.importEntries([{ path: source, group: targetGroup }])
+  assert.equal(result.imported, 1)
+  assert.equal(result.createdGroups.length, 0)
+  assert.equal(workspace.get().experiments[0].group, targetGroup)
+  assert.equal(fs.existsSync(path.join(libraryDirectory, targetGroup, path.basename(source))), true)
+  assert.equal(fs.existsSync(path.join(libraryDirectory, '算法设计与分析实验')), false)
+})
+
 test('renames a course folder and moves every tracked PDF into it', async (t) => {
   const { directory, sourceDirectory, libraryDirectory, library } = createLibrary()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

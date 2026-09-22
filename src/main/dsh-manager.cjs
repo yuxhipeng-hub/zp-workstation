@@ -1,4 +1,5 @@
 const EventEmitter = require('node:events')
+const { randomUUID } = require('node:crypto')
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const net = require('node:net')
@@ -113,6 +114,32 @@ function fileInfo(filePath) {
   }
 }
 
+function responseCookies(headers) {
+  if (typeof headers.getSetCookie === 'function') return headers.getSetCookie()
+  const value = headers.get('set-cookie')
+  return value ? [value] : []
+}
+
+function cookieHeader(headers) {
+  return responseCookies(headers)
+    .map((value) => String(value).split(';')[0].trim())
+    .filter(Boolean)
+    .join('; ')
+}
+
+function validateDeepseekApiKey(value) {
+  const key = String(value || '').trim()
+  if (
+    key.length < 16 ||
+    key.length > 256 ||
+    /[\s\u0000-\u001f]/.test(key) ||
+    !key.startsWith('sk-')
+  ) {
+    throw new Error('请输入以 sk- 开头的有效 DeepSeek API Key。')
+  }
+  return key
+}
+
 class DshManager extends EventEmitter {
   constructor({ app, settings, logger }) {
     super()
@@ -123,6 +150,9 @@ class DshManager extends EventEmitter {
     this.webProcess = null
     this.webTaskId = null
     this.webUrl = null
+    this.dshAuthCookie = null
+    this.dshAuthBaseUrl = null
+    this.dshSessionPromise = null
     this.busyTask = null
     this.registryCache = null
     this.nodeVersionCache = null
@@ -213,6 +243,164 @@ class DshManager extends EventEmitter {
       },
       defaultModel: defaults,
     }
+  }
+
+  dshApiBaseUrl() {
+    if (!this.webUrl) return null
+    const url = new URL(this.webUrl)
+    url.pathname = '/'
+    url.search = ''
+    url.hash = ''
+    return url.toString().replace(/\/$/, '')
+  }
+
+  async ensureDshSession() {
+    const baseUrl = this.dshApiBaseUrl()
+    if (!baseUrl || !this.webUrl) throw new Error('DSH Web 服务尚未就绪。')
+    if (this.dshAuthCookie && this.dshAuthBaseUrl === baseUrl) return this.dshAuthCookie
+    if (this.dshSessionPromise) return this.dshSessionPromise
+
+    this.dshSessionPromise = (async () => {
+      const response = await fetch(this.webUrl, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(8000),
+      })
+      const cookie = cookieHeader(response.headers)
+      if (!cookie) throw new Error('无法建立 DSH 配置会话，请刷新后重试。')
+      this.dshAuthCookie = cookie
+      this.dshAuthBaseUrl = baseUrl
+      return cookie
+    })().finally(() => {
+      this.dshSessionPromise = null
+    })
+
+    return this.dshSessionPromise
+  }
+
+  async requestDsh(method, args = {}, { autoStart = true } = {}) {
+    if (!this.webProcess || this.webProcess.killed) {
+      if (!autoStart) throw new Error('DSH 尚未启动。')
+      await this.startWeb()
+    }
+
+    const send = async () => {
+      const baseUrl = this.dshApiBaseUrl()
+      if (!baseUrl) throw new Error('DSH Web 服务尚未就绪。')
+      const cookie = await this.ensureDshSession()
+      const response = await fetch(`${baseUrl}/api/${String(method).replace(/^\/+/, '')}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie,
+        },
+        body: JSON.stringify({
+          type: 'client-request',
+          rpcId: randomUUID(),
+          method,
+          payload: { args },
+        }),
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await response.text()
+      let payload = null
+      try {
+        payload = JSON.parse(text)
+      } catch {
+        throw new Error(`DSH 返回了无法识别的响应（HTTP ${response.status}）。`)
+      }
+      return { response, payload }
+    }
+
+    let result = await send()
+    if ([401, 403].includes(result.response.status)) {
+      this.dshAuthCookie = null
+      this.dshAuthBaseUrl = null
+      result = await send()
+    }
+
+    const { response, payload } = result
+    if (!response.ok) {
+      throw new Error(payload?.error?.message || `DSH 请求失败（HTTP ${response.status}）。`)
+    }
+    const remoteResult = payload?.result
+    if (!remoteResult || remoteResult.ok !== true) {
+      const message =
+        remoteResult?.error?.message ||
+        remoteResult?.error?.data?.message ||
+        remoteResult?.error?.code ||
+        'DSH 拒绝了本次配置操作。'
+      throw new Error(message)
+    }
+    return remoteResult.value
+  }
+
+  async getDshModelState({ autoStart = false } = {}) {
+    const local = this.getModelConfig()
+    const fallback = {
+      available: false,
+      credential: {
+        configured: Boolean(local.credentials.deepseekStored),
+        writable: true,
+        source: local.credentials.deepseekStored ? 'file' : undefined,
+      },
+      defaultModel: local.defaultModel,
+      writable: false,
+      error: null,
+    }
+
+    if ((!this.webProcess || this.webProcess.killed) && !autoStart) return fallback
+
+    try {
+      const credentials = await this.requestDsh(
+        'credentials/describe',
+        { refs: ['DEEPSEEK_API_KEY'] },
+        { autoStart },
+      )
+      const settings = await this.requestDsh('settings/describe', {}, { autoStart })
+      const namespace = (settings?.namespaces || []).find(
+        (item) => item.ns === 'agent-default-model',
+      )
+      const defaultModel =
+        namespace?.value && typeof namespace.value === 'object'
+          ? {
+              provider: namespace.value.provider || null,
+              model: namespace.value.model || null,
+              reasoningEffort: namespace.value.reasoningEffort || null,
+            }
+          : local.defaultModel
+      return {
+        available: true,
+        credential: credentials?.DEEPSEEK_API_KEY || {
+          configured: Boolean(local.credentials.deepseekStored),
+          writable: false,
+        },
+        defaultModel,
+        writable: Boolean(settings?.writable),
+        error: null,
+      }
+    } catch (error) {
+      return {
+        ...fallback,
+        error: error.message,
+      }
+    }
+  }
+
+  async setDeepseekApiKey(value) {
+    await this.requestDsh(
+      'credentials/set',
+      {
+        ref: 'DEEPSEEK_API_KEY',
+        value: validateDeepseekApiKey(value),
+      },
+      { autoStart: true },
+    )
+    return this.getDshModelState({ autoStart: true })
+  }
+
+  async clearDeepseekApiKey() {
+    await this.requestDsh('credentials/unset', { ref: 'DEEPSEEK_API_KEY' }, { autoStart: true })
+    return this.getDshModelState({ autoStart: true })
   }
 
   buildEnvironment() {
@@ -630,6 +818,8 @@ class DshManager extends EventEmitter {
     const taskId = `dsh-web-${Date.now()}`
     this.webTaskId = taskId
     this.webUrl = baseUrl
+    this.dshAuthCookie = null
+    this.dshAuthBaseUrl = null
     let readyUrl = null
     this.logger.info('dsh', `启动 DeepSeek Harness Web UI：${baseUrl}`)
 
@@ -677,6 +867,8 @@ class DshManager extends EventEmitter {
           this.webProcess = null
           this.webTaskId = null
           this.webUrl = null
+          this.dshAuthCookie = null
+          this.dshAuthBaseUrl = null
           this.emit('process-state', this.getProcessState())
         }
       })
@@ -705,6 +897,8 @@ class DshManager extends EventEmitter {
     this.webProcess = null
     this.webTaskId = null
     this.webUrl = null
+    this.dshAuthCookie = null
+    this.dshAuthBaseUrl = null
     this.emit('process-state', this.getProcessState())
     return { success: true, stopped: true }
   }
@@ -750,7 +944,7 @@ class DshManager extends EventEmitter {
     } catch (error) {
       let message = error.message
       if (/MISSING_CREDENTIAL|no API key/i.test(stderr)) {
-        message = 'DSH 还没有配置 DeepSeek API Key，请先到“模型与 API”页面完成配置。'
+        message = 'DSH 还没有配置 DeepSeek API Key，请先到“模型连接”页面完成配置。'
       } else {
         const detail = stderr
           .split(/\r?\n/)

@@ -12,7 +12,12 @@ const {
 const { APP_ID, APP_NAME } = require('./constants.cjs')
 const { SettingsStore } = require('./settings-store.cjs')
 const { WorkspaceStore } = require('./workspace-store.cjs')
-const { ExperimentLibrary } = require('./experiment-library.cjs')
+const {
+  ExperimentLibrary,
+  inferExperimentGroup,
+  resolveExperimentGroup,
+} = require('./experiment-library.cjs')
+const { JevManager } = require('./jev-manager.cjs')
 const { ScheduleManager } = require('./schedule-manager.cjs')
 const { Logger } = require('./logger.cjs')
 const { DshManager } = require('./dsh-manager.cjs')
@@ -25,6 +30,8 @@ const { registerIpc } = require('./ipc.cjs')
 
 const userDataOverride = process.env.ZP_WORKBENCH_USER_DATA
 if (userDataOverride) app.setPath('userData', path.resolve(userDataOverride))
+
+app.setName(APP_NAME)
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
@@ -48,6 +55,7 @@ let quitting = false
 let settings
 let workspace
 let experimentLibrary
+let jevManager
 let scheduleManager
 let logger
 let dshManager
@@ -68,6 +76,11 @@ function iconPath() {
   return candidates.find((candidate) => existsSync(candidate)) || candidates[0]
 }
 
+function appIcon() {
+  const image = nativeImage.createFromPath(iconPath())
+  return image.isEmpty() ? undefined : image
+}
+
 function createMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.show()
@@ -83,7 +96,7 @@ function createMainWindow() {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#ffffff',
-    icon: iconPath(),
+    icon: appIcon(),
     title: APP_NAME,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
@@ -93,6 +106,9 @@ function createMainWindow() {
       spellcheck: false,
     },
   })
+  const icon = appIcon()
+  if (icon) mainWindow.setIcon(icon)
+  mainWindow.setTitle(APP_NAME)
   mainWindow.setMenuBarVisibility(false)
 
   const devServer = process.env.VITE_DEV_SERVER_URL
@@ -130,7 +146,7 @@ function openWorkbench(url) {
     minHeight: 640,
     autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#ffffff',
-    icon: iconPath(),
+    icon: appIcon(),
     title: `${APP_NAME} - DeepSeek Harness`,
     webPreferences: {
       contextIsolation: true,
@@ -138,6 +154,8 @@ function openWorkbench(url) {
       sandbox: true,
     },
   })
+  const icon = appIcon()
+  if (icon) workbenchWindow.setIcon(icon)
   workbenchWindow.setMenuBarVisibility(false)
   workbenchWindow.loadURL(url)
   workbenchWindow.on('closed', () => {
@@ -146,7 +164,7 @@ function openWorkbench(url) {
 }
 
 function createTray() {
-  const image = nativeImage.createFromPath(iconPath()).resize({ width: 20, height: 20 })
+  const image = (appIcon() || nativeImage.createEmpty()).resize({ width: 20, height: 20 })
   tray = new Tray(image)
   tray.setToolTip(APP_NAME)
   tray.setContextMenu(
@@ -188,10 +206,24 @@ async function bootstrap() {
   const userData = app.getPath('userData')
   settings = new SettingsStore(userData)
   workspace = new WorkspaceStore(userData)
-  experimentLibrary = new ExperimentLibrary({ settings, workspace })
+  logger = new Logger(userData)
+  jevManager = new JevManager({
+    userDataDir: userData,
+    settings,
+    safeStorage,
+    logger,
+    fallbackClassifier: ({ fileName, existingGroups }) => {
+      const matchedGroup = resolveExperimentGroup(fileName, existingGroups)
+      return {
+        group: matchedGroup || inferExperimentGroup(fileName),
+        confidence: matchedGroup ? 0.7 : 0.35,
+        reason: matchedGroup ? '匹配到了已有的课程文件夹。' : '根据文件名生成新的课程分类。',
+      }
+    },
+  })
+  experimentLibrary = new ExperimentLibrary({ settings, workspace, jevManager })
   scheduleManager = new ScheduleManager({ workspace })
   nativeTheme.themeSource = settings.get().theme || 'system'
-  logger = new Logger(userData)
   dshManager = new DshManager({ app, settings, logger })
   const skillRegistryFile = path.join(userData, 'skill-registry.json')
   skillsManager = new SkillsManager({
@@ -234,6 +266,7 @@ async function bootstrap() {
     settings,
     workspace,
     experimentLibrary,
+    jevManager,
     scheduleManager,
     logger,
     dshManager,
@@ -247,6 +280,7 @@ async function bootstrap() {
   createMainWindow()
   createTray()
   reminderManager.start()
+  jevManager.start()
   backupManager.startAuto()
 
   mainWindow.webContents.once('did-finish-load', () => {
@@ -283,6 +317,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', async (event) => {
   quitting = true
   backupManager?.stopAuto()
+  jevManager?.stop()
   if (dshManager) {
     event.preventDefault()
     try {

@@ -218,6 +218,11 @@ function cleanScheduleCourse(input = {}) {
   }
 }
 
+function cleanTimeValue(value) {
+  const match = cleanString(value, 8).match(/^([01]?\d|2[0-3]):([0-5]\d)$/)
+  return match ? `${match[1].padStart(2, '0')}:${match[2]}` : ''
+}
+
 function cleanSchedule(input) {
   if (!input || typeof input !== 'object') return null
   const courses = (Array.isArray(input.courses) ? input.courses : [])
@@ -225,10 +230,24 @@ function cleanSchedule(input) {
     .filter(Boolean)
     .slice(0, 500)
   if (!courses.length) return null
+  const periodTimeInputs = Array.isArray(input.periodTimes) ? input.periodTimes : []
   const maxPeriod = Math.min(
     20,
-    Math.max(10, Number(input.maxPeriod) || 0, ...courses.map((course) => course.endPeriod)),
+    Math.max(
+      1,
+      Number(input.maxPeriod) || 0,
+      periodTimeInputs.length,
+      ...courses.map((course) => course.endPeriod),
+    ),
   )
+  const periodTimes = Array.from({ length: maxPeriod }, (_item, index) => {
+    const entry = periodTimeInputs[index] || {}
+    return {
+      period: index + 1,
+      startTime: cleanTimeValue(entry.startTime),
+      endTime: cleanTimeValue(entry.endTime),
+    }
+  })
   const maxWeek = Math.min(
     30,
     Math.max(16, Number(input.maxWeek) || 0, ...courses.flatMap((course) => course.weeks)),
@@ -244,6 +263,7 @@ function cleanSchedule(input) {
     importedAt: cleanString(input.importedAt, 40) || new Date().toISOString(),
     maxPeriod,
     maxWeek,
+    periodTimes,
     courses,
   }
 }

@@ -1,6 +1,7 @@
 const { randomUUID } = require('node:crypto')
 const {
   formatWeeksCompact,
+  normalizePeriodTimes,
   normalizeCourses,
   parseScheduleFileAsync,
   parseWeeks,
@@ -66,8 +67,25 @@ function manualSchedule() {
     importedAt: now,
     maxPeriod: 10,
     maxWeek: 16,
+    periodTimes: normalizePeriodTimes([], [], 10),
     courses: [],
   }
+}
+
+function syncCourseTime(schedule, course) {
+  schedule.periodTimes = normalizePeriodTimes(
+    schedule.periodTimes,
+    schedule.courses,
+    schedule.maxPeriod,
+  )
+  const startPeriod = Math.max(1, Number(course.startPeriod) || 1)
+  const endPeriod = Math.max(startPeriod, Number(course.endPeriod) || startPeriod)
+  if (course.startTime) schedule.periodTimes[startPeriod - 1].startTime = course.startTime
+  if (course.endTime) schedule.periodTimes[endPeriod - 1].endTime = course.endTime
+  schedule.maxPeriod = Math.min(
+    20,
+    Math.max(1, ...schedule.courses.map((item) => item.endPeriod), schedule.periodTimes.length),
+  )
 }
 
 class ScheduleManager {
@@ -98,6 +116,7 @@ class ScheduleManager {
     const schedule = current ? structuredClone(current) : manualSchedule()
     const course = normalizeCourse(input)
     schedule.courses = [...schedule.courses, course]
+    syncCourseTime(schedule, course)
     const workspace = this.workspace.replaceSchedule(schedule)
     return { workspace, course }
   }
@@ -111,6 +130,7 @@ class ScheduleManager {
       ...structuredClone(current),
       courses: current.courses.map((item) => (item.id === id ? course : item)),
     }
+    syncCourseTime(schedule, course)
     const workspace = this.workspace.replaceSchedule(schedule)
     return {
       workspace,
@@ -128,6 +148,30 @@ class ScheduleManager {
       courses: current.courses.filter((course) => course.id !== id),
     }
     return this.workspace.replaceSchedule(schedule.courses.length ? schedule : null)
+  }
+
+  updatePeriodTimes(periodTimes) {
+    const current = this.workspace.get().schedule
+    if (!current?.courses?.length) throw new Error('请先创建或导入课程。')
+    const schedule = structuredClone(current)
+    schedule.periodTimes = normalizePeriodTimes(
+      periodTimes,
+      schedule.courses,
+      Array.isArray(periodTimes) ? periodTimes.length : 0,
+    )
+    schedule.maxPeriod = Math.min(
+      20,
+      Math.max(
+        1,
+        ...schedule.courses.map((course) => course.endPeriod),
+        schedule.periodTimes.length,
+      ),
+    )
+    const workspace = this.workspace.replaceSchedule(schedule)
+    return {
+      workspace,
+      periodTimes: workspace.schedule?.periodTimes || [],
+    }
   }
 }
 

@@ -1,7 +1,10 @@
 import { createIcons, FileCheck2, FolderOpen, icons, Upload } from 'lucide'
 import { defineMorphIcon } from 'morphicons/element'
+import '@fontsource-variable/inter/wght.css'
+import '@fontsource-variable/noto-sans-sc/wght.css'
 import './styles.css'
 import './design-system.css'
+import './ui-refresh.css'
 
 defineMorphIcon()
 
@@ -31,6 +34,9 @@ const state = {
   skillBusyId: null,
   skillUpdates: null,
   modelConfig: null,
+  modelState: null,
+  modelBusy: false,
+  jev: null,
   workspace: null,
   activeTask: null,
   dismissedTaskId: null,
@@ -46,11 +52,17 @@ const state = {
   highlightAssignmentId: null,
   experimentDropActive: false,
   experimentImporting: false,
+  experimentDraggingId: null,
+  experimentMovingId: null,
+  experimentDropTargetGroup: null,
   experimentSelectedGroup: null,
+  experimentSuggestionBusy: false,
   scheduleDropActive: false,
   scheduleImporting: false,
   scheduleComposerOpen: false,
   editingScheduleCourseId: null,
+  scheduleTimeEditorOpen: false,
+  schedulePeriodDraft: null,
   highlightScheduleCourseId: null,
   scheduleWeek: 'all',
   todayReminders: null,
@@ -61,7 +73,6 @@ const state = {
   backupBusy: false,
   backupNotice: null,
   reminderBusy: false,
-  settingsDirty: false,
   onboarding: null,
   welcomeOverlayPinned: false,
   courseBusy: false,
@@ -72,16 +83,15 @@ const state = {
 
 const pageMeta = {
   today: ['今天', '今日', '把今天要上的课、要交的作业和要复习的知识点集中在一页。'],
-  overview: ['控制台', '总览', '运行时状态、更新和工作台入口集中在这里。'],
-  schedule: ['学习', '课表', '导入课表文件，自动生成按星期和节次排列的周课表。'],
+  schedule: ['学习', '课表', '导入课表文件，自动抓取上课时间并生成可自由调整的周课表。'],
   assignments: ['学习', '作业收件箱', '收集零碎任务，按截止时间和处理状态逐项清空。'],
   experiments: ['学习', '资料库', '按课程归纳文件，像 Windows 文件夹一样逐层展开。'],
   knowledge: ['学习', '知识点', '从资料库文件生成知识点，按课程文件夹整理并追踪掌握程度。'],
-  guide: ['帮助', '看这，Ruka！', '先了解工作站能做什么，再按顺序完成第一次配置。'],
+  guide: ['帮助', '指南', '先了解工作站能做什么，再按顺序完成第一次配置。'],
   updates: ['运行时', '版本与更新', '检查通道、安装版本并保持 Harness 处于最新状态。'],
   plugins: ['扩展', '插件', '管理 Web Profile 的第三方 npm 插件。'],
   skills: ['运行时', 'Skills', '查看 DSH 与 Agent 共享目录中的 Skill、用途和调用名称。'],
-  models: ['连接', '模型与 API', '定位 DSH 的模型配置与安全凭据入口。'],
+  models: ['连接', '模型连接', '在工作台内配置 DeepSeek API，并查看 DSH 当前使用的默认模型。'],
   logs: ['诊断', '日志', '查看本机启动、更新和运行过程中的事件记录。'],
   settings: ['偏好', '设置', '调整主题、运行时目录、端口和自动检查策略。'],
   backup: ['系统', '备份与同步', '创建完整备份，并同步到 OneDrive 文件夹或 WebDAV。'],
@@ -155,7 +165,8 @@ function fileTone(fileName) {
   const extension = String(fileName || '')
     .match(/\.([^.\\/]+)$/)?.[1]
     ?.toLocaleLowerCase('en-US')
-  if (['pdf', 'doc', 'docx', 'txt', 'md', 'rtf'].includes(extension)) return 'document'
+  if (extension === 'pdf') return 'pdf'
+  if (['doc', 'docx', 'txt', 'md', 'rtf'].includes(extension)) return 'document'
   if (['xls', 'xlsx', 'csv', 'ods'].includes(extension)) return 'sheet'
   if (['ppt', 'pptx', 'odp'].includes(extension)) return 'slides'
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(extension)) return 'image'
@@ -181,6 +192,18 @@ function fileTone(fileName) {
     return 'code'
   }
   return 'generic'
+}
+
+function fileIconName(fileName) {
+  const tone = fileTone(fileName)
+  if (tone === 'pdf') return 'file-type-2'
+  if (tone === 'document') return 'file-text'
+  if (tone === 'sheet') return 'file-spreadsheet'
+  if (tone === 'slides') return 'presentation'
+  if (tone === 'image') return 'image'
+  if (tone === 'archive') return 'file-archive'
+  if (tone === 'code') return 'file-code-2'
+  return 'file'
 }
 
 function statusLabel(status) {
@@ -315,6 +338,77 @@ function scheduleWeekText(course) {
   return `${ranges.join(',')}周`
 }
 
+function schedulePeriodTimeMap(schedule) {
+  const map = new Map()
+  for (let period = 1; period <= (schedule?.maxPeriod || 10); period += 1) {
+    map.set(period, { startTime: '', endTime: '' })
+  }
+  for (const entry of schedule?.periodTimes || []) {
+    const period = Number(entry?.period)
+    if (!Number.isInteger(period) || period < 1) continue
+    map.set(period, {
+      startTime: String(entry.startTime || '').slice(0, 5),
+      endTime: String(entry.endTime || '').slice(0, 5),
+    })
+  }
+  for (const course of schedule?.courses || []) {
+    const startPeriod = Number(course.startPeriod)
+    const endPeriod = Math.max(startPeriod, Number(course.endPeriod) || startPeriod)
+    if (!Number.isInteger(startPeriod) || startPeriod < 1) continue
+    const start = map.get(startPeriod) || { startTime: '', endTime: '' }
+    if (!start.startTime && course.startTime) start.startTime = course.startTime
+    map.set(startPeriod, start)
+    if (course.endTime) {
+      const end = map.get(endPeriod) || { startTime: '', endTime: '' }
+      if (!end.endTime) end.endTime = course.endTime
+      map.set(endPeriod, end)
+    }
+  }
+  return map
+}
+
+function scheduleCourseTimes(schedule, course) {
+  const periodTimes = schedulePeriodTimeMap(schedule)
+  return {
+    startTime: course.startTime || periodTimes.get(course.startPeriod)?.startTime || '',
+    endTime: course.endTime || periodTimes.get(course.endPeriod)?.endTime || '',
+  }
+}
+
+function inferPeriodTimesFromCourses(schedule) {
+  const periodTimes = schedulePeriodTimeMap(schedule)
+  const starts = new Map()
+  const ends = new Map()
+  const choose = (values) => {
+    const counts = new Map()
+    for (const value of values.filter(Boolean)) {
+      counts.set(value, (counts.get(value) || 0) + 1)
+    }
+    return (
+      [...counts.entries()]
+        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+        .at(0)?.[0] || ''
+    )
+  }
+  for (const course of schedule?.courses || []) {
+    if (!course.startTime && !course.endTime) continue
+    const startPeriod = Number(course.startPeriod)
+    const endPeriod = Math.max(startPeriod, Number(course.endPeriod) || startPeriod)
+    if (course.startTime)
+      starts.set(startPeriod, [...(starts.get(startPeriod) || []), course.startTime])
+    if (course.endTime) ends.set(endPeriod, [...(ends.get(endPeriod) || []), course.endTime])
+  }
+  return Array.from({ length: schedule?.maxPeriod || 10 }, (_item, index) => {
+    const period = index + 1
+    const current = periodTimes.get(period) || { startTime: '', endTime: '' }
+    return {
+      period,
+      startTime: choose(starts.get(period) || []) || current.startTime,
+      endTime: choose(ends.get(period) || []) || current.endTime,
+    }
+  })
+}
+
 function scheduleLayout(courses, week) {
   const layout = new Map()
   for (let weekday = 1; weekday <= 7; weekday += 1) layout.set(weekday, [])
@@ -379,18 +473,20 @@ function minutesOfTime(value) {
 function todayCourses() {
   const { weekday, minutes } = todayDate()
   const week = termWeekNumber()
-  const courses = (state.workspace?.schedule?.courses || [])
+  const schedule = state.workspace?.schedule
+  const courses = (schedule?.courses || [])
     .filter((course) => course.weekday === weekday)
     .filter((course) => !course.weeks?.length || week === null || course.weeks.includes(week))
     .map((course) => {
-      const start = minutesOfTime(course.startTime)
-      const end = minutesOfTime(course.endTime)
+      const times = scheduleCourseTimes(schedule, course)
+      const start = minutesOfTime(times.startTime)
+      const end = minutesOfTime(times.endTime)
       let phase = 'upcoming'
       if (start !== null && end !== null) {
         if (minutes >= end) phase = 'done'
         else if (minutes >= start) phase = 'ongoing'
       }
-      return { ...course, startMinutes: start, endMinutes: end, phase }
+      return { ...course, ...times, startMinutes: start, endMinutes: end, phase }
     })
     .sort((left, right) => (left.startMinutes ?? 9999) - (right.startMinutes ?? 9999))
   return courses
@@ -407,28 +503,6 @@ function dueKnowledge() {
   return (state.workspace?.knowledge || [])
     .filter((item) => item.dueAt && new Date(item.dueAt).getTime() <= now)
     .sort((left, right) => String(left.dueAt).localeCompare(String(right.dueAt)))
-}
-
-function courseOverview() {
-  const workspace = state.workspace || {}
-  return (workspace.courses || [])
-    .map((course) => {
-      const counts = {
-        schedule: (workspace.schedule?.courses || []).filter((item) => item.courseId === course.id)
-          .length,
-        assignments: (workspace.assignments || []).filter((item) => item.courseId === course.id)
-          .length,
-        knowledge: (workspace.knowledge || []).filter((item) => item.courseId === course.id).length,
-        experiments: (workspace.experiments || []).filter((item) => item.courseId === course.id)
-          .length,
-      }
-      return {
-        ...course,
-        counts,
-        total: Object.values(counts).reduce((sum, value) => sum + value, 0),
-      }
-    })
-    .sort((left, right) => right.total - left.total || left.name.localeCompare(right.name, 'zh-CN'))
 }
 
 function todayCourseStatus(course) {
@@ -455,9 +529,64 @@ function renderToday() {
       String(right.importedAt || '').localeCompare(String(left.importedAt || '')),
     )
     .slice(0, 4)
-  const coursesOverview = courseOverview()
   const missingCount = state.workspaceHealth?.missing?.length || 0
   const nextCourse = courses.find((course) => course.phase !== 'done') || null
+  const focusAssignment = nextCourse ? null : assignments[0] || null
+  const focusKnowledge = nextCourse || focusAssignment ? null : knowledge[0] || null
+  let focus = {
+    label: '今日安排',
+    title: '没有紧急事项',
+    meta: '可以整理资料，或提前准备下一节课',
+    actionLabel: '整理资料',
+    actionAttrs: 'data-page-jump="experiments"',
+    actionClass: 'secondary',
+    actionIcon: 'folder-open',
+  }
+
+  if (nextCourse) {
+    focus = {
+      label: '下一节课',
+      title: nextCourse.name,
+      meta:
+        [
+          nextCourse.startTime ? `${nextCourse.startTime} 开始` : '',
+          nextCourse.location || nextCourse.teacher || '',
+        ]
+          .filter(Boolean)
+          .join(' · ') || '时间待补充',
+      actionLabel: '打开课表',
+      actionAttrs: 'data-page-jump="schedule"',
+      actionClass: 'secondary',
+      actionIcon: 'calendar-days',
+    }
+  } else if (focusAssignment) {
+    focus = {
+      label: '优先处理',
+      title: focusAssignment.title,
+      meta: [dueDateMeta(focusAssignment.dueAt).label, focusAssignment.course || '未分类'].join(
+        ' · ',
+      ),
+      actionLabel: '处理作业',
+      actionAttrs: `data-page-jump="assignments" data-focus-assignment="${escapeHtml(
+        focusAssignment.id,
+      )}"`,
+      actionClass: 'primary',
+      actionIcon: 'check',
+    }
+  } else if (focusKnowledge) {
+    focus = {
+      label: '建议复习',
+      title: focusKnowledge.title,
+      meta: [
+        focusKnowledge.course || '未分类',
+        knowledgeTypeMeta[focusKnowledge.type]?.label || '概念',
+      ].join(' · '),
+      actionLabel: '开始复习',
+      actionAttrs: 'data-page-jump="knowledge"',
+      actionClass: 'primary',
+      actionIcon: 'sparkles',
+    }
+  }
 
   const summaryParts = [
     courses.length ? `${courses.length} 节课` : '',
@@ -466,49 +595,27 @@ function renderToday() {
   ].filter(Boolean)
 
   return `
-    <section class="today-hero">
-      <div class="today-hero-copy">
-        <span class="eyebrow">TODAY${week ? ` · 第 ${week} 周` : ''}</span>
+    <div class="today-surface workbench-canvas">
+    <section class="today-hero canvas-heading-group">
+      <div class="today-hero-copy canvas-heading">
+        <span class="canvas-kicker">${week ? `第 ${week} 周` : '今天'}</span>
         <h2>${escapeHtml(label)}</h2>
         <p>${
           summaryParts.length
             ? `今天有 ${summaryParts.join('，')}。`
             : '今天没有安排课程、待办和到期复习，可以整理资料或提前准备。'
         }</p>
-        <div class="today-pulse" aria-label="今日学习概览">
-          <span><strong>${courses.length}</strong><small>今日课程</small></span>
-          <span><strong>${assignments.length}</strong><small>待交作业</small></span>
-          <span><strong>${knowledge.length}</strong><small>到期复习</small></span>
-          <span><strong>${experiments.length}</strong><small>最近资料</small></span>
-        </div>
       </div>
-      <div class="today-hero-side">
-        ${
-          nextCourse
-            ? `<div class="today-next">
-                <span>下一节</span>
-                <strong>${escapeHtml(nextCourse.name)}</strong>
-                <small>${escapeHtml(
-                  [
-                    nextCourse.startTime ? `${nextCourse.startTime} 开始` : '',
-                    nextCourse.location || '',
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || '时间待补充',
-                )}</small>
-              </div>`
-            : `<div class="today-next muted">
-                <span>下一节</span>
-                <strong>今天没有课</strong>
-                <small>可以安排作业或复习</small>
-              </div>`
-        }
-        <div class="button-row">
-          <button class="button secondary" type="button" data-page-jump="schedule">
-            <i data-lucide="calendar-days"></i><span>课表</span>
-          </button>
-          <button class="button primary" type="button" data-action="open-assignment-composer">
-            <i data-lucide="plus"></i><span>添加作业</span>
+      <div class="today-hero-side canvas-context">
+        <div class="today-next">
+          <span class="canvas-kicker">${escapeHtml(focus.label)}</span>
+          <strong>${escapeHtml(focus.title)}</strong>
+          <small>${escapeHtml(focus.meta)}</small>
+        </div>
+        <div class="canvas-context-actions">
+          <button class="button ${focus.actionClass}" type="button" ${focus.actionAttrs}>
+            <i data-lucide="${focus.actionIcon}"></i>
+            <span>${escapeHtml(focus.actionLabel)}</span>
           </button>
         </div>
       </div>
@@ -523,12 +630,17 @@ function renderToday() {
         : ''
     }
 
-    <div class="today-grid">
-      <div class="today-grid-column today-grid-primary">
-        <section class="today-panel today-panel-primary">
+    ${
+      state.assignmentComposerOpen
+        ? `<div class="today-composer">${renderAssignmentComposer()}</div>`
+        : ''
+    }
+
+    <div class="today-grid canvas-split">
+      <div class="today-grid-column today-grid-primary canvas-column">
+        <section class="today-panel today-panel-primary canvas-section">
         <header class="today-panel-head today-panel-head-primary">
           <div>
-            <span class="eyebrow">NEXT ACTIONS</span>
             <h3>待交作业</h3>
             <span>${assignments.length ? `${assignments.length} 项未完成` : '已清空'}</span>
           </div>
@@ -540,7 +652,7 @@ function renderToday() {
           assignments.length
             ? `<div class="today-task-list">
                 ${assignments
-                  .slice(0, 5)
+                  .slice(0, 4)
                   .map((assignment) => {
                     const due = dueDateMeta(assignment.dueAt)
                     const priority =
@@ -569,16 +681,53 @@ function renderToday() {
               </button>`
         }
         </section>
+
+        <section class="today-panel canvas-section">
+        <header class="today-panel-head">
+          <div>
+            <h3>最近资料</h3>
+            <span>${experiments.length ? '最近导入的文件' : '资料库为空'}</span>
+          </div>
+          <button class="text-button" type="button" data-page-jump="experiments">资料库 <i data-lucide="chevron-right"></i></button>
+        </header>
+        ${
+          experiments.length
+            ? `<div class="today-file-list">
+                ${experiments
+                  .slice(0, 3)
+                  .map(
+                    (item) => `
+                    <button type="button" data-page-jump="experiments">
+                      <span class="file-sigil tone-${fileTone(item.originalName)}">
+                        <i data-lucide="${fileIconName(item.originalName)}"></i>
+                        <span>${escapeHtml(fileExtensionLabel(item.originalName))}</span>
+                      </span>
+                      <span class="today-file-copy">
+                        <strong>${escapeHtml(item.title)}</strong>
+                        <small>${escapeHtml(item.group || '未分类实验')} · ${escapeHtml(formatTime(item.importedAt))}</small>
+                      </span>
+                    </button>`,
+                  )
+                  .join('')}
+              </div>`
+            : '<div class="today-empty"><i data-lucide="folder-open"></i><span>拖入课程资料后会自动按课程归档。</span></div>'
+        }
+        </section>
       </div>
 
-      <div class="today-grid-column">
-        <section class="today-panel">
+      <div class="today-grid-column canvas-column">
+        <section class="today-panel canvas-section">
         <header class="today-panel-head">
           <div>
             <h3>今天的课</h3>
             <span>${week ? `第 ${week} 周课程` : '未设置开学日期，按每周课程显示'}</span>
           </div>
-          <button class="text-button" type="button" data-page-jump="schedule">打开课表 <i data-lucide="chevron-right"></i></button>
+          <div class="today-panel-head-actions">
+            <button class="text-button" type="button" data-action="add-course">
+              <i data-lucide="plus"></i>新建课程
+            </button>
+            <button class="text-button" type="button" data-page-jump="schedule">打开课表 <i data-lucide="chevron-right"></i></button>
+          </div>
         </header>
         ${
           courses.length
@@ -605,7 +754,7 @@ function renderToday() {
         }
         </section>
 
-        <section class="today-panel">
+        <section class="today-panel canvas-section">
         <header class="today-panel-head">
           <div>
             <h3>到期复习</h3>
@@ -617,7 +766,7 @@ function renderToday() {
           knowledge.length
             ? `<div class="today-review-list">
                 ${knowledge
-                  .slice(0, 4)
+                  .slice(0, 3)
                   .map(
                     (card) => `
                     <div class="today-review-row">
@@ -643,73 +792,9 @@ function renderToday() {
             : '<div class="today-empty"><i data-lucide="sparkles"></i><span>没有到期的知识点，继续按计划推进即可。</span></div>'
         }
         </section>
-
-        <section class="today-panel">
-        <header class="today-panel-head">
-          <div>
-            <h3>最近资料</h3>
-            <span>${experiments.length ? '最近导入的文件' : '资料库为空'}</span>
-          </div>
-          <button class="text-button" type="button" data-page-jump="experiments">资料库 <i data-lucide="chevron-right"></i></button>
-        </header>
-        ${
-          experiments.length
-            ? `<div class="today-file-list">
-                ${experiments
-                  .map(
-                    (item) => `
-                    <button type="button" data-page-jump="experiments">
-                      <span class="file-sigil tone-${fileTone(item.originalName)}"><span>${escapeHtml(fileExtensionLabel(item.originalName))}</span></span>
-                      <span class="today-file-copy">
-                        <strong>${escapeHtml(item.title)}</strong>
-                        <small>${escapeHtml(item.group || '未分类实验')} · ${escapeHtml(formatTime(item.importedAt))}</small>
-                      </span>
-                    </button>`,
-                  )
-                  .join('')}
-              </div>`
-            : '<div class="today-empty"><i data-lucide="folder-open"></i><span>拖入课程资料后会自动按课程归档。</span></div>'
-        }
-        </section>
       </div>
     </div>
-
-    <section class="today-courses">
-      <header class="today-panel-head">
-        <div>
-          <h3>课程</h3>
-          <span>课表、作业、资料和知识点都按这里的课程归档，共 ${coursesOverview.length} 门。</span>
-        </div>
-        <button class="button secondary" type="button" data-action="add-course">
-          <i data-lucide="plus"></i><span>新建课程</span>
-        </button>
-      </header>
-      ${
-        coursesOverview.length
-          ? `<div class="course-grid">
-              ${coursesOverview
-                .map(
-                  (course) => `
-                  <article class="course-card">
-                    <div class="course-card-head">
-                      <strong>${escapeHtml(course.name)}</strong>
-                      <button class="icon-button compact" type="button" data-action="rename-course" data-id="${escapeHtml(course.id)}" title="重命名课程">
-                        <i data-lucide="pencil"></i>
-                      </button>
-                    </div>
-                    <div class="course-card-counts">
-                      <span><strong>${course.counts.schedule}</strong>课表</span>
-                      <span><strong>${course.counts.assignments}</strong>作业</span>
-                      <span><strong>${course.counts.experiments}</strong>资料</span>
-                      <span><strong>${course.counts.knowledge}</strong>知识点</span>
-                    </div>
-                  </article>`,
-                )
-                .join('')}
-            </div>`
-          : `<div class="today-empty"><i data-lucide="graduation-cap"></i><span>还没有课程。导入课表或新建课程后，作业、资料和知识点会自动归到对应课程。</span></div>`
-      }
-    </section>
+    </div>
   `
 }
 
@@ -748,9 +833,9 @@ function guideSteps() {
     {
       id: 'api',
       title: '接入你自己的模型 API',
-      body: '密钥由 DSH 保存在本机凭据文件里，工作站不读取也不上传。启动工作台后，打开左下角「设置 → 模型」填写。',
+      body: '密钥由 DSH 保存在本机凭据文件里，工作站不读取也不上传。请启动 DSH，在它自己的左下角打开「设置 → 模型」填写，不是 ZP Workbench 的设置。',
       done: Boolean(credentials.exists && (credentials.refs?.length || credentials.deepseekStored)),
-      action: { label: '启动并配置', action: 'launch-models' },
+      action: { label: '打开 DSH 工作台', action: 'launch-models' },
     },
     {
       id: 'term',
@@ -828,9 +913,9 @@ function renderWelcomeOverlay() {
             <span><strong>本地掌控</strong>数据、密钥和运行环境默认保留在你自己的电脑上。</span>
           </div>
         </div>
-        <p class="welcome-note">欢迎页只做概括介绍。第一次使用的配置顺序、功能说明和常见问题，都集中在左侧「帮助 → 看这，Ruka！」。</p>
+        <p class="welcome-note">欢迎页只做概括介绍。第一次使用的配置顺序、功能说明和常见问题，都集中在左侧「帮助 → 指南」。</p>
         <div class="welcome-actions">
-          <button class="button secondary" type="button" data-action="open-guide-from-welcome">查看 Ruka 教程</button>
+          <button class="button secondary" type="button" data-action="open-guide-from-welcome">查看使用指南</button>
           <button class="button primary" type="button" data-action="finish-welcome">
             <i data-lucide="arrow-right"></i><span>进入工作站</span>
           </button>
@@ -930,6 +1015,82 @@ function openTextDialog({
   })
 }
 
+function openChoiceDialog({
+  title,
+  description = '',
+  label,
+  options = [],
+  value = '',
+  confirmLabel = '确定',
+}) {
+  const root = document.querySelector('#dialogRoot')
+  if (!root) return Promise.resolve(null)
+
+  return new Promise((resolve) => {
+    let settled = false
+
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      document.removeEventListener('keydown', handleKeydown)
+      root.innerHTML = ''
+      resolve(result)
+    }
+
+    const handleKeydown = (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      finish(null)
+    }
+
+    root.innerHTML = `
+      <div class="dialog-layer">
+        <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialogTitle" aria-describedby="dialogDescription">
+          <div class="dialog-heading">
+            <span class="dialog-eyebrow">LOCAL WORKSPACE</span>
+            <h2 id="dialogTitle">${escapeHtml(title)}</h2>
+            <p id="dialogDescription">${escapeHtml(description)}</p>
+          </div>
+          <form class="dialog-form">
+            <label class="field" for="dialogChoice">
+              <span>${escapeHtml(label)}</span>
+              <select id="dialogChoice">
+                ${options
+                  .map(
+                    (option) =>
+                      `<option value="${escapeHtml(option.value)}" ${option.value === value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`,
+                  )
+                  .join('')}
+              </select>
+            </label>
+            <div class="dialog-actions">
+              <button class="button secondary" type="button" data-dialog-cancel>取消</button>
+              <button class="button primary" type="submit">${escapeHtml(confirmLabel)}</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    `
+
+    const layer = root.querySelector('.dialog-layer')
+    const form = root.querySelector('.dialog-form')
+    const select = root.querySelector('#dialogChoice')
+    const cancelButton = root.querySelector('[data-dialog-cancel]')
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault()
+      finish(select.value || null)
+    })
+    cancelButton.addEventListener('click', () => finish(null))
+    layer.addEventListener('mousedown', (event) => {
+      if (event.target === layer) finish(null)
+    })
+    document.addEventListener('keydown', handleKeydown)
+
+    requestAnimationFrame(() => select.focus())
+  })
+}
+
 function guideActionButton(action) {
   if (!action) return ''
   if (action.page) {
@@ -943,8 +1104,8 @@ function renderRukaGuide() {
     <section class="guide-section ruka-guide">
       <div class="ruka-guide-hero">
         <div>
-          <span class="eyebrow">CODEX QUICKSTART</span>
-          <p>如果你第一次接触 Codex，先从这里开始。下面按「认识、安装、登录、API、网络、Skills、排错」排列，不需要一次全看完。</p>
+          <span class="eyebrow">CODEX + DEEPSEEK GUIDES</span>
+          <p>指南分成「共同概念、Codex 入门、DeepSeek 接入」三部分。Codex 与 DeepSeek 是两个独立板块，不需要按顺序全部看完。</p>
         </div>
         <div class="ruka-guide-links">
           <button class="button secondary" type="button" data-url="https://apps.microsoft.com/detail/9plm9xgg6vks">
@@ -959,10 +1120,10 @@ function renderRukaGuide() {
       <div class="ai-concept-board">
         <div class="ai-board-head">
           <div>
-            <span class="eyebrow">AI BASICS</span>
-            <h3>先分清：谁在思考，谁在干活，谁只是入口</h3>
+            <span class="eyebrow">AI 基础概念</span>
+            <h3>先分清五个角色，再看懂一次请求是怎么完成的</h3>
           </div>
-          <p>记住一条主线：你提出任务，入口把任务交给 Agent，Agent 再调用大模型。API 和 Key 是程序连接模型的通道与钥匙。</p>
+          <p><strong>最短理解：</strong>你提出目标；客户端接收操作；Agent 拆解并执行；大模型负责推理生成；API、Key、Token 分别负责连接、身份和用量。</p>
         </div>
 
         <div class="ai-system-map" aria-label="AI 工作流程">
@@ -971,23 +1132,23 @@ function renderRukaGuide() {
             <i data-lucide="user-round"></i>
             <div>
               <strong>你</strong>
-              <p>提出任务。你操作的是入口，不是直接操作模型。</p>
+              <p>说明目标、补充材料和限制，最后判断结果是否可信。你操作的是客户端，不会直接操作模型。</p>
             </div>
           </article>
           <article class="ai-system-step">
             <span>02</span>
             <i data-lucide="panels-top-left"></i>
             <div>
-              <strong>入口</strong>
-              <p>Codex 桌面版、Codex CLI、豆包桌面版。它是你看见并操作的界面。</p>
+              <strong>客户端</strong>
+              <p>Codex 桌面版、Codex CLI、豆包桌面版等。它是你看见并操作的界面，不等于模型本身。</p>
             </div>
           </article>
           <article class="ai-system-step">
             <span>03</span>
             <i data-lucide="bot"></i>
             <div>
-              <strong>Agent</strong>
-              <p>Codex、DSH 等会拆步骤、读文件、调用工具并检查结果。</p>
+              <strong>Agent 执行代理</strong>
+              <p>Codex、DSH 等会理解任务、拆步骤、读写文件、调用工具，再检查结果。</p>
             </div>
           </article>
           <article class="ai-system-step">
@@ -995,44 +1156,57 @@ function renderRukaGuide() {
             <i data-lucide="brain-circuit"></i>
             <div>
               <strong>大模型</strong>
-              <p>GPT、DeepSeek、豆包模型等负责理解和生成内容。</p>
+              <p>GPT、DeepSeek、通义千问等负责理解、推理和生成内容。模型本身不会直接操作你的文件。</p>
             </div>
           </article>
           <article class="ai-system-step">
             <span>05</span>
             <i data-lucide="file-check-2"></i>
             <div>
-              <strong>结果</strong>
-              <p>最后得到答案、文件、代码，或程序替你完成的实际操作。</p>
+              <strong>API 连接层</strong>
+              <p>让客户端或 Agent 调用模型服务。API 是连接通道，不是模型，也不是桌面应用。</p>
             </div>
           </article>
         </div>
 
         <div class="ai-concept-strip">
           <article>
-            <span>桌面版大模型</span>
-            <strong>做好的整车</strong>
-            <p>ChatGPT、豆包、DeepSeek 桌面版把界面、账号、模型和功能打包在一起。它不是能直接塞进 Codex 的模型文件。</p>
-          </article>
-          <article>
-            <span>API + API Key</span>
-            <strong>插座 + 钥匙</strong>
-            <p>API 让程序调用模型服务，Key 证明是谁在调用、费用算给谁。Key 本身不是模型。</p>
+            <span>API Key</span>
+            <strong>身份与计费凭证</strong>
+            <p>告诉服务方是谁在调用、费用记到哪个账号。它是凭证，不是模型，也不能公开分享。</p>
           </article>
           <article>
             <span>Token</span>
-            <strong>计价和容量刻度</strong>
+            <strong>调用量与价格刻度</strong>
             <p>模型读写的文字会被切成 Token。输入、输出、上下文长度和价格通常都按它计算。</p>
+          </article>
+          <article>
+            <span>桌面 AI 应用</span>
+            <strong>打包好的完整产品</strong>
+            <p>ChatGPT、豆包、DeepSeek 桌面版把界面、账号、模型调用和附加功能整合在一起。它不是可以塞进 Codex 的模型文件。</p>
           </article>
         </div>
 
+        <p class="ai-flow-example">
+          <strong>实际例子：</strong>你在 Codex 中输入“整理这份 PDF” → Codex 作为客户端接收任务 → Agent 读取文件并拆解步骤 → 通过 API 请求 GPT 或 DeepSeek → 大模型返回推理结果 → Agent 写入整理后的内容 → 你检查并确认。
+        </p>
+      </div>
+
+      <section class="ruka-topic-section ruka-topic-codex">
+        <div class="ruka-topic-head">
+          <div>
+            <span class="eyebrow">CODEX QUICKSTART</span>
+            <h3>Codex 入门</h3>
+          </div>
+          <p>先选择桌面应用或 CLI。这里处理 Codex 的安装、登录、网络准备和 Skills；DeepSeek 接入放在下一个独立板块。</p>
+        </div>
         <div class="ruka-route-picker">
           <div class="ruka-route-picker-head">
             <div>
               <span class="eyebrow">CHOOSE YOUR ROUTE</span>
-              <h3>先选你的使用方式</h3>
+              <h3>选择 Codex 入口</h3>
             </div>
-            <p>桌面应用和 CLI 分成两套教程，但两条路线都能接入 ChatGPT 或 DeepSeek API。先选主要入口，再按同一路线完成安装和模型配置。</p>
+            <p>桌面应用适合新手，CLI 适合需要使用终端和自动化的人。两条路线都能登录 ChatGPT，也都能在配置完成后接入 DeepSeek API。</p>
           </div>
           <div class="ruka-route-options">
             <button
@@ -1067,7 +1241,6 @@ function renderRukaGuide() {
             </button>
           </div>
         </div>
-      </div>
 
       ${
         state.rukaRoute
@@ -1078,7 +1251,7 @@ function renderRukaGuide() {
           <div>
             <span class="eyebrow">${state.rukaRoute === 'desktop' ? 'DESKTOP ROUTE' : 'CLI ROUTE'}</span>
             <h3>${state.rukaRoute === 'desktop' ? 'Codex 桌面应用完整教程' : 'Codex CLI 完整教程'}</h3>
-            <p>安装、登录、DeepSeek API、网络准备、Skills 和常见排错都收在这里。</p>
+            <p>安装、登录、网络准备、Skills 和常见排错都收在这里；DeepSeek API 在下一个独立板块。</p>
           </div>
           <button class="icon-button" type="button" data-action="close-ruka-route" title="收起当前教程">
             <i data-lucide="x"></i>
@@ -1088,7 +1261,7 @@ function renderRukaGuide() {
         <details class="ruka-route-desktop" id="rukaDesktopDetails" ${state.rukaOpenSections.has('rukaDesktopDetails') ? 'open' : ''}>
           <summary>
             <span class="ruka-index">01</span>
-            <span><strong>桌面应用教程</strong><small>安装 → ChatGPT 登录 / DeepSeek API</small></span>
+            <span><strong>桌面应用教程</strong><small>安装 → ChatGPT 登录 → 日常使用</small></span>
             <i data-lucide="chevron-down"></i>
           </summary>
           <div class="ruka-body">
@@ -1139,7 +1312,7 @@ function renderRukaGuide() {
         <details class="ruka-route-cli" id="rukaCliDetails" ${state.rukaOpenSections.has('rukaCliDetails') ? 'open' : ''}>
           <summary>
             <span class="ruka-index">01</span>
-            <span><strong>Codex CLI 教程</strong><small>安装 → 登录 → API Key / DeepSeek</small></span>
+            <span><strong>Codex CLI 教程</strong><small>安装 → 登录 → API Key</small></span>
             <i data-lucide="chevron-down"></i>
           </summary>
           <div class="ruka-body">
@@ -1193,11 +1366,27 @@ codex doctor</code></div>
             <p class="ruka-note">API Key 相当于密码。不要写进截图、聊天记录、Git 仓库或公开配置文件；发现泄露后应立即撤销并重新创建。</p>
           </div>
         </details>
+        </div>
+        </div>
+      `
+          : ''
+      }
 
+      </section>
+
+      <section class="ruka-topic-section ruka-topic-deepseek">
+        <div class="ruka-topic-head">
+          <div>
+            <span class="eyebrow">MODEL CONNECTION</span>
+            <h3>DeepSeek 接入 Codex</h3>
+          </div>
+          <p>这是一个独立配置板块。桌面版、CLI 和 IDE 插件共用同一份 <code>~/.codex</code> 配置，不需要先选择上面的桌面或 CLI 路线。</p>
+        </div>
+        <div class="ruka-accordion ruka-topic-accordion">
         <details class="ruka-route-shared" id="rukaDeepseekDetails" ${state.rukaDeepseekOpen ? 'open' : ''}>
           <summary>
-            <span class="ruka-index">02</span>
-            <span><strong>Codex 接入 DeepSeek API</strong><small>桌面版、CLI 与 IDE 共用同一份配置</small></span>
+            <span class="ruka-index">API</span>
+            <span><strong>查看完整接入步骤</strong><small>准备 Key → 一键脚本 / 手动配置 → 验证</small></span>
             <i data-lucide="chevron-down"></i>
           </summary>
           <div class="ruka-body" id="rukaDeepseekCodex">
@@ -1339,10 +1528,21 @@ codex</code></div>
             </div>
           </div>
         </details>
+        </div>
+      </section>
 
+      <section class="ruka-topic-section ruka-topic-reference">
+        <div class="ruka-topic-head">
+          <div>
+            <span class="eyebrow">NETWORK &amp; EXTENSIONS</span>
+            <h3>网络、代理与 Skills</h3>
+          </div>
+          <p>这部分只解释通用原理和安全边界：VPN 不是万能解，Clash Verge 需要订阅，Skill 也不会绕过账号、API 或网络限制。</p>
+        </div>
+        <div class="ruka-accordion ruka-topic-accordion">
         <details class="ruka-route-shared">
           <summary>
-            <span class="ruka-index">03</span>
+            <span class="ruka-index">02</span>
             <span><strong>VPN 是什么</strong><small>只介绍原理和使用方式，不推荐任何服务</small></span>
             <i data-lucide="chevron-down"></i>
           </summary>
@@ -1360,7 +1560,7 @@ codex</code></div>
 
         <details class="ruka-route-shared">
           <summary>
-            <span class="ruka-index">04</span>
+            <span class="ruka-index">03</span>
             <span><strong>机场与 Clash Verge 使用</strong><small>订阅导入、节点、模式和系统代理</small></span>
             <i data-lucide="chevron-down"></i>
           </summary>
@@ -1387,7 +1587,7 @@ codex</code></div>
 
         <details class="ruka-route-shared">
           <summary>
-            <span class="ruka-index">05</span>
+            <span class="ruka-index">04</span>
             <span><strong>Skills 与插件</strong><small>安装、调用、检查和安全边界</small></span>
             <i data-lucide="chevron-down"></i>
           </summary>
@@ -1408,7 +1608,7 @@ codex plugin list</code></div>
 
         <details class="ruka-route-shared">
           <summary>
-            <span class="ruka-index">06</span>
+            <span class="ruka-index">05</span>
             <span><strong>常见问题</strong><small>安装、登录、API、网络和 Skill 不生效</small></span>
             <i data-lucide="chevron-down"></i>
           </summary>
@@ -1424,24 +1624,18 @@ codex plugin list</code></div>
           </div>
         </details>
       </div>
-      </div>
-      `
-          : ''
-      }
+      </section>
     </section>
   `
 }
 
 function openRukaDeepseekGuide({ behavior = 'smooth' } = {}) {
-  if (!state.rukaRoute) state.rukaRoute = 'cli'
-  state.rukaOpenSections.clear()
-  state.rukaOpenSections.add('rukaDeepseekDetails')
   state.rukaDeepseekOpen = true
-  render({ anchor: '.ruka-route-picker' })
+  render({ anchor: '#rukaDeepseekDetails' })
   requestAnimationFrame(() => {
-    const body = document.querySelector('#rukaDeepseekCodex')
-    if (!body) return
-    body.scrollIntoView({
+    const section = document.querySelector('#rukaDeepseekDetails')
+    if (!section) return
+    section.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : behavior,
       block: 'start',
     })
@@ -1462,7 +1656,7 @@ function renderGuide() {
     <section class="guide-hero">
       <div>
         <span class="eyebrow">GETTING STARTED</span>
-        <h2>看这，Ruka！</h2>
+        <h2>指南</h2>
         <p>ZP Workbench 是一个本地学习工作站。它不替你写作业，而是把课程、作业、资料和知识点归到一处，再把需要动脑的部分交给 DeepSeek Harness。</p>
       </div>
       <div class="guide-progress">
@@ -1657,28 +1851,6 @@ function knowledgePrompt(cards) {
   ].join('\n')
 }
 
-function focusPrompt(assignments) {
-  const tasks = assignments
-    .slice(0, 8)
-    .map((assignment, index) => {
-      const due = dueDateMeta(assignment.dueAt)
-      return `${index + 1}. ${assignment.title}｜${assignment.course || '未分类'}｜${assignment.dueAt || '未设截止'}（${due.label}）｜${assignment.notes || '无补充说明'}`
-    })
-    .join('\n')
-  return [
-    '你是我的学习任务助手。下面是当前待处理作业，请帮我安排今天和接下来几天的执行顺序。',
-    '',
-    tasks,
-    '',
-    '请输出：',
-    '1. 按截止时间和依赖关系排序的任务清单；',
-    '2. 每项任务预计需要投入的时间和第一步动作；',
-    '3. 哪些任务可以合并处理，哪些必须单独完成；',
-    '4. 今天必须完成的最小闭环；',
-    '5. 完成后再建议需要沉淀成知识点的内容。',
-  ].join('\n')
-}
-
 async function copyPromptAndLaunch(prompt, successMessage) {
   await guard(() => api.copyText(prompt), '复制提示词失败')
   const result = await api.launch()
@@ -1706,6 +1878,348 @@ function toast(message, tone = 'info', duration = 4200) {
   }, duration)
 }
 
+let quickTooltipTimer = null
+let quickTooltipHideTimer = null
+let quickTooltipTarget = null
+
+function quickTooltipText(target) {
+  if (!target) return ''
+  if (target.dataset.tooltip) return target.dataset.tooltip
+  const title = target.getAttribute('title') || target.dataset.nativeTitle || ''
+  if (!title) return ''
+  const iconOnly = target.matches('.icon-button, .text-button') || !target.textContent.trim()
+  return iconOnly ? title : ''
+}
+
+function quickTooltipTargetFromEvent(event) {
+  const target = event.target.closest?.('[data-tooltip], button[title], button[data-native-title]')
+  return target && quickTooltipText(target) ? target : null
+}
+
+function hideQuickTooltip() {
+  window.clearTimeout(quickTooltipTimer)
+  quickTooltipTimer = null
+  const target = quickTooltipTarget
+  quickTooltipTarget = null
+  if (target?.dataset.nativeTitle) {
+    target.setAttribute('title', target.dataset.nativeTitle)
+    delete target.dataset.nativeTitle
+  }
+  const node = document.querySelector('#quickTooltip')
+  if (!node) return
+  window.clearTimeout(quickTooltipHideTimer)
+  node.classList.remove('is-visible')
+  quickTooltipHideTimer = window.setTimeout(() => {
+    quickTooltipHideTimer = null
+    if (!quickTooltipTarget && !node.classList.contains('is-visible')) node.hidden = true
+  }, 90)
+}
+
+function positionQuickTooltip(target, node) {
+  const rect = target.getBoundingClientRect()
+  const gap = 9
+  const viewportPadding = 12
+  const width = node.offsetWidth
+  const height = node.offsetHeight
+  const left = Math.min(
+    Math.max(viewportPadding, rect.left + rect.width / 2 - width / 2),
+    window.innerWidth - width - viewportPadding,
+  )
+  const preferredTop = rect.top - height - gap
+  const top =
+    preferredTop >= viewportPadding
+      ? preferredTop
+      : Math.min(rect.bottom + gap, window.innerHeight - height - viewportPadding)
+  node.style.left = `${Math.round(left)}px`
+  node.style.top = `${Math.round(Math.max(viewportPadding, top))}px`
+}
+
+function showQuickTooltip(target) {
+  window.clearTimeout(quickTooltipTimer)
+  window.clearTimeout(quickTooltipHideTimer)
+  quickTooltipHideTimer = null
+  quickTooltipTarget = target
+  quickTooltipTimer = window.setTimeout(() => {
+    quickTooltipTimer = null
+    const node = document.querySelector('#quickTooltip')
+    const text = quickTooltipText(target) || target?.getAttribute('aria-label') || ''
+    if (!node || quickTooltipTarget !== target || !target?.isConnected || !text) return
+    if (target.hasAttribute('title')) {
+      target.dataset.nativeTitle = target.getAttribute('title')
+      target.removeAttribute('title')
+    }
+    node.textContent = text
+    node.hidden = false
+    positionQuickTooltip(target, node)
+    requestAnimationFrame(() => {
+      if (quickTooltipTarget === target) node.classList.add('is-visible')
+    })
+  }, 80)
+}
+
+document.addEventListener('pointerover', (event) => {
+  const target = quickTooltipTargetFromEvent(event)
+  if (!target || target === quickTooltipTarget) return
+  if (event.relatedTarget && target.contains(event.relatedTarget)) return
+  showQuickTooltip(target)
+})
+
+document.addEventListener('pointerout', (event) => {
+  const target = quickTooltipTargetFromEvent(event)
+  if (!target || target !== quickTooltipTarget) return
+  if (event.relatedTarget && target.contains(event.relatedTarget)) return
+  hideQuickTooltip()
+})
+
+document.addEventListener('focusin', (event) => {
+  const target = quickTooltipTargetFromEvent(event)
+  if (target) showQuickTooltip(target)
+})
+
+document.addEventListener('focusout', (event) => {
+  if (quickTooltipTargetFromEvent(event)) hideQuickTooltip()
+})
+
+document.addEventListener('scroll', hideQuickTooltip, true)
+window.addEventListener('resize', hideQuickTooltip)
+
+let timePickerPopover = null
+let timePickerTarget = null
+let timePickerCloseTimer = null
+let timePickerDraft = { hour: 0, minute: 0 }
+
+function normalizeTimeValue(value) {
+  const match = String(value ?? '')
+    .trim()
+    .match(/^(\d{1,2}):?(\d{1,2})$/)
+  if (!match) return ''
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return ''
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+function formatTimeInputValue(value) {
+  const cleaned = String(value ?? '').replace(/[^\d:]/g, '')
+  if (cleaned.includes(':')) {
+    const [hour = '', minute = ''] = cleaned.split(':')
+    return `${hour.replace(/\D/g, '').slice(0, 2)}:${minute.replace(/\D/g, '').slice(0, 2)}`
+  }
+  const digits = cleaned.replace(/\D/g, '').slice(0, 4)
+  if (digits.length <= 2) return digits
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`
+}
+
+function timeControlMarkup(value, attributes = '') {
+  const controlValue = normalizeTimeValue(value) || ''
+  return `
+    <div class="time-control" data-time-control data-time-value="${escapeHtml(controlValue)}">
+      <input
+        class="time-control-input"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        spellcheck="false"
+        maxlength="5"
+        value="${escapeHtml(controlValue)}"
+        placeholder="HH:MM"
+        role="combobox"
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="timePickerPopover"
+        data-time-input
+        ${attributes}
+      />
+      <button class="time-control-trigger" type="button" data-time-trigger aria-label="选择时间" title="选择时间">
+        <i data-lucide="clock"></i>
+      </button>
+    </div>
+  `
+}
+
+function ensureTimePickerPopover() {
+  if (timePickerPopover?.isConnected) return timePickerPopover
+  const hours = Array.from(
+    { length: 24 },
+    (_item, hour) =>
+      `<button type="button" role="option" aria-selected="false" data-time-part="hour" data-time-value="${hour}">${String(hour).padStart(2, '0')}</button>`,
+  ).join('')
+  const minutes = Array.from(
+    { length: 60 },
+    (_item, minute) =>
+      `<button type="button" role="option" aria-selected="false" data-time-part="minute" data-time-value="${minute}">${String(minute).padStart(2, '0')}</button>`,
+  ).join('')
+  timePickerPopover = document.createElement('div')
+  timePickerPopover.id = 'timePickerPopover'
+  timePickerPopover.className = 'time-picker-popover'
+  timePickerPopover.hidden = true
+  timePickerPopover.setAttribute('role', 'dialog')
+  timePickerPopover.setAttribute('aria-label', '选择时间')
+  timePickerPopover.innerHTML = `
+    <div class="time-picker-head" aria-hidden="true">
+      <span>小时</span>
+      <span>分钟</span>
+    </div>
+    <div class="time-picker-columns">
+      <div class="time-picker-column" data-time-column="hour" aria-label="小时">${hours}</div>
+      <div class="time-picker-column" data-time-column="minute" aria-label="分钟">${minutes}</div>
+    </div>
+    <div class="time-picker-foot">
+      <button type="button" class="time-picker-now" data-time-now>现在</button>
+      <button type="button" class="time-picker-done" data-time-done>完成</button>
+    </div>
+  `
+  document.body.append(timePickerPopover)
+  refreshIcons()
+  return timePickerPopover
+}
+
+function updateTimePickerSelection() {
+  if (!timePickerPopover) return
+  timePickerPopover.querySelectorAll('[data-time-part]').forEach((option) => {
+    const selected =
+      Number(option.dataset.timeValue) ===
+      (option.dataset.timePart === 'hour' ? timePickerDraft.hour : timePickerDraft.minute)
+    option.setAttribute('aria-selected', selected ? 'true' : 'false')
+  })
+  requestAnimationFrame(() => {
+    timePickerPopover
+      ?.querySelectorAll('[data-time-part][aria-selected="true"]')
+      .forEach((option) => option.scrollIntoView({ block: 'center' }))
+  })
+}
+
+function positionTimePicker() {
+  if (!timePickerPopover || !timePickerTarget?.isConnected) return
+  const anchor = timePickerTarget.closest('.time-control') || timePickerTarget
+  const rect = anchor.getBoundingClientRect()
+  const width = timePickerPopover.offsetWidth || 236
+  const height = timePickerPopover.offsetHeight || 300
+  const padding = 12
+  const gap = 8
+  const left = Math.min(Math.max(padding, rect.left), window.innerWidth - width - padding)
+  const below = rect.bottom + gap
+  const above = rect.top - height - gap
+  const top =
+    below + height <= window.innerHeight - padding || above < padding
+      ? Math.min(below, window.innerHeight - height - padding)
+      : above
+  timePickerPopover.style.left = `${Math.round(left)}px`
+  timePickerPopover.style.top = `${Math.round(Math.max(padding, top))}px`
+}
+
+function openTimePicker(input) {
+  if (!input || input.disabled || input.readOnly) return
+  const popover = ensureTimePickerPopover()
+  window.clearTimeout(timePickerCloseTimer)
+  timePickerCloseTimer = null
+  timePickerTarget = input
+  const value = normalizeTimeValue(input.value) || '00:00'
+  const [hour, minute] = value.split(':').map(Number)
+  timePickerDraft = { hour, minute }
+  popover.hidden = false
+  popover.classList.remove('is-open')
+  input.setAttribute('aria-expanded', 'true')
+  updateTimePickerSelection()
+  positionTimePicker()
+  requestAnimationFrame(() => {
+    if (timePickerTarget === input) {
+      positionTimePicker()
+      popover.classList.add('is-open')
+    }
+  })
+}
+
+function closeTimePicker({ restoreFocus = false } = {}) {
+  if (!timePickerPopover) return
+  const target = timePickerTarget
+  timePickerTarget = null
+  target?.setAttribute('aria-expanded', 'false')
+  if (restoreFocus && target?.isConnected) target.focus()
+  timePickerPopover.classList.remove('is-open')
+  window.clearTimeout(timePickerCloseTimer)
+  timePickerCloseTimer = window.setTimeout(() => {
+    timePickerCloseTimer = null
+    if (!timePickerTarget) timePickerPopover.hidden = true
+  }, 150)
+}
+
+function commitTimePicker() {
+  const input = timePickerTarget
+  if (!input) return
+  const value = `${String(timePickerDraft.hour).padStart(2, '0')}:${String(timePickerDraft.minute).padStart(2, '0')}`
+  input.value = value
+  const control = input.closest('[data-time-control]')
+  if (control) control.dataset.timeValue = value
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+  closeTimePicker({ restoreFocus: true })
+}
+
+document.addEventListener('click', (event) => {
+  const part = event.target.closest?.('[data-time-part]')
+  if (part) {
+    const value = Number(part.dataset.timeValue)
+    if (part.dataset.timePart === 'hour') timePickerDraft.hour = value
+    else timePickerDraft.minute = value
+    updateTimePickerSelection()
+    return
+  }
+  if (event.target.closest?.('[data-time-now]')) {
+    const now = new Date()
+    timePickerDraft = { hour: now.getHours(), minute: now.getMinutes() }
+    updateTimePickerSelection()
+    return
+  }
+  if (event.target.closest?.('[data-time-done]')) {
+    commitTimePicker()
+    return
+  }
+  const trigger = event.target.closest?.('[data-time-trigger]')
+  if (trigger) {
+    const input = trigger.closest('.time-control')?.querySelector('[data-time-input]')
+    if (input && timePickerTarget === input && !timePickerPopover?.hidden) closeTimePicker()
+    else openTimePicker(input)
+    return
+  }
+  const input = event.target.closest?.('[data-time-input]')
+  if (input) {
+    if (timePickerTarget !== input || timePickerPopover?.hidden) openTimePicker(input)
+    return
+  }
+  if (timePickerTarget && !event.target.closest?.('#timePickerPopover')) closeTimePicker()
+})
+
+document.addEventListener('keydown', (event) => {
+  const input = event.target.closest?.('[data-time-input]')
+  if (input) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      openTimePicker(input)
+      return
+    }
+    if (event.key === 'Escape' && timePickerTarget === input) {
+      event.preventDefault()
+      closeTimePicker({ restoreFocus: true })
+      return
+    }
+    if (event.key === 'Enter' && timePickerTarget === input) {
+      event.preventDefault()
+      commitTimePicker()
+    }
+    return
+  }
+  if (event.key === 'Escape' && timePickerTarget) {
+    event.preventDefault()
+    closeTimePicker({ restoreFocus: true })
+  }
+})
+
+document.addEventListener('scroll', (event) => {
+  if (!timePickerTarget || event.target.closest?.('#timePickerPopover')) return
+  positionTimePicker()
+})
+window.addEventListener('resize', positionTimePicker)
+
 async function guard(action, errorPrefix = '操作失败') {
   try {
     return await action()
@@ -1717,13 +2231,28 @@ async function guard(action, errorPrefix = '操作失败') {
 
 async function refreshStatus({ check = false } = {}) {
   if (check) {
-    const update = await guard(() => api.checkUpdate({ force: true }), '检查更新失败')
-    state.status = { ...(state.status || {}), ...update }
+    const taskId = beginUiTask('正在检查 DSH 版本', '正在同步当前通道的版本信息。')
+    try {
+      const update = await guard(() => api.checkUpdate({ force: true }), '检查更新失败')
+      state.status = { ...(state.status || {}), ...update }
+      completeUiTask(
+        taskId,
+        update.updateAvailable ? '发现 DSH 新版本' : 'DSH 版本检查完成',
+        update.updateAvailable
+          ? `可更新到 ${update.selectedVersion || '最新版本'}`
+          : update.installedVersion
+            ? `当前已安装 ${update.installedVersion}`
+            : '尚未安装 DSH',
+      )
+    } catch (error) {
+      failUiTask(taskId, '检查 DSH 更新失败', error.message)
+      throw error
+    }
   } else {
     state.status = await api.getStatus()
   }
   updateChrome()
-  if (state.page === 'overview' || state.page === 'updates') render()
+  if (state.page === 'updates') render()
 }
 
 function updateChrome() {
@@ -1755,6 +2284,24 @@ function updateChrome() {
   if (topText) topText.textContent = label
   if (topVersion) topVersion.textContent = versionLabel
   updateDot.classList.toggle('hidden', !status.updateAvailable)
+
+  const running = Boolean(status.process?.running)
+  const topLaunchButton = document.querySelector('#topLaunchButton')
+  const topLaunchLabel = document.querySelector('#topLaunchLabel')
+  const runtimeLaunchAction = document.querySelector('#runtimeLaunchAction')
+  const runtimeLaunchLabel = document.querySelector('#runtimeLaunchLabel')
+  const runtimeLaunchDetail = document.querySelector('#runtimeLaunchDetail')
+  const runtimeStopAction = document.querySelector('#runtimeStopAction')
+  if (topLaunchButton) topLaunchButton.disabled = running
+  if (topLaunchLabel) topLaunchLabel.textContent = running ? '工作台运行中' : '启动工作台'
+  if (runtimeLaunchAction) runtimeLaunchAction.disabled = running
+  if (runtimeLaunchLabel) runtimeLaunchLabel.textContent = running ? '工作台运行中' : '启动工作台'
+  if (runtimeLaunchDetail) {
+    runtimeLaunchDetail.textContent = running
+      ? status.process?.url || '本地服务正在运行'
+      : '启动本地 DeepSeek Harness'
+  }
+  if (runtimeStopAction) runtimeStopAction.disabled = !running
 }
 
 function formatLauncherProgress(progress) {
@@ -1909,19 +2456,17 @@ function syncLauncherUpdateAbout() {
 }
 
 function render(options = {}) {
+  if (quickTooltipTarget && !quickTooltipTarget.isConnected) hideQuickTooltip()
+  if (timePickerTarget && !timePickerTarget.isConnected) closeTimePicker()
   const view = document.querySelector('#view')
   const samePage = view.dataset.page === state.page
-  const settingsDraft =
-    !options.ignoreSettingsDraft && state.page === 'settings' && view.dataset.page === 'settings'
-      ? collectSettings()
-      : null
   view.classList.toggle('is-settled', samePage)
   const previousScrollTop = view.scrollTop
   const anchorSelector = options.anchor || ''
   const previousAnchorTop = anchorSelector
     ? view.querySelector(anchorSelector)?.getBoundingClientRect().top
     : null
-  const meta = pageMeta[state.page] || pageMeta.overview
+  const meta = pageMeta[state.page] || pageMeta.today
   document.querySelector('#pageEyebrow').textContent = meta[0]
   document.querySelector('#pageTitle').textContent = meta[1]
   document.querySelector('#pageSummary').textContent = meta[2]
@@ -1934,7 +2479,6 @@ function render(options = {}) {
 
   const renderers = {
     today: renderToday,
-    overview: renderOverview,
     schedule: renderSchedule,
     assignments: renderAssignments,
     experiments: renderExperiments,
@@ -1950,19 +2494,14 @@ function render(options = {}) {
     about: renderAbout,
   }
   view.dataset.page = state.page
-  view.innerHTML = (renderers[state.page] || renderOverview)()
+  const content = (renderers[state.page] || renderToday)()
+  view.innerHTML =
+    state.page === 'today'
+      ? content
+      : `<div class="workbench-canvas route-canvas" data-route-canvas>${content}</div>`
   syncOnboardingOverlay()
   refreshIcons()
   syncExperimentMorph()
-  if (settingsDraft) {
-    for (const element of view.querySelectorAll('[data-setting]')) {
-      const key = element.dataset.setting
-      if (!Object.hasOwn(settingsDraft, key)) continue
-      if (element.type === 'checkbox') element.checked = Boolean(settingsDraft[key])
-      else element.value = settingsDraft[key] ?? ''
-    }
-    syncSettingsDirtyBar()
-  }
   if (state.page === 'logs') scrollLogs()
   requestAnimationFrame(() => {
     const nextView = document.querySelector('#view')
@@ -1979,232 +2518,6 @@ function render(options = {}) {
     }
     nextView.scrollTop = previousScrollTop
   })
-}
-
-function renderOverview() {
-  const status = state.status
-  if (!status)
-    return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取本地状态</span></div>'
-  const version = versionState(status)
-  const processTone = status.process?.running ? 'running' : 'stopped'
-  const installed = status.installedVersion || '未安装'
-  const selected = status.selectedVersion || '暂不可用'
-
-  return `
-    <section class="status-band ${version.tone}">
-      <div class="status-band-main">
-        <div class="status-symbol">
-          <i data-lucide="${version.tone === 'update' ? 'download' : version.tone === 'danger' ? 'circle-alert' : 'shield-check'}"></i>
-        </div>
-        <div>
-          <div class="status-title-row">
-            <h2>${escapeHtml(version.title)}</h2>
-            <span class="badge ${version.tone}">${escapeHtml(version.badge)}</span>
-          </div>
-          <p>${escapeHtml(version.body)}</p>
-        </div>
-      </div>
-      <div class="status-band-actions">
-        <button class="button secondary" type="button" data-action="check-update">
-          <i data-lucide="refresh-cw"></i><span>重新检查</span>
-        </button>
-        <button class="button ${status.updateAvailable || !status.installed ? 'primary' : 'secondary'}"
-          type="button" data-action="${status.updateAvailable ? 'install-update' : 'force-install'}">
-          <i data-lucide="${status.installed ? 'download' : 'package-plus'}"></i>
-          <span>${status.updateAvailable ? '立即更新' : status.installed ? '重新安装' : '安装 Harness'}</span>
-        </button>
-      </div>
-    </section>
-
-    ${renderFocusBoard()}
-
-    <section class="section">
-      <div class="section-heading">
-        <div>
-          <h2>运行环境</h2>
-          <p>启动器自带 Node、npm 与 pnpm 运行时，不要求用户预先安装开发环境。</p>
-        </div>
-        <button class="text-button" type="button" data-page-jump="settings">
-          修改设置 <i data-lucide="chevron-right"></i>
-        </button>
-      </div>
-      <div class="environment-grid">
-        <div class="metric">
-          <i data-lucide="cpu"></i>
-          <span>内置 Node.js</span>
-          <strong>${escapeHtml(status.nodeVersion)}</strong>
-        </div>
-        <div class="metric">
-          <i data-lucide="package"></i>
-          <span>内置 npm</span>
-          <strong>${escapeHtml(status.npmVersion)}</strong>
-        </div>
-        <div class="metric">
-          <i data-lucide="hard-drive"></i>
-          <span>DSH 数据目录</span>
-          <strong class="path-value" title="${escapeHtml(status.dshHome)}">${escapeHtml(status.dshHome)}</strong>
-        </div>
-        <div class="metric">
-          <i data-lucide="shield-check"></i>
-          <span>系统 Node</span>
-          <strong>${status.systemNode ? '已检测到，非必需' : '未安装，可正常使用'}</strong>
-        </div>
-      </div>
-    </section>
-
-    <div class="dashboard-columns">
-      <section class="section launch-panel">
-        <div class="section-heading">
-          <div>
-            <h2>工作台</h2>
-            <p>启动官方 Web UI，按设置在内置窗口或默认浏览器中打开。</p>
-          </div>
-          <span class="run-pill ${processTone}">
-            <span></span>${status.process?.running ? '运行中' : '已停止'}
-          </span>
-        </div>
-        <div class="launch-summary">
-          <div>
-            <span>监听地址</span>
-            <strong>${escapeHtml(status.process?.url || `${state.settings.host}:${state.settings.port}`)}</strong>
-          </div>
-          <div>
-            <span>启动方式</span>
-            <strong>${state.settings.openMode === 'embedded' ? '内置窗口' : '默认浏览器'}</strong>
-          </div>
-          <div>
-            <span>进程 PID</span>
-            <strong>${status.process?.pid || '--'}</strong>
-          </div>
-        </div>
-        <div class="button-row">
-          <button class="button primary" type="button" data-action="launch" ${status.process?.running ? 'disabled' : ''}>
-            <i data-lucide="play"></i><span>启动工作台</span>
-          </button>
-          <button class="button secondary" type="button" data-action="stop" ${status.process?.running ? '' : 'disabled'}>
-            <i data-lucide="square"></i><span>停止</span>
-          </button>
-          <button class="icon-button" type="button" data-action="open-dsh-home" title="打开 DSH 数据目录">
-            <i data-lucide="folder-open"></i>
-          </button>
-        </div>
-      </section>
-
-      <section class="section version-panel">
-        <div class="section-heading">
-          <div>
-            <h2>版本</h2>
-            <p>${escapeHtml(state.channels[state.settings.channel]?.description || '')}</p>
-          </div>
-          ${versionBadge(status.installed ? status.updateState : 'not-installed')}
-        </div>
-        <div class="version-flow">
-          <div>
-            <span>已安装</span>
-            <strong>${escapeHtml(installed)}</strong>
-          </div>
-          <i data-lucide="arrow-right"></i>
-          <div>
-            <span>${escapeHtml(status.channelLabel)}</span>
-            <strong>${escapeHtml(selected)}</strong>
-          </div>
-        </div>
-        <button class="text-button" type="button" data-page-jump="updates">
-          查看全部版本信息 <i data-lucide="chevron-right"></i>
-        </button>
-      </section>
-    </div>
-
-    <section class="section">
-      <div class="section-heading">
-        <div>
-          <h2>最近活动</h2>
-          <p>安装、更新和启动过程会在这里留下可追踪记录。</p>
-        </div>
-        <button class="text-button" type="button" data-page-jump="logs">
-          打开完整日志 <i data-lucide="chevron-right"></i>
-        </button>
-      </div>
-      ${renderActivityTable(state.logs.slice(-6).reverse())}
-    </section>
-  `
-}
-
-function renderFocusBoard() {
-  if (!state.workspace) {
-    return '<section class="focus-board loading-panel"><i data-lucide="loader"></i><span>正在读取学习工作区</span></section>'
-  }
-  const stats = assignmentStats()
-  const urgent = state.workspace.assignments
-    .filter((item) => item.status !== 'done')
-    .sort(assignmentSort)
-    .slice(0, 3)
-  return `
-    <section class="focus-board">
-      <div class="focus-board-head">
-        <div>
-          <span class="eyebrow">TODAY'S FOCUS</span>
-          <h2>学习工作区</h2>
-          <p>先清空最紧急的作业，再把课程文件集中归档，最后从资料中生成可复习的知识点。</p>
-        </div>
-        <div class="button-row">
-          <button class="button secondary" type="button" data-page-jump="assignments">
-            <i data-lucide="list-todo"></i><span>作业收件箱</span>
-          </button>
-          <button class="button secondary" type="button" data-page-jump="knowledge">
-            <i data-lucide="brain-circuit"></i><span>知识点</span>
-          </button>
-          <button class="button secondary" type="button" data-page-jump="experiments">
-            <i data-lucide="folder-open"></i><span>资料库</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="focus-board-grid">
-        <div class="focus-metrics">
-          <div><span>待处理</span><strong>${stats.open}</strong><small>包含进行中的任务</small></div>
-          <div><span>进行中</span><strong>${stats.doing}</strong><small>正在处理的作业</small></div>
-          <div><span>资料文件</span><strong>${stats.experiments}</strong><small>已归类的课程资料</small></div>
-          <div><span>知识点</span><strong>${stats.knowledge}</strong><small>可搜索的复习线索</small></div>
-        </div>
-        <div class="focus-quick">
-          <div>
-            <strong>交给 DSH 继续处理</strong>
-            <span>生成提示词并复制，启动工作台后直接粘贴。</span>
-          </div>
-          <div class="button-row">
-            <button class="button primary" type="button" data-action="copy-focus-prompt" ${stats.open ? '' : 'disabled'}>
-              <i data-lucide="notebook-pen"></i><span>拆解待办</span>
-            </button>
-            <button class="button secondary" type="button" data-page-jump="knowledge">
-              <i data-lucide="sparkles"></i><span>${stats.knowledge ? '打开知识点' : '生成知识点'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      ${
-        urgent.length
-          ? `<div class="focus-list">
-              ${urgent
-                .map((assignment) => {
-                  const due = dueDateMeta(assignment.dueAt)
-                  return `
-                    <button type="button" data-page-jump="assignments" data-focus-assignment="${escapeHtml(assignment.id)}">
-                      <span class="focus-list-status ${escapeHtml(assignment.status)}"></span>
-                      <span>
-                        <strong>${escapeHtml(assignment.title)}</strong>
-                        <small>${escapeHtml(assignment.course || '未分类')}</small>
-                      </span>
-                      <span class="badge ${due.tone}">${escapeHtml(due.label)}</span>
-                    </button>`
-                })
-                .join('')}
-            </div>`
-          : '<div class="focus-empty"><i data-lucide="circle-check"></i><span>当前没有待处理作业，可以整理知识点或安排复习。</span></div>'
-      }
-    </section>
-  `
 }
 
 function renderAssignmentComposer() {
@@ -2311,14 +2624,14 @@ function renderScheduleComposer() {
             <span>结束节次</span>
             <input id="scheduleEndPeriod" type="number" min="1" max="20" value="${editing?.endPeriod || 2}" />
           </label>
-          <label class="field">
+          <div class="field">
             <span>开始时间</span>
-            <input id="scheduleStartTime" type="time" value="${escapeHtml(editing?.startTime || '')}" />
-          </label>
-          <label class="field">
+            ${timeControlMarkup(editing?.startTime || '', 'id="scheduleStartTime"')}
+          </div>
+          <div class="field">
             <span>结束时间</span>
-            <input id="scheduleEndTime" type="time" value="${escapeHtml(editing?.endTime || '')}" />
-          </label>
+            ${timeControlMarkup(editing?.endTime || '', 'id="scheduleEndTime"')}
+          </div>
           <label class="field schedule-week-field">
             <span>上课周次</span>
             <input id="scheduleWeekText" type="text" maxlength="80" value="${escapeHtml(scheduleWeekText(editing))}" placeholder="例如：1-16、1,3,5、1-16单周；留空表示每周" />
@@ -2343,6 +2656,78 @@ function renderScheduleComposer() {
   `
 }
 
+function renderScheduleTimeEditor() {
+  if (!state.scheduleTimeEditorOpen || !state.workspace?.schedule) return ''
+  const schedule = state.workspace.schedule
+  const rows =
+    state.schedulePeriodDraft ||
+    Array.from({ length: schedule.maxPeriod }, (_item, index) => {
+      const entry = schedule.periodTimes?.[index] || {}
+      return {
+        period: index + 1,
+        startTime: entry.startTime || '',
+        endTime: entry.endTime || '',
+      }
+    })
+  const minimumPeriods = Math.max(
+    1,
+    ...(schedule.courses || []).map((course) => Number(course.endPeriod) || 0),
+  )
+  return `
+    <div class="schedule-editor-layer" data-schedule-time-editor-layer>
+      <section class="workspace-composer schedule-time-editor" role="dialog" aria-modal="true" aria-labelledby="scheduleTimeEditorTitle">
+        <div class="composer-head">
+          <div>
+            <span class="eyebrow">PERIOD TIMES</span>
+            <h2 id="scheduleTimeEditorTitle">节次时间</h2>
+          </div>
+          <button class="icon-button compact" type="button" data-action="close-schedule-time-editor" title="关闭">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="schedule-period-list">
+          ${rows
+            .map(
+              (entry, index) => `
+                <div class="schedule-period-row" data-schedule-period-row>
+                  <span>${index + 1}</span>
+                  <div class="schedule-time-field">
+                    <small>开始</small>
+                    ${timeControlMarkup(entry.startTime || '', `data-schedule-period-start aria-label="第 ${index + 1} 节开始时间"`)}
+                  </div>
+                  <div class="schedule-time-field">
+                    <small>结束</small>
+                    ${timeControlMarkup(entry.endTime || '', `data-schedule-period-end aria-label="第 ${index + 1} 节结束时间"`)}
+                  </div>
+                </div>`,
+            )
+            .join('')}
+        </div>
+        <div class="schedule-period-help">
+          <i data-lucide="sparkles"></i>
+          <span>只有课程填写了时间时，自动识别才会更新对应节次。</span>
+        </div>
+        <div class="composer-actions schedule-period-actions">
+          <button class="button secondary" type="button" data-action="infer-schedule-period-times">
+            <i data-lucide="wand-sparkles"></i><span>自动识别</span>
+          </button>
+          <button class="button secondary" type="button" data-action="add-schedule-period" ${rows.length >= 20 ? 'disabled' : ''}>
+            <i data-lucide="plus"></i><span>增加一节</span>
+          </button>
+          <button class="button secondary" type="button" data-action="remove-schedule-period" ${rows.length <= minimumPeriods ? 'disabled' : ''}>
+            <i data-lucide="minus"></i><span>减少一节</span>
+          </button>
+          <span class="composer-spacer"></span>
+          <button class="button secondary" type="button" data-action="close-schedule-time-editor">取消</button>
+          <button class="button primary" type="button" data-action="save-schedule-period-times">
+            <i data-lucide="check"></i><span>保存</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  `
+}
+
 function renderSchedule() {
   const schedule = state.workspace?.schedule || null
   const importing = state.scheduleImporting
@@ -2350,8 +2735,8 @@ function renderSchedule() {
     return `
       <section class="page-intro action-intro">
         <div>
-          <h2>把课表文件变成周视图</h2>
-          <p>支持 Excel、CSV、ICS 和网页表格。导入后会识别星期、节次、周次、课程、教师和教室。</p>
+          <h2>把课表文件变成可编辑周视图</h2>
+          <p>支持 Excel、CSV、ICS 和网页表格。导入后会识别星期、节次、上课时间、周次、课程、教师和教室。</p>
         </div>
         <div class="button-row">
           <button class="button primary" type="button" data-action="choose-schedule-file" ${importing ? 'disabled' : ''}>
@@ -2400,12 +2785,7 @@ function renderSchedule() {
   const layout = scheduleLayout(schedule.courses, week)
   const currentWeekday = new Date().getDay() || 7
   const visibleCount = [...layout.values()].reduce((total, courses) => total + courses.length, 0)
-  const periodTimes = new Map()
-  for (const course of schedule.courses) {
-    if (course.startTime && !periodTimes.has(course.startPeriod)) {
-      periodTimes.set(course.startPeriod, course.startTime)
-    }
-  }
+  const periodTimes = schedulePeriodTimeMap(schedule)
   const weekOptions = [
     '<option value="all">全部教学周</option>',
     ...Array.from(
@@ -2419,7 +2799,7 @@ function renderSchedule() {
     <section class="page-intro action-intro schedule-intro">
       <div>
         <h2>本周课表</h2>
-        <p>导入文件后自动生成周视图；遇到重叠课程时会并排显示，不会互相盖住。</p>
+        <p>课程时间和节次时间都可以单独调整；遇到重叠课程时会并排显示，不会互相盖住。</p>
       </div>
       <div class="button-row">
         <button class="button primary" type="button" data-action="open-schedule-composer">
@@ -2443,12 +2823,18 @@ function renderSchedule() {
 
     <section class="schedule-source-bar">
       <div class="schedule-source-file">
-        <span class="file-sigil tone-sheet"><span>${escapeHtml(schedule.source?.path ? fileExtensionLabel(schedule.source?.name) : 'EDIT')}</span></span>
+        <span class="file-sigil tone-${schedule.source?.path ? fileTone(schedule.source.name) : 'generic'}">
+          <i data-lucide="${schedule.source?.path ? fileIconName(schedule.source.name) : 'calendar-days'}"></i>
+          <span>${escapeHtml(schedule.source?.path ? fileExtensionLabel(schedule.source.name) : 'EDIT')}</span>
+        </span>
         <div>
           <strong>${escapeHtml(schedule.source?.name || '手动维护')}</strong>
           <span>${schedule.source?.path ? `${escapeHtml(formatBytes(schedule.source.size))} · 导入于 ${escapeHtml(formatTime(schedule.importedAt))}` : `本地维护 · 更新于 ${escapeHtml(formatTime(schedule.importedAt))}`}</span>
         </div>
       </div>
+      <button class="button secondary schedule-period-button" type="button" data-action="open-schedule-time-editor">
+        <i data-lucide="clock-3"></i><span>节次时间</span>
+      </button>
       <label class="field schedule-week-select">
         <span>查看周次</span>
         <select data-schedule-week>${weekOptions}</select>
@@ -2456,6 +2842,7 @@ function renderSchedule() {
     </section>
 
     ${renderScheduleComposer()}
+    ${renderScheduleTimeEditor()}
 
     <section class="schedule-board" aria-label="周课表">
       <div class="schedule-board-head">
@@ -2478,14 +2865,30 @@ function renderSchedule() {
         ).join('')}
 
         <div class="schedule-times">
-          ${Array.from(
-            { length: schedule.maxPeriod },
-            (_item, index) => `
-              <div class="schedule-time-cell">
-                <strong>${index + 1}</strong>
-                <span>${escapeHtml(periodTimes.get(index + 1) || '')}</span>
-              </div>`,
-          ).join('')}
+          ${Array.from({ length: schedule.maxPeriod }, (_item, index) => {
+            const time = periodTimes.get(index + 1) || {}
+            const startTime = time.startTime || ''
+            const endTime = time.endTime || ''
+            const timeLabel =
+              startTime && endTime
+                ? `${startTime}–${endTime}`
+                : startTime
+                  ? `起 ${startTime}`
+                  : endTime
+                    ? `止 ${endTime}`
+                    : ''
+            const timeTitle = [
+              startTime ? `开始 ${startTime}` : '',
+              endTime ? `结束 ${endTime}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')
+            return `
+                <div class="schedule-time-cell ${startTime ? 'has-start' : ''} ${endTime ? 'has-end' : ''}">
+                  <strong>${index + 1}</strong>
+                  <span title="${escapeHtml(timeTitle)}">${escapeHtml(timeLabel)}</span>
+                </div>`
+          }).join('')}
         </div>
 
         ${Array.from({ length: 7 }, (_item, index) => {
@@ -2496,8 +2899,13 @@ function renderSchedule() {
             <div class="schedule-day-column ${currentWeekday === weekday ? 'is-today' : ''}">
               <div class="schedule-day-body" style="--schedule-lanes:${laneCount}">
                 ${courses
-                  .map(
-                    (course) => `
+                  .map((course) => {
+                    const times = scheduleCourseTimes(schedule, course)
+                    const timeLabel =
+                      times.startTime && times.endTime
+                        ? `${times.startTime}–${times.endTime}`
+                        : times.startTime || times.endTime || ''
+                    return `
                       <button
                         type="button"
                         class="schedule-course tone-${(course.name.length + weekday) % 4} ${state.highlightScheduleCourseId === course.id ? 'is-highlighted' : ''}"
@@ -2507,13 +2915,16 @@ function renderSchedule() {
                         data-id="${escapeHtml(course.id)}"
                         data-schedule-course-id="${escapeHtml(course.id)}"
                       >
-                        <div class="schedule-course-period">${course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 节` : `第 ${course.startPeriod}-${course.endPeriod} 节`}</div>
+                        <div class="schedule-course-period">
+                          <span>${course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 节` : `第 ${course.startPeriod}-${course.endPeriod} 节`}</span>
+                          ${timeLabel ? `<time>${escapeHtml(timeLabel)}</time>` : ''}
+                        </div>
                         <strong>${escapeHtml(course.name)}</strong>
                         <span>${escapeHtml([course.location, course.teacher].filter(Boolean).join(' · ') || '地点待确认')}</span>
                         <small>${escapeHtml(scheduleWeekText(course) || '每周')}</small>
                         <i class="schedule-course-edit" data-lucide="pencil"></i>
-                      </button>`,
-                  )
+                      </button>`
+                  })
                   .join('')}
               </div>
             </div>`
@@ -2681,7 +3092,7 @@ function renderExperiments() {
     <section class="page-intro action-intro">
       <div>
         <h2>资料库</h2>
-        <p>拖入任意类型的课程资料后会先匹配已有文件夹；没有匹配才新建。课程文件夹可以随时整体改名。</p>
+        <p>拖入任意类型的课程资料后会先生成分类建议，等你确认后再归档。课程文件夹可以随时整体改名。</p>
       </div>
       <div class="button-row">
         <button class="button secondary" type="button" data-action="open-experiment-directory">
@@ -2708,8 +3119,8 @@ function renderExperiments() {
         <morph-icon class="experiment-morph" aria-hidden="true"></morph-icon>
       </div>
       <div class="experiment-dropzone-copy">
-        <strong>${state.experimentImporting ? '正在复制并分类…' : state.experimentDropActive ? '松手后自动归档' : '把课程资料拖到这里'}</strong>
-        <span>${state.experimentDropActive ? '会先检索已有分类，匹配不到时自动新建。' : '支持 PDF、Word、Excel、PPT、图片、压缩包、代码等任意文件类型。'}</span>
+        <strong>${state.experimentImporting ? '正在复制并归档…' : state.experimentSuggestionBusy ? '正在分析资料归属…' : state.experimentDropTargetGroup ? `松手归档到“${escapeHtml(state.experimentDropTargetGroup)}”` : state.experimentDropActive ? '松手后生成分类建议' : '把课程资料拖到这里'}</strong>
+        <span>${state.experimentDropTargetGroup ? '文件会直接进入你指定的课程文件夹。' : state.experimentDropActive ? '确认分类建议后才会复制文件。' : '支持 PDF、Word、Excel、PPT、图片、压缩包、代码等任意文件类型。'}</span>
       </div>
       <button class="button secondary" type="button" data-action="choose-experiment-files" ${state.experimentImporting ? 'disabled' : ''}>
         <i data-lucide="upload"></i><span>选择文件</span>
@@ -2736,7 +3147,7 @@ function renderExperiments() {
                 ${groups
                   .map(
                     (group) => `
-                      <div class="experiment-group ${group.name === selectedGroup?.name ? 'selected' : ''}" data-experiment-group="${escapeHtml(group.name)}">
+                      <div class="experiment-group ${group.name === selectedGroup?.name ? 'selected' : ''} ${group.name === state.experimentDropTargetGroup ? 'is-drop-target' : ''}" data-experiment-group="${escapeHtml(group.name)}" data-experiment-group-drop="${escapeHtml(group.name)}">
                         <button class="experiment-group-select" type="button" data-action="select-experiment-group" data-group="${escapeHtml(group.name)}">
                           <span class="experiment-folder">
                             <i data-lucide="folder"></i>
@@ -2749,10 +3160,10 @@ function renderExperiments() {
                           <i data-lucide="chevron-right"></i>
                         </button>
                         <span class="experiment-group-actions">
-                          <button class="icon-button compact" type="button" data-action="rename-experiment-group" data-group="${escapeHtml(group.name)}" title="重命名课程文件夹">
+                          <button class="icon-button compact" type="button" data-action="rename-experiment-group" data-group="${escapeHtml(group.name)}" data-tooltip="重命名课程文件夹" aria-label="重命名课程文件夹">
                             <i data-lucide="pencil"></i>
                           </button>
-                          <button class="icon-button compact" type="button" data-action="open-experiment-group" data-group="${escapeHtml(group.name)}" title="在资源管理器中打开课程文件夹">
+                          <button class="icon-button compact" type="button" data-action="open-experiment-group" data-group="${escapeHtml(group.name)}" data-tooltip="在资源管理器中打开课程文件夹" aria-label="在资源管理器中打开课程文件夹">
                             <i data-lucide="folder-open"></i>
                           </button>
                         </span>
@@ -2761,7 +3172,7 @@ function renderExperiments() {
                   .join('')}
               </div>
             </aside>
-            <section class="experiment-explorer-main" aria-label="${escapeHtml(selectedGroup?.name || '资料文件')}">
+            <section class="experiment-explorer-main ${selectedGroup?.name === state.experimentDropTargetGroup ? 'is-drop-target' : ''}" aria-label="${escapeHtml(selectedGroup?.name || '资料文件')}" ${selectedGroup ? `data-experiment-group-drop="${escapeHtml(selectedGroup.name)}"` : ''}>
               ${
                 selectedGroup
                   ? `<header class="experiment-explorer-head">
@@ -2770,39 +3181,34 @@ function renderExperiments() {
                         <h3>${escapeHtml(selectedGroup.name)}</h3>
                         <p>${selectedGroup.items.length} 个文件 · ${formatBytes(selectedGroup.items.reduce((sum, item) => sum + (Number(item.size) || 0), 0))}${selectedKnowledgeCount ? ` · ${selectedKnowledgeCount} 个知识点` : ''}</p>
                       </div>
-                      <div class="experiment-explorer-head-actions">
-                        <button class="button secondary" type="button" data-action="open-experiment-group" data-group="${escapeHtml(selectedGroup.name)}">
-                          <i data-lucide="folder-open"></i><span>打开文件夹</span>
-                        </button>
-                        <button class="button secondary" type="button" data-action="rename-experiment-group" data-group="${escapeHtml(selectedGroup.name)}">
-                          <i data-lucide="pencil"></i><span>重命名</span>
-                        </button>
-                      </div>
                     </header>
                     <div class="experiment-file-list" role="group">
                       ${selectedGroup.items
                         .map(
                           (item) => `
-                            <article class="experiment-file" data-experiment-id="${escapeHtml(item.id)}">
-                              <span class="file-sigil tone-${fileTone(item.originalName)}"><span>${escapeHtml(fileExtensionLabel(item.originalName))}</span></span>
+                            <article class="experiment-file ${state.experimentDraggingId === item.id ? 'is-dragging' : ''} ${state.experimentMovingId === item.id ? 'is-moving' : ''}" data-experiment-id="${escapeHtml(item.id)}" draggable="${state.experimentMovingId === item.id ? 'false' : 'true'}" title="拖动到左侧课程文件夹可直接移动">
+                              <span class="file-sigil tone-${fileTone(item.originalName)}">
+                                <i data-lucide="${fileIconName(item.originalName)}"></i>
+                                <span>${escapeHtml(fileExtensionLabel(item.originalName))}</span>
+                              </span>
                               <div class="experiment-file-copy">
                                 <strong title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</strong>
                                 <span>${escapeHtml(item.originalName)} · ${formatBytes(item.size)} · ${formatTime(item.modifiedAt || item.importedAt)}${knowledgeCounts.get(item.id) ? ` · ${knowledgeCounts.get(item.id)} 个知识点` : ''}</span>
                               </div>
                               <div class="experiment-file-actions">
-                                <button class="icon-button compact" type="button" data-action="generate-knowledge" data-id="${escapeHtml(item.id)}" title="${knowledgeCounts.get(item.id) ? '重新生成知识点' : '生成知识点'}" ${state.knowledgeGeneratingId === item.id ? 'disabled' : ''}>
+                                <button class="icon-button compact" type="button" data-action="generate-knowledge" data-id="${escapeHtml(item.id)}" data-tooltip="${knowledgeCounts.get(item.id) ? '重新生成知识点' : '生成知识点'}" aria-label="${knowledgeCounts.get(item.id) ? '重新生成知识点' : '生成知识点'}" ${state.knowledgeGeneratingId === item.id || state.experimentMovingId === item.id ? 'disabled' : ''}>
                                   <i data-lucide="${state.knowledgeGeneratingId === item.id ? 'loader-circle' : 'sparkles'}"></i>
                                 </button>
-                                <button class="icon-button compact" type="button" data-action="open-experiment-file" data-id="${escapeHtml(item.id)}" title="打开文件">
+                                <button class="icon-button compact" type="button" data-action="open-experiment-file" data-id="${escapeHtml(item.id)}" data-tooltip="打开文件" aria-label="打开文件" ${state.experimentMovingId === item.id ? 'disabled' : ''}>
                                   <i data-lucide="external-link"></i>
                                 </button>
-                                <button class="icon-button compact" type="button" data-action="reveal-experiment-file" data-id="${escapeHtml(item.id)}" title="在文件夹中显示">
+                                <button class="icon-button compact" type="button" data-action="reveal-experiment-file" data-id="${escapeHtml(item.id)}" data-tooltip="在文件夹中显示" aria-label="在文件夹中显示" ${state.experimentMovingId === item.id ? 'disabled' : ''}>
                                   <i data-lucide="locate-fixed"></i>
                                 </button>
-                                <button class="icon-button compact" type="button" data-action="edit-experiment-group" data-id="${escapeHtml(item.id)}" title="修改课程分组">
-                                  <i data-lucide="folder-pen"></i>
+                                <button class="icon-button compact" type="button" data-action="edit-experiment-group" data-id="${escapeHtml(item.id)}" data-tooltip="移动到其他课程文件夹" aria-label="移动到其他课程文件夹" ${state.experimentMovingId === item.id ? 'disabled' : ''}>
+                                  <i data-lucide="${state.experimentMovingId === item.id ? 'loader-circle' : 'folder-pen'}"></i>
                                 </button>
-                                <button class="icon-button compact danger" type="button" data-action="delete-experiment" data-id="${escapeHtml(item.id)}" title="从工作站移除记录">
+                                <button class="icon-button compact danger" type="button" data-action="delete-experiment" data-id="${escapeHtml(item.id)}" data-tooltip="从工作站移除记录" aria-label="从工作站移除记录" ${state.experimentMovingId === item.id ? 'disabled' : ''}>
                                   <i data-lucide="trash-2"></i>
                                 </button>
                               </div>
@@ -2939,7 +3345,6 @@ function renderKnowledge() {
         <i data-lucide="search"></i>
         <input id="knowledgeSearch" type="search" value="${escapeHtml(state.knowledgeQuery)}" placeholder="搜索标题、课程、标签、来源或内容" />
       </label>
-      <span>${cards.length} 个知识点</span>
     </section>
 
     ${
@@ -3032,30 +3437,6 @@ function renderKnowledge() {
             </button>
           </div>`
     }
-  `
-}
-
-function renderActivityTable(entries) {
-  if (!entries.length) return '<div class="empty-state">暂无活动记录。</div>'
-  return `
-    <div class="table-wrap compact-table">
-      <table>
-        <thead><tr><th>时间</th><th>模块</th><th>级别</th><th>内容</th></tr></thead>
-        <tbody>
-          ${entries
-            .map(
-              (entry) => `
-                <tr>
-                  <td class="muted nowrap">${formatTime(entry.at)}</td>
-                  <td><span class="scope-tag">${escapeHtml(entry.scope)}</span></td>
-                  <td><span class="level ${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</span></td>
-                  <td class="message-cell">${escapeHtml(entry.message)}</td>
-                </tr>`,
-            )
-            .join('')}
-        </tbody>
-      </table>
-    </div>
   `
 }
 
@@ -3460,116 +3841,209 @@ function renderModels() {
     return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取模型配置状态</span></div>'
   }
 
-  const defaults = config.defaultModel || {}
-  const provider = defaults.provider || '未选择'
-  const model = defaults.model || '未选择'
-  const effort = defaults.reasoningEffort || '默认'
+  const live = state.modelState
+  const defaults = live?.defaultModel || config.defaultModel || {}
+  const provider = defaults.provider || 'DeepSeek 官方'
+  const model = defaults.model || 'deepseek-flash'
+  const effort = defaults.reasoningEffort || '模型默认'
   const refs = config.credentials?.refs || []
-  const credentialState = !config.credentials?.exists
-    ? '尚未创建'
-    : refs.length
-      ? `已存 ${refs.length} 个引用`
-      : '已创建，暂无引用'
+  const stored = live?.credential?.configured ?? Boolean(config.credentials?.deepseekStored)
+  const writable = live?.credential?.writable ?? true
+  const source = live?.credential?.source
+  const sourceLabel =
+    source === 'file'
+      ? 'DSH 凭据文件'
+      : source === 'env'
+        ? '系统环境变量'
+        : source
+          ? 'DSH 官方凭据库'
+          : stored
+            ? '已写入 DSH'
+            : '尚未配置'
+  const credentialState = stored ? '已连接' : '待配置'
+  const liveHint = live?.available
+    ? '已由 DSH 实时确认'
+    : live?.error
+      ? `暂未连接 DSH：${live.error}`
+      : 'DSH 尚未启动，当前显示本地状态'
+  const statusTitle = stored ? 'DeepSeek 已连接' : '连接你的 DeepSeek API'
+  const statusCopy = stored
+    ? 'API Key 已保存在 DSH 官方凭据库中。新的 DSH 会话会直接使用这套凭据。'
+    : '粘贴 API Key 后，ZP Workbench 会直接写入 DSH 官方凭据库，不需要再进入网页重复配置。'
 
   return `
     <section class="page-intro">
       <div>
-        <h2>模型与 API</h2>
-        <p>模型提供方、API 密钥和默认模型均由 DeepSeek Harness 管理。ZP Workbench 只负责启动与定位配置，不读取或保存密钥值。</p>
+        <h2>模型连接</h2>
+        <p>在工作台内安全接入 DeepSeek API；默认模型与更多提供方仍由 DSH 统一管理。</p>
       </div>
       <div class="button-row">
         <button class="button secondary" type="button" data-action="refresh-models">
-          <i data-lucide="refresh-cw"></i><span>刷新状态</span>
+          <i data-lucide="refresh-cw"></i><span>刷新连接</span>
         </button>
         <button class="button primary" type="button" data-action="launch-models">
-          <i data-lucide="arrow-up-right"></i><span>启动并配置</span>
+          <i data-lucide="arrow-up-right"></i><span>高级模型设置</span>
         </button>
       </div>
     </section>
 
-    <section class="api-callout">
-      <div class="api-callout-icon"><i data-lucide="key-round"></i></div>
-      <div>
-        <span class="eyebrow">DSH 设置</span>
-        <h2>在“设置 → 模型”中接入你自己的 API</h2>
-        <p>启动工作台后，打开左下角“设置”，选择“模型”，为 DeepSeek 或自定义提供方填写 API 密钥、Base URL 和模型列表。保存后密钥由 DSH 以只写方式存入本机凭据文件。</p>
+    <section class="model-connection ${stored ? 'is-connected' : 'needs-key'}">
+      <div class="model-connection-head">
+        <div class="model-connection-mark">
+          <i data-lucide="${stored ? 'shield-check' : 'key-round'}"></i>
+        </div>
+        <div class="model-connection-copy">
+          <span class="eyebrow">DEEPSEEK API</span>
+          <h2>${statusTitle}</h2>
+          <p>${statusCopy}</p>
+        </div>
+        <span class="model-connection-badge ${stored ? 'is-connected' : ''}">
+          <i data-lucide="${stored ? 'circle-check' : 'circle-dashed'}"></i>
+          ${credentialState}
+        </span>
+      </div>
+
+      <div class="model-connection-body">
+        <div class="model-key-panel">
+          <div class="model-key-heading">
+            <div>
+              <strong>${stored ? '替换 API Key' : '填写 API Key'}</strong>
+              <span>${liveHint}</span>
+            </div>
+            <span class="model-source-pill"><i data-lucide="database"></i>${escapeHtml(sourceLabel)}</span>
+          </div>
+          <label class="model-key-field" for="deepseekApiKey">
+            <span>DeepSeek API Key</span>
+            <div class="model-key-input">
+              <i data-lucide="key-round"></i>
+              <input
+                id="deepseekApiKey"
+                class="model-secret-input"
+                type="text"
+                name="deepseek-api-credential"
+                autocomplete="off"
+                autocapitalize="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
+                spellcheck="false"
+                readonly
+                placeholder="${stored ? '输入新 Key 可安全替换现有凭据' : 'sk-...'}"
+                ${writable ? '' : 'disabled'}
+              />
+            </div>
+          </label>
+          <div class="model-key-actions">
+            <button class="button primary" type="button" data-action="save-deepseek-key" ${writable ? '' : 'disabled'}>
+              <i data-lucide="plug-zap"></i><span>${stored ? '替换并连接' : '保存并连接'}</span>
+            </button>
+            ${
+              stored && writable
+                ? `<button class="button danger-outline" type="button" data-action="clear-deepseek-key">
+                    <i data-lucide="unplug"></i><span>清除凭据</span>
+                  </button>`
+                : ''
+            }
+          </div>
+          <p class="model-key-note">
+            <i data-lucide="lock-keyhole"></i>
+            <span>密钥只写入 DSH，不回显到界面，也不会进入 ZP Workbench 日志。</span>
+          </p>
+        </div>
+
+        <div class="model-connection-facts">
+          <div>
+            <span>凭据状态</span>
+            <strong>${credentialState}</strong>
+            <small>${escapeHtml(sourceLabel)}</small>
+          </div>
+          <div>
+            <span>当前提供方</span>
+            <strong>${escapeHtml(provider)}</strong>
+            <small>来自 DSH 默认模型</small>
+          </div>
+          <div>
+            <span>默认模型</span>
+            <strong>${escapeHtml(model)}</strong>
+            <small>推理等级：${escapeHtml(effort)}</small>
+          </div>
+        </div>
       </div>
     </section>
-
-    <div class="model-status-grid">
-      <div class="model-status-card">
-        <span>当前提供方</span>
-        <strong>${escapeHtml(provider)}</strong>
-        <small>来自 DSH 默认模型配置</small>
-      </div>
-      <div class="model-status-card">
-        <span>默认模型</span>
-        <strong>${escapeHtml(model)}</strong>
-        <small>推理等级：${escapeHtml(effort)}</small>
-      </div>
-      <div class="model-status-card">
-        <span>凭据存储</span>
-        <strong>${escapeHtml(credentialState)}</strong>
-        <small>${config.credentials?.exists ? '密钥值不会传入启动器界面' : '首次保存密钥时自动创建'}</small>
-      </div>
-    </div>
 
     <section class="section">
       <div class="section-heading">
         <div>
-          <h2>配置入口</h2>
-          <p>这里只显示是否存在配置和引用名称，不显示任何密钥内容。</p>
+          <h2>连接方式</h2>
+          <p>基础连接在这里完成；模型列表、Base URL 和额外提供方继续在 DSH 的模型设置中管理。</p>
         </div>
       </div>
-      <div class="config-list">
-        <div class="config-row">
+      <div class="model-route-grid">
+        <div class="model-route-item">
+          <i data-lucide="zap"></i>
+          <div>
+            <strong>在 ZP Workbench 接入</strong>
+            <span>适合首次配置和快速更换 DeepSeek API Key。</span>
+          </div>
+        </div>
+        <div class="model-route-item">
           <i data-lucide="sliders-horizontal"></i>
           <div>
-            <strong>settings.yaml</strong>
-            <span>${escapeHtml(config.settings?.path || '')}</span>
+            <strong>在 DSH 中深入管理</strong>
+            <span>适合修改默认模型、推理等级、Base URL 和额外提供方。</span>
           </div>
-          <span class="badge ${config.settings?.exists ? 'success' : 'neutral'}">${config.settings?.exists ? '已创建' : '未创建'}</span>
-        </div>
-        <div class="config-row">
-          <i data-lucide="shield-check"></i>
-          <div>
-            <strong>.credentials.yaml</strong>
-            <span>${escapeHtml(config.credentials?.path || '')}</span>
-          </div>
-          <span class="badge ${config.credentials?.exists ? 'success' : 'neutral'}">${config.credentials?.exists ? '已创建' : '未创建'}</span>
-        </div>
-        <div class="config-row">
-          <i data-lucide="user-round-cog"></i>
-          <div>
-            <strong>DSH Web Profile</strong>
-            <span>${escapeHtml(config.profile?.path || '')}</span>
-          </div>
-          <span class="badge ${config.profile?.exists ? 'success' : 'neutral'}">${config.profile?.exists ? '已创建' : '未创建'}</span>
         </div>
       </div>
-      ${
-        refs.length
-          ? `<div class="credential-refs">
-              <span>已识别凭据引用</span>
-              <div>${refs.map((ref) => `<code>${escapeHtml(ref)}</code>`).join('')}</div>
-            </div>`
-          : ''
-      }
     </section>
 
-    <section class="section">
-      <div class="section-heading">
-        <div>
-          <h2>安全边界</h2>
-          <p>这能避免启动器成为第二套配置系统，防止版本更新覆盖或重复保存模型密钥。</p>
+    <details class="model-advanced">
+      <summary>
+        <span><i data-lucide="settings-2"></i>高级与诊断</span>
+        <small>配置文件位置、凭据引用与安全边界</small>
+        <i data-lucide="chevron-down"></i>
+      </summary>
+      <div class="model-advanced-body">
+        <div class="config-list">
+          <div class="config-row">
+            <i data-lucide="sliders-horizontal"></i>
+            <div>
+              <strong>settings.yaml</strong>
+              <span>${escapeHtml(config.settings?.path || '')}</span>
+            </div>
+            <span class="badge ${config.settings?.exists ? 'success' : 'neutral'}">${config.settings?.exists ? '已创建' : '未创建'}</span>
+          </div>
+          <div class="config-row">
+            <i data-lucide="shield-check"></i>
+            <div>
+              <strong>.credentials.yaml</strong>
+              <span>${escapeHtml(config.credentials?.path || '')}</span>
+            </div>
+            <span class="badge ${config.credentials?.exists ? 'success' : 'neutral'}">${config.credentials?.exists ? '已创建' : '未创建'}</span>
+          </div>
+          <div class="config-row">
+            <i data-lucide="user-round-cog"></i>
+            <div>
+              <strong>DSH Web Profile</strong>
+              <span>${escapeHtml(config.profile?.path || '')}</span>
+            </div>
+            <span class="badge ${config.profile?.exists ? 'success' : 'neutral'}">${config.profile?.exists ? '已创建' : '未创建'}</span>
+          </div>
+        </div>
+        ${
+          refs.length
+            ? `<div class="credential-refs">
+                <span>已识别凭据引用</span>
+                <div>${refs.map((ref) => `<code>${escapeHtml(ref)}</code>`).join('')}</div>
+              </div>`
+            : ''
+        }
+        <div class="boundary-grid">
+          <div><i data-lucide="badge-check"></i><span><strong>仅 DSH 写入</strong><small>配置通过 DSH 官方接口保存，不直接改写 YAML。</small></span></div>
+          <div><i data-lucide="eye-off"></i><span><strong>界面不回显</strong><small>启动器只读取配置状态，不保存或返回密钥值。</small></span></div>
+          <div><i data-lucide="database"></i><span><strong>配置不随更新丢失</strong><small>DSH_HOME 与隔离运行时目录相互独立。</small></span></div>
         </div>
       </div>
-      <div class="boundary-grid">
-        <div><i data-lucide="badge-check"></i><span><strong>仅 DSH 写入</strong><small>API 密钥通过 DSH 的凭据接口保存。</small></span></div>
-        <div><i data-lucide="eye-off"></i><span><strong>界面不回显</strong><small>启动器只读取引用的名称和文件状态。</small></span></div>
-        <div><i data-lucide="database"></i><span><strong>配置不随更新丢失</strong><small>DSH_HOME 与隔离运行时目录相互独立。</small></span></div>
-      </div>
-    </section>
+    </details>
   `
 }
 
@@ -3608,6 +4082,75 @@ function renderLogs() {
 
 function renderSettings() {
   const settings = state.settings
+  const jev = state.jev || {}
+  const jevEnabled = settings.jevEnabled !== false
+  const jevAutoClassify = settings.jevAutoClassify !== false
+  const jevHasApiKey = Boolean(jev.hasApiKey)
+  const jevEnhancedActive = jevEnabled && jevAutoClassify && jevHasApiKey
+  const jevAwaitingKey = jevEnabled && !jevHasApiKey
+  const jevPaused = jevEnabled && jevHasApiKey && !jevAutoClassify
+  const jevStatusTone = jev.checking
+    ? 'info'
+    : jev.lastError
+      ? 'warning'
+      : jevAwaitingKey
+        ? 'warning'
+        : !jevEnabled
+          ? 'neutral'
+          : jevPaused
+            ? 'neutral'
+            : jev.compatibilityPassed
+              ? 'success'
+              : 'neutral'
+  const jevStatusText = jev.checking
+    ? '正在检查'
+    : jev.lastError
+      ? '需要处理'
+      : jevAwaitingKey
+        ? '等待配置'
+        : !jevEnabled
+          ? '本地模式可用'
+          : jevPaused
+            ? '请求已暂停'
+            : jev.compatibilityPassed
+              ? '连接正常'
+              : '尚未检测'
+  const jevModeTitle = jevEnhancedActive
+    ? 'Jev 云端增强模式'
+    : jevAwaitingKey
+      ? 'Jev 增强待配置'
+      : jevPaused
+        ? '免费本地模式（Jev 已暂停）'
+        : '免费本地模式（不使用 Jev）'
+  const jevModeBadge = jevEnhancedActive
+    ? '需 Key · 外网'
+    : jevAwaitingKey
+      ? '缺少 Key'
+      : jevPaused
+        ? '本地规则'
+        : '不含 Jev'
+  const jevModeBadgeTone = jevEnhancedActive ? 'neutral' : jevAwaitingKey ? 'warning' : 'success'
+  const jevToggleTitle = !jevEnabled
+    ? '启用 Jev 云端增强'
+    : jevPaused
+      ? 'Jev 已启用，分类已暂停'
+      : jevHasApiKey
+        ? 'Jev 云端增强已启用'
+        : 'Jev 已启用，待配置 Key'
+  const jevToggleHint = !jevEnabled
+    ? '需要 TypeSafe Key 与外网'
+    : jevPaused
+      ? '可在下方重新开启自动分类'
+      : jevHasApiKey
+        ? '拖入资料时请求 Jev'
+        : '保存 Key 后自动生效'
+  const jevModeDescription = jevAwaitingKey
+    ? 'Jev 增强开关已打开，但尚未配置 TypeSafe API Key，因此暂时仍使用免费本地规则。请在下方保存 Key 并测试连接。'
+    : !jevEnabled
+      ? '无需 TypeSafe Key、无需外网，也不调用 Jev；资料分类完全在本机完成。打开上方开关后可配置 Jev 云端增强。'
+      : jevPaused
+        ? '已配置 TypeSafe Key，但自动分类请求已关闭；拖入资料时仍使用免费本地规则，不会连接 TypeSafe。'
+        : '已配置 TypeSafe API Key，拖入资料时会通过外网请求 Jev 分类建议，仍需人工确认。'
   return `
     <section class="page-intro">
       <div>
@@ -3618,8 +4161,6 @@ function renderSettings() {
         <i data-lucide="rotate-ccw"></i><span>恢复默认</span>
       </button>
     </section>
-
-    ${settingsSaveBar()}
 
     <section class="settings-grid">
       <div class="settings-group">
@@ -3696,7 +4237,7 @@ function renderSettings() {
       </div>
 
       <div class="settings-group">
-        <div class="settings-group-head"><h2>自动检查</h2><p>启动时发现新版本会在总览中提示。</p></div>
+        <div class="settings-group-head"><h2>自动检查</h2><p>启动时发现新版本会在顶部状态栏和版本与更新页提示。</p></div>
         ${toggleRow('autoCheckDsh', '启动时检查 DSH 版本', settings.autoCheckDsh)}
         ${toggleRow('autoCheckLauncher', '启动时检查启动器更新', settings.autoCheckLauncher)}
         ${toggleRow('minimizeToTray', '关闭窗口后最小化到托盘', settings.minimizeToTray)}
@@ -3726,6 +4267,173 @@ function renderSettings() {
         </div>
       </div>
 
+      <div class="settings-group settings-group-wide jev-settings-group">
+        <div class="settings-group-head">
+          <div class="settings-group-title">
+            <h2>Jev 智能分类</h2>
+            <span class="badge ${jevStatusTone}">${escapeHtml(jevStatusText)}</span>
+          </div>
+          <p>Jev 是 TypeSafe 的云端结构化模型，不是聊天模型。启用后需要独立的 TypeSafe API Key 和外网；不启用则使用免费本地模式。</p>
+        </div>
+
+        <div class="jev-mode-hero ${jevEnhancedActive ? 'enhanced' : 'local'}">
+          <div class="jev-mode-hero-icon" aria-hidden="true">
+            <i data-lucide="${jevEnhancedActive ? 'sparkles' : 'laptop'}"></i>
+          </div>
+          <div class="jev-mode-hero-copy">
+            <span class="jev-mode-kicker">当前运行模式</span>
+            <div class="jev-current-mode-title">
+              <strong>${escapeHtml(jevModeTitle)}</strong>
+              <span class="badge ${jevModeBadgeTone}">${escapeHtml(jevModeBadge)}</span>
+            </div>
+            <p>${escapeHtml(jevModeDescription)}</p>
+          </div>
+          <label
+            class="jev-mode-switch"
+            data-setting-choice="jevEnabled"
+            data-value="${settings.jevEnabled !== false ? 'false' : 'true'}"
+          >
+            <span class="jev-mode-switch-copy">
+              <strong>${escapeHtml(jevToggleTitle)}</strong>
+              <small>${escapeHtml(jevToggleHint)}</small>
+            </span>
+            <input type="checkbox" ${settings.jevEnabled !== false ? 'checked' : ''} />
+            <span class="toggle" aria-hidden="true"></span>
+          </label>
+        </div>
+
+        <div class="jev-config-grid">
+          <section class="jev-primary-setup">
+            <label class="field">
+              <span>TypeSafe API Key（Jev 专用）<em>可选</em></span>
+              <input id="jevApiKey" type="password" autocomplete="off" placeholder="${jev.hasApiKey ? '已安全保存；留空不会覆盖' : '输入 TypeSafe API Key'}" />
+              <small>和 DeepSeek API Key 不通用。只使用免费本地模式时无需填写；密钥保存在 Windows 安全存储中，不写入设置、日志或备份。</small>
+            </label>
+            <div class="button-row jev-key-actions">
+              <button class="button primary" type="button" data-action="save-jev-key">
+                <i data-lucide="key-round"></i><span>保存并测试 Jev</span>
+              </button>
+              <button class="button secondary" type="button" data-action="test-jev" ${jev.hasApiKey ? '' : 'disabled'}>
+                <i data-lucide="plug-zap"></i><span>测试连接</span>
+              </button>
+              <button class="button danger-outline" type="button" data-action="clear-jev-key" ${jev.hasApiKey ? '' : 'disabled'}>
+                <i data-lucide="trash-2"></i><span>清除密钥</span>
+              </button>
+            </div>
+          </section>
+          <aside class="jev-free-note">
+            <i data-lucide="shield-check" aria-hidden="true"></i>
+            <div>
+              <strong>免费本地模式不使用 Jev</strong>
+              <p>它使用工作站自带规则，不需要 TypeSafe Key、不需要外网，也没有 Jev 调用费用。</p>
+            </div>
+          </aside>
+        </div>
+
+        ${
+          jev.lastError
+            ? `<div class="warning-note"><i data-lucide="triangle-alert"></i><span>${escapeHtml(jev.lastError)}</span></div>`
+            : ''
+        }
+
+        <div class="jev-disclosures">
+          <details class="jev-disclosure">
+            <summary>
+              <span><strong>本地规则与 Jev 增强有什么区别</strong><small>发送范围、网络要求、费用与准确度</small></span>
+              <i data-lucide="chevron-down"></i>
+            </summary>
+            <div class="jev-disclosure-body">
+              <div class="jev-mode-grid" aria-label="Jev 配置差异">
+                <section class="jev-mode-panel">
+                  <span class="jev-mode-kicker">不使用 Jev</span>
+                  <strong>免费本地规则模式</strong>
+                  <ul>
+                    <li>完全本地运行，不需要外网</li>
+                    <li>不需要 TypeSafe API Key</li>
+                    <li>不会向 TypeSafe 发送资料信息</li>
+                    <li>按文件名、扩展名和已有文件夹分类</li>
+                    <li>命名复杂时，可能需要手动修改建议</li>
+                  </ul>
+                </section>
+                <section class="jev-mode-panel enhanced">
+                  <span class="jev-mode-kicker">调用 TypeSafe 云端 Jev</span>
+                  <strong>Jev 云端增强模式</strong>
+                  <ul>
+                    <li>必须配置 TypeSafe API Key</li>
+                    <li>必须连接外网访问 TypeSafe</li>
+                    <li>发送文件名、文件夹名和可选的有限文字片段</li>
+                    <li>更擅长理解命名混乱的课程资料</li>
+                    <li>仍必须人工确认，可能产生官方额度费用</li>
+                  </ul>
+                </section>
+              </div>
+            </div>
+          </details>
+
+          <details class="jev-disclosure">
+            <summary>
+              <span><strong>如何获取 Jev 专用的 TypeSafe API Key</strong><small>官方控制台创建，和 DeepSeek Key 不通用</small></span>
+              <i data-lucide="chevron-down"></i>
+            </summary>
+            <div class="jev-disclosure-body">
+              <section class="jev-key-guide">
+                <ol>
+                  <li>打开 TypeSafe Console，登录或注册账号</li>
+                  <li>进入控制台首页的 API Keys 页面</li>
+                  <li>创建并复制新的 API Key</li>
+                  <li>粘贴到上方输入框，保存并测试连接</li>
+                </ol>
+                <div class="button-row">
+                  <button class="button secondary" type="button" data-url="https://console.typesafe.ai/">
+                    <i data-lucide="external-link"></i><span>打开官方控制台</span>
+                  </button>
+                  <button class="text-button" type="button" data-url="https://docs.typesafe.ai/introduction/quickstart">
+                    查看官方获取教程
+                  </button>
+                </div>
+              </section>
+            </div>
+          </details>
+
+          <details class="jev-disclosure">
+            <summary>
+              <span><strong>隐私、模型状态与高级设置</strong><small>发送范围、API 地址和功能开关</small></span>
+              <i data-lucide="chevron-down"></i>
+            </summary>
+            <div class="jev-disclosure-body">
+              <p class="setting-hint">这里的配置只影响 Jev 分类，不会修改 DeepSeek Harness 的模型或 API Key。</p>
+              <div class="jev-status-strip">
+                <div>
+                  <span>调用别名</span>
+                  <strong>${escapeHtml(jev.model || 'jev-latest')}</strong>
+                </div>
+                <div>
+                  <span>实际模型</span>
+                  <strong>${escapeHtml(jev.lastModel || '尚未检测')}</strong>
+                </div>
+                <div>
+                  <span>最近检测</span>
+                  <strong>${escapeHtml(jev.lastCheckedAt ? formatTime(jev.lastCheckedAt) : '尚未检测')}</strong>
+                </div>
+              </div>
+              <div class="jev-toggle-grid">
+                ${toggleRow('jevAutoClassify', '拖入资料时请求分类建议', settings.jevAutoClassify !== false)}
+                ${toggleRow('jevIncludeText', '允许发送有限的文档文字片段', settings.jevIncludeText !== false)}
+              </div>
+              <label class="field">
+                <span>API 地址</span>
+                <input type="text" data-setting="jevApiBaseUrl" value="${escapeHtml(settings.jevApiBaseUrl || 'https://api.typesafe.ai/v1')}" />
+                <small>默认使用 TypeSafe 官方地址；只有接入兼容代理时才需要修改。</small>
+              </label>
+              <div class="security-note">
+                <i data-lucide="shield-check"></i>
+                <span>每次判断最多发送文件名、扩展名、已有文件夹名称和约 3,600 字文档片段，不会上传完整文件。网络不可用时自动回到本地规则。</span>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
       <div class="settings-group settings-group-wide">
         <div class="settings-group-head">
           <h2>学期与提醒</h2>
@@ -3747,16 +4455,16 @@ function renderSettings() {
             <span>作业提前提醒（天）</span>
             <input type="number" min="0" max="14" data-setting="assignmentReminderDays" value="${escapeHtml(settings.assignmentReminderDays ?? 1)}" />
           </label>
-          <label class="field">
+          <div class="field">
             <span>每日提醒时间</span>
-            <input type="time" data-setting="dailyDigestTime" value="${escapeHtml(settings.dailyDigestTime || '08:00')}" />
-          </label>
+            ${timeControlMarkup(settings.dailyDigestTime || '08:00', 'data-setting="dailyDigestTime"')}
+          </div>
         </div>
         <div class="two-fields">
-          <label class="field">
+          <div class="field">
             <span>复习提醒时间</span>
-            <input type="time" data-setting="reviewReminderTime" value="${escapeHtml(settings.reviewReminderTime || '19:00')}" />
-          </label>
+            ${timeControlMarkup(settings.reviewReminderTime || '19:00', 'data-setting="reviewReminderTime"')}
+          </div>
           <div class="field field-inline-action">
             <span>测试</span>
             <button class="button secondary" type="button" data-action="test-reminder">
@@ -4100,7 +4808,7 @@ function renderBackup() {
               <input id="backupRetention" type="number" min="3" max="100" value="${escapeHtml(config.backupRetention)}" />
             </label>
           </div>
-          <button class="button secondary full" type="button" data-action="save-backup-policy" ${state.backupBusy ? 'disabled' : ''}>
+          <button class="button secondary full backup-policy-save" type="button" data-action="save-backup-policy" ${state.backupBusy ? 'disabled' : ''}>
             <i data-lucide="save"></i><span>保存备份策略</span>
           </button>
           <p class="setting-hint">资料文件较多时，备份包会明显变大。同步备份始终加密。</p>
@@ -4235,7 +4943,33 @@ function scrollLogs() {
   if (consoleNode) consoleNode.scrollTop = consoleNode.scrollHeight
 }
 
+let uiTaskSequence = 0
+let taskAutoHideTimer = null
+
+function beginUiTask(label, detail = '', taskId = '') {
+  const id = taskId || `ui-task-${Date.now()}-${++uiTaskSequence}`
+  showTask({
+    taskId: id,
+    state: 'running',
+    label,
+    detail,
+    progress: { indeterminate: true },
+  })
+  return id
+}
+
+function completeUiTask(taskId, label, detail = '') {
+  if (taskId && state.activeTask?.taskId && state.activeTask.taskId !== taskId) return
+  showTask({ taskId, state: 'success', label, detail, toast: false })
+}
+
+function failUiTask(taskId, label, detail = '') {
+  if (taskId && state.activeTask?.taskId && state.activeTask.taskId !== taskId) return
+  showTask({ taskId, state: 'error', label, detail, toast: false })
+}
+
 function showTask(payload) {
+  window.clearTimeout(taskAutoHideTimer)
   const normalized = {
     ...payload,
     state: payload?.state || (payload?.visible === false ? 'success' : 'running'),
@@ -4300,14 +5034,20 @@ function showTask(payload) {
     normalized.label,
   )
 
-  if (normalized.state === 'success') {
+  if (normalized.state === 'success' && normalized.toast !== false) {
     toast(
       normalized.detail ? `${normalized.label}：${normalized.detail}` : normalized.label,
       'success',
     )
   }
-  if (normalized.state === 'error') {
+  if (normalized.state === 'error' && normalized.toast !== false) {
     toast(normalized.detail || normalized.label, 'error', 7000)
+  }
+  if (normalized.state === 'success') {
+    taskAutoHideTimer = window.setTimeout(() => {
+      if (state.activeTask?.taskId !== normalized.taskId) return
+      document.querySelector('#taskStrip')?.classList.add('hidden')
+    }, 3200)
   }
 }
 
@@ -4324,23 +5064,39 @@ async function installSelected({ force = false } = {}) {
     )
     if (!confirmed) return
   }
+  const taskId = beginUiTask(
+    status.installed ? '正在准备更新 DeepSeek Harness' : '正在准备安装 DeepSeek Harness',
+    `目标版本 ${target}。正在同步软件源，请保持网络连接。`,
+  )
   try {
     await api.install(target, { force: force || status.updateState === 'ahead' })
     state.settings = await api.getSettings()
     state.history = (await api.getSettings()).updateHistory || []
     await refreshStatus()
+    completeUiTask(taskId, 'DeepSeek Harness 安装任务已提交', `目标版本 ${target}`)
     toast('DeepSeek Harness 安装已开始。', 'info')
   } catch (error) {
+    failUiTask(taskId, 'DeepSeek Harness 安装失败', error.message)
     toast(error.message, 'error', 7000)
   }
 }
 
 async function launchWorkbench() {
+  const taskId = beginUiTask(
+    '正在启动工作台',
+    '正在检查本地运行时并启动 DeepSeek Harness。首次使用可能需要下载组件。',
+  )
   try {
     const result = await api.launch()
+    completeUiTask(
+      taskId,
+      '工作台已就绪',
+      result.url ? `已打开 ${result.url}` : 'DeepSeek Harness 已启动。',
+    )
     toast(result.url ? `工作台已就绪：${result.url}` : '工作台已启动', 'success')
     await refreshStatus()
   } catch (error) {
+    failUiTask(taskId, '工作台启动失败', error.message)
     toast(`启动失败：${error.message}`, 'error', 7000)
   }
 }
@@ -4359,11 +5115,19 @@ async function downloadLauncherUpdate() {
     total: update.asset.size || 0,
     percent: 0,
   }
+  showTask({
+    taskId: LAUNCHER_DOWNLOAD_TASK_ID,
+    state: 'running',
+    label: '正在准备下载 ZP Workbench 更新',
+    detail: '正在选择可用的更新线路。',
+    progress: { indeterminate: true },
+  })
   updateChrome()
   try {
     await api.downloadLauncherUpdate(update.asset)
   } catch (error) {
     if (state.launcherUpdateProgress?.phase !== 'error') {
+      failUiTask(LAUNCHER_DOWNLOAD_TASK_ID, '更新下载失败', error.message)
       toast(`更新下载失败：${error.message}`, 'error', 7000)
     }
   } finally {
@@ -4398,9 +5162,74 @@ async function loadBackupCenter({ refresh = false } = {}) {
   if (state.page === 'backup') render()
 }
 
-async function refreshModelConfig() {
+async function refreshModelConfig({ start = false, notify = false } = {}) {
   state.modelConfig = await guard(() => api.getModelConfig(), '读取模型配置失败')
+  state.modelState = await guard(
+    () => api.getDshModelState({ autoStart: start }),
+    '读取 DSH 连接状态失败',
+  )
   if (state.page === 'models') render()
+  if (notify) {
+    if (state.modelState?.available) toast('DSH 连接状态已刷新。', 'success')
+    else if (state.modelState?.error)
+      toast(`连接状态未确认：${state.modelState.error}`, 'error', 6500)
+    else toast('当前显示本地配置状态，启动 DSH 后可实时确认。', 'info')
+  }
+}
+
+async function saveDeepseekApiKey() {
+  if (state.modelBusy) return
+  const input = document.querySelector('#deepseekApiKey')
+  const value = input?.value?.trim() || ''
+  if (!value) {
+    toast('请先填写 DeepSeek API Key。', 'error')
+    input?.focus()
+    return
+  }
+
+  state.modelBusy = true
+  const button = document.querySelector('[data-action="save-deepseek-key"]')
+  if (button) button.disabled = true
+  const taskId = beginUiTask(
+    '正在连接 DeepSeek',
+    '正在把密钥写入 DSH 官方凭据库，并确认默认模型状态。',
+  )
+  try {
+    state.modelState = await api.setDeepseekApiKey(value)
+    state.modelConfig = await api.getModelConfig()
+    if (input) input.value = ''
+    completeUiTask(taskId, 'DeepSeek API 已连接', '凭据已由 DSH 保存，无需再次进入网页配置。')
+    render()
+    toast('DeepSeek API 已连接，可直接启动工作台。', 'success', 6500)
+  } catch (error) {
+    failUiTask(taskId, 'DeepSeek API 连接失败', error.message)
+    toast(`DeepSeek API 连接失败：${error.message}`, 'error', 7000)
+  } finally {
+    state.modelBusy = false
+    if (button?.isConnected) button.disabled = false
+  }
+}
+
+async function clearDeepseekApiKey() {
+  if (state.modelBusy) return
+  if (!window.confirm('确定从 DSH 中清除已保存的 DeepSeek API Key 吗？')) return
+  state.modelBusy = true
+  const button = document.querySelector('[data-action="clear-deepseek-key"]')
+  if (button) button.disabled = true
+  const taskId = beginUiTask('正在清除 DeepSeek 凭据', '正在通过 DSH 官方接口移除 API Key。')
+  try {
+    state.modelState = await api.clearDeepseekApiKey()
+    state.modelConfig = await api.getModelConfig()
+    completeUiTask(taskId, 'DeepSeek 凭据已清除', 'DSH 不会再使用这套已保存的 API Key。')
+    render()
+    toast('DeepSeek API Key 已从 DSH 中清除。', 'success')
+  } catch (error) {
+    failUiTask(taskId, '清除 DeepSeek 凭据失败', error.message)
+    toast(`清除凭据失败：${error.message}`, 'error', 7000)
+  } finally {
+    state.modelBusy = false
+    if (button?.isConnected) button.disabled = false
+  }
 }
 
 function applyWorkspace(workspace) {
@@ -4458,6 +5287,14 @@ function collectScheduleInput() {
     endTime: document.querySelector('#scheduleEndTime')?.value || '',
     weekText: document.querySelector('#scheduleWeekText')?.value || '',
   }
+}
+
+function collectSchedulePeriodTimes() {
+  return [...document.querySelectorAll('[data-schedule-period-row]')].map((row, index) => ({
+    period: index + 1,
+    startTime: row.querySelector('[data-schedule-period-start]')?.value || '',
+    endTime: row.querySelector('[data-schedule-period-end]')?.value || '',
+  }))
 }
 
 function backupArchivePassword() {
@@ -4530,10 +5367,297 @@ function filterSkillCards(query) {
   if (empty) empty.classList.toggle('hidden', visible !== 0)
 }
 
-async function importExperimentEntries(entries) {
+function openExperimentSuggestionDialog(suggestions, usedJev) {
+  const root = document.querySelector('#dialogRoot')
+  if (!root) return Promise.resolve(null)
+  const knownGroups = [
+    ...new Set([
+      ...(state.workspace?.experiments || []).map((item) => item.group).filter(Boolean),
+      ...suggestions.map((item) => item.suggestion?.group).filter(Boolean),
+    ]),
+  ].sort((left, right) => left.localeCompare(right, 'zh-CN'))
+
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      document.removeEventListener('keydown', handleKeydown)
+      root.innerHTML = ''
+      resolve(result)
+    }
+    const handleKeydown = (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      finish(null)
+    }
+
+    root.innerHTML = `
+      <div class="dialog-layer">
+        <section class="dialog-card experiment-suggestion-card" role="dialog" aria-modal="true" aria-labelledby="dialogTitle" aria-describedby="dialogDescription">
+          <div class="dialog-heading">
+            <span class="dialog-eyebrow">${usedJev ? 'JEV SUGGESTION' : 'LOCAL RULE SUGGESTION'}</span>
+            <h2 id="dialogTitle">确认资料分类</h2>
+            <p id="dialogDescription">${usedJev ? 'Jev 已给出建议，但不会直接移动文件。' : 'Jev 未参与本次判断，下面由本地规则生成建议。'}请检查或修改课程文件夹，确认后才会复制到资料库，原文件不会移动。</p>
+          </div>
+          <div class="experiment-suggestion-list">
+            ${suggestions
+              .map((item, index) => {
+                const suggestion = item.suggestion || {}
+                const sourceLabel =
+                  suggestion.source === 'jev'
+                    ? 'Jev 建议'
+                    : suggestion.source === 'explicit'
+                      ? '指定位置'
+                      : '本地规则'
+                const confidence = Number.isFinite(Number(suggestion.confidence))
+                  ? `${Math.round(Number(suggestion.confidence) * 100)}%`
+                  : '--'
+                return `
+                  <article class="experiment-suggestion-item">
+                    <div class="experiment-suggestion-file">
+                      <span class="file-sigil tone-${fileTone(item.name || item.path)}">
+                        <i data-lucide="${fileIconName(item.name || item.path)}"></i>
+                        <span>${escapeHtml(fileExtensionLabel(item.name || item.path))}</span>
+                      </span>
+                      <div>
+                        <strong title="${escapeHtml(item.name || item.path)}">${escapeHtml(item.name || item.path)}</strong>
+                        <span>${escapeHtml(suggestion.reason || '')}</span>
+                      </div>
+                    </div>
+                    <div class="experiment-suggestion-meta">
+                      <span class="badge ${suggestion.source === 'jev' ? 'info' : suggestion.lowConfidence ? 'warning' : 'neutral'}">${escapeHtml(sourceLabel)} · ${confidence}</span>
+                      ${suggestion.model ? `<code>${escapeHtml(suggestion.model)}</code>` : ''}
+                    </div>
+                    <div class="field suggestion-group-field">
+                      <label for="experimentSuggestionGroup-${index}">课程文件夹</label>
+                      <div class="suggestion-combobox" data-suggestion-combobox>
+                        <div class="suggestion-combobox-control">
+                          <input
+                            id="experimentSuggestionGroup-${index}"
+                            type="text"
+                            maxlength="64"
+                            data-suggestion-index="${index}"
+                            value="${escapeHtml(suggestion.group || '')}"
+                            autocomplete="off"
+                            role="combobox"
+                            aria-autocomplete="list"
+                            aria-controls="experimentSuggestionMenu-${index}"
+                            aria-expanded="false"
+                          />
+                          <button
+                            class="suggestion-combobox-toggle"
+                            type="button"
+                            data-combobox-toggle
+                            aria-label="查看已有课程文件夹"
+                            aria-expanded="false"
+                            ${knownGroups.length ? '' : 'disabled'}
+                          >
+                            <i data-lucide="chevron-down"></i>
+                          </button>
+                        </div>
+                        <div
+                          class="suggestion-combobox-menu hidden"
+                          id="experimentSuggestionMenu-${index}"
+                          role="listbox"
+                          aria-label="已有课程文件夹"
+                        >
+                          ${
+                            knownGroups.length
+                              ? knownGroups
+                                  .map(
+                                    (group) =>
+                                      `<button class="suggestion-combobox-option" type="button" role="option" data-combobox-value="${escapeHtml(group)}"><span>${escapeHtml(group)}</span><i data-lucide="check"></i></button>`,
+                                  )
+                                  .join('')
+                              : ''
+                          }
+                          <p class="suggestion-combobox-empty">${knownGroups.length ? '没有匹配项，直接使用当前输入即可。' : '暂无已有文件夹，直接输入名称即可。'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </article>`
+              })
+              .join('')}
+          </div>
+          <p class="dialog-error hidden" role="alert"></p>
+          <div class="dialog-actions">
+            <button class="button secondary" type="button" data-dialog-cancel>取消</button>
+            <button class="button primary" type="submit" data-confirm-suggestions>
+              <i data-lucide="check"></i><span>确认并归档</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    `
+
+    refreshIcons()
+
+    const layer = root.querySelector('.dialog-layer')
+    const error = root.querySelector('.dialog-error')
+    const cancelButton = root.querySelector('[data-dialog-cancel]')
+    const confirmButton = root.querySelector('[data-confirm-suggestions]')
+    const comboboxCleanups = [...root.querySelectorAll('[data-suggestion-combobox]')].map(
+      (container) => setupSuggestionCombobox(container),
+    )
+    const submit = () => {
+      const inputs = [...root.querySelectorAll('[data-suggestion-index]')]
+      const reviewed = []
+      for (let index = 0; index < suggestions.length; index += 1) {
+        const group = String(inputs[index]?.value || '').trim()
+        if (!group) {
+          error.textContent = '每个文件都需要一个课程文件夹名称。'
+          error.classList.remove('hidden')
+          inputs[index]?.focus()
+          return
+        }
+        const nextEntry = { ...suggestions[index], group }
+        delete nextEntry.suggestion
+        reviewed.push(nextEntry)
+      }
+      comboboxCleanups.forEach((cleanup) => cleanup())
+      finish(reviewed)
+    }
+    confirmButton.addEventListener('click', submit)
+    cancelButton.addEventListener('click', () => {
+      comboboxCleanups.forEach((cleanup) => cleanup())
+      finish(null)
+    })
+    layer.addEventListener('mousedown', (event) => {
+      if (event.target !== layer) return
+      comboboxCleanups.forEach((cleanup) => cleanup())
+      finish(null)
+    })
+    document.addEventListener('keydown', handleKeydown)
+    requestAnimationFrame(() => root.querySelector('[data-suggestion-index]')?.focus())
+  })
+}
+
+function setupSuggestionCombobox(container) {
+  const input = container.querySelector('[role="combobox"]')
+  const toggle = container.querySelector('[data-combobox-toggle]')
+  const menu = container.querySelector('.suggestion-combobox-menu')
+  const empty = container.querySelector('.suggestion-combobox-empty')
+  const options = [...container.querySelectorAll('[role="option"]')]
+  let activeIndex = -1
+  let closed = false
+
+  if (!input || !toggle || !menu) return () => {}
+
+  const visibleOptions = () =>
+    options.filter((option) => !option.hidden && option.getAttribute('aria-disabled') !== 'true')
+
+  const setActive = (option) => {
+    options.forEach((item) => item.classList.toggle('active', item === option))
+    activeIndex = option ? visibleOptions().indexOf(option) : -1
+  }
+
+  const close = () => {
+    menu.classList.add('hidden')
+    input.setAttribute('aria-expanded', 'false')
+    toggle.setAttribute('aria-expanded', 'false')
+    setActive(null)
+  }
+
+  const filterOptions = () => {
+    const query = input.value.trim().toLocaleLowerCase('zh-CN')
+    for (const option of options) {
+      option.hidden =
+        Boolean(query) && !option.dataset.comboboxValue.toLocaleLowerCase('zh-CN').includes(query)
+    }
+    empty?.classList.toggle('hidden', visibleOptions().length !== 0)
+  }
+
+  const open = () => {
+    if (closed || toggle.disabled) return
+    filterOptions()
+    menu.classList.remove('hidden')
+    input.setAttribute('aria-expanded', 'true')
+    toggle.setAttribute('aria-expanded', 'true')
+    const firstVisible = visibleOptions()[0]
+    setActive(firstVisible || null)
+  }
+
+  const choose = (option) => {
+    if (!option) return
+    input.value = option.dataset.comboboxValue || ''
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    close()
+    input.focus()
+  }
+
+  const handleInput = () => {
+    filterOptions()
+    if (!menu.classList.contains('hidden')) setActive(visibleOptions()[0] || null)
+  }
+
+  const handleKeydown = (event) => {
+    const visible = visibleOptions()
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (menu.classList.contains('hidden')) {
+        open()
+        return
+      }
+      const nextIndex = visible.length ? (activeIndex + 1) % visible.length : -1
+      setActive(visible[nextIndex] || null)
+      visible[nextIndex]?.scrollIntoView({ block: 'nearest' })
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (menu.classList.contains('hidden')) {
+        open()
+        return
+      }
+      const nextIndex = visible.length ? (activeIndex - 1 + visible.length) % visible.length : -1
+      setActive(visible[nextIndex] || null)
+      visible[nextIndex]?.scrollIntoView({ block: 'nearest' })
+      return
+    }
+    if (event.key === 'Enter' && !menu.classList.contains('hidden') && activeIndex >= 0) {
+      event.preventDefault()
+      choose(visible[activeIndex])
+      return
+    }
+    if (event.key === 'Escape' && !menu.classList.contains('hidden')) {
+      event.preventDefault()
+      event.stopPropagation()
+      close()
+    }
+  }
+
+  toggle.addEventListener('click', () => {
+    if (menu.classList.contains('hidden')) open()
+    else close()
+  })
+  input.addEventListener('input', handleInput)
+  input.addEventListener('keydown', handleKeydown)
+  input.addEventListener('blur', () => {
+    window.setTimeout(() => {
+      if (!container.contains(document.activeElement)) close()
+    }, 0)
+  })
+  options.forEach((option) => {
+    option.addEventListener('click', () => choose(option))
+  })
+
+  return () => {
+    closed = true
+    close()
+  }
+}
+
+async function performExperimentImport(entries) {
   if (!entries.length || state.experimentImporting) return
+  const targetGroup = [...new Set(entries.map((entry) => entry?.group).filter(Boolean))]
+  const taskId = beginUiTask(
+    targetGroup.length === 1 ? `正在归档到“${targetGroup[0]}”` : '正在复制并分类资料',
+    `正在处理 ${entries.length} 个文件，请勿关闭工作站。`,
+  )
   state.experimentImporting = true
   state.experimentDropActive = false
+  state.experimentDropTargetGroup = null
   if (state.page === 'experiments') render()
   try {
     const result = await api.importExperiments(entries)
@@ -4559,15 +5683,91 @@ async function importExperimentEntries(entries) {
         .join('；')
       toast(detail, result.imported ? 'info' : 'error', 7600)
     }
+    completeUiTask(
+      taskId,
+      result.imported ? '资料归档完成' : '没有导入资料',
+      result.imported
+        ? `已归档 ${result.imported} 个文件${result.createdGroups?.length ? `，新建 ${result.createdGroups.length} 个课程文件夹` : ''}。`
+        : result.rejected?.length
+          ? `${result.rejected.length} 个文件未导入。`
+          : '没有可导入的文件。',
+    )
   } catch (error) {
     state.experimentImporting = false
     if (state.page === 'experiments') render()
+    failUiTask(taskId, '资料导入失败', error.message)
+    throw error
+  }
+}
+
+async function importExperimentEntries(entries) {
+  if (!entries.length || state.experimentImporting || state.experimentSuggestionBusy) return
+  const explicitEntries = entries.filter((entry) => String(entry?.group || '').trim())
+  const pendingEntries = entries.filter((entry) => !String(entry?.group || '').trim())
+  if (!pendingEntries.length) {
+    await performExperimentImport(explicitEntries)
+    return
+  }
+
+  state.experimentSuggestionBusy = true
+  state.experimentDropActive = false
+  state.experimentDropTargetGroup = null
+  const taskId = beginUiTask(
+    '正在分析资料归属',
+    `正在为 ${pendingEntries.length} 个文件生成分类建议；确认前不会移动任何文件。`,
+  )
+  try {
+    const result = await api.suggestExperimentGroups(pendingEntries)
+    state.experimentSuggestionBusy = false
+    completeUiTask(
+      taskId,
+      result.usedJev ? 'Jev 分类建议已生成' : '本地分类建议已生成',
+      result.usedJev
+        ? `实际模型 ${result.model || '未知版本'}；等待你确认。`
+        : 'Jev 未参与本次判断，等待你确认本地规则建议。',
+    )
+    const reviewed = await openExperimentSuggestionDialog(result.suggestions || [], result.usedJev)
+    if (!reviewed) {
+      toast('已取消归档，原文件没有变化。', 'info')
+      return
+    }
+    await performExperimentImport([...explicitEntries, ...reviewed])
+  } catch (error) {
+    state.experimentSuggestionBusy = false
+    failUiTask(taskId, '资料分类建议失败', error.message)
+    throw error
+  }
+}
+
+async function moveExperimentToGroup(experimentId, group) {
+  const experiment = state.workspace?.experiments.find((item) => item.id === experimentId)
+  if (!experiment || !group || experiment.group === group || state.experimentMovingId) return
+  const taskId = beginUiTask(
+    `正在移动到“${group}”`,
+    `正在移动 ${experiment.originalName || experiment.title}，请勿关闭工作站。`,
+  )
+  state.experimentMovingId = experimentId
+  state.experimentDropTargetGroup = null
+  if (state.page === 'experiments') render()
+  try {
+    const result = await api.updateExperiment(experimentId, { group })
+    applyWorkspace(result.workspace)
+    state.experimentSelectedGroup = result.experiment.group || group
+    state.experimentMovingId = null
+    if (state.page === 'experiments') render()
+    completeUiTask(taskId, '资料移动完成', `已移动到“${result.experiment.group || group}”。`)
+    toast(`已移动到“${result.experiment.group}”课程文件夹。`, 'success')
+  } catch (error) {
+    state.experimentMovingId = null
+    if (state.page === 'experiments') render()
+    failUiTask(taskId, '资料移动失败', error.message)
     throw error
   }
 }
 
 async function importScheduleFile(filePath) {
   if (!filePath || state.scheduleImporting) return
+  const taskId = beginUiTask('正在解析课表文件', '正在识别课程、星期、节次、周次和教师。')
   state.scheduleImporting = true
   state.scheduleDropActive = false
   if (state.page === 'schedule') render()
@@ -4582,97 +5782,61 @@ async function importScheduleFile(filePath) {
       'success',
       6000,
     )
+    completeUiTask(
+      taskId,
+      '课表导入完成',
+      `已识别 ${result.summary?.courses || result.schedule?.courses?.length || 0} 个课程安排。`,
+    )
   } catch (error) {
     state.scheduleImporting = false
     if (state.page === 'schedule') render()
+    failUiTask(taskId, '课表导入失败', error.message)
     throw error
   }
 }
 
-function collectSettings() {
-  const patch = {}
-  document.querySelectorAll('[data-setting]').forEach((element) => {
-    const key = element.dataset.setting
-    if (element.type === 'checkbox') patch[key] = element.checked
-    else if (element.type === 'number') patch[key] = Number(element.value)
-    else patch[key] = element.value
-  })
-  return patch
+function readSettingFieldValue(element) {
+  if (element.type === 'checkbox') return element.checked
+  if (element.type === 'number') return Number(element.value)
+  return element.value
 }
 
-const settingsFieldLabels = {
-  channel: '版本通道',
-  dshHome: 'DSH 数据目录',
-  experimentDir: '资料库目录',
-  host: '监听地址',
-  port: '端口',
-  openMode: '打开方式',
-  autoCheckDsh: '启动时检查 DSH',
-  autoCheckLauncher: '启动器更新检查',
-  minimizeToTray: '最小化到托盘',
-  launchAtLogin: '开机启动',
-  theme: '主题',
-  termStartDate: '开学日期',
-  notificationsEnabled: '系统通知',
-  classReminderMinutes: '课前提醒',
-  assignmentReminderDays: '作业提前提醒',
-  reviewReminderEnabled: '复习提醒',
-  dailyDigestTime: '每日提醒时间',
-  reviewReminderTime: '复习提醒时间',
-}
-
-function savedSettingValue(key, element) {
-  const saved = state.settings?.[key]
-  const current = element.type === 'checkbox' ? element.checked : element.value
-  if (element.type === 'checkbox') return Boolean(saved) === current
-  if (element.type === 'number') {
-    if (String(current).trim() === '') return false
-    return Number(saved) === Number(current)
+async function persistSettingsPatch(patch, sourceKey = '') {
+  const previousDshHome = state.settings?.dshHome
+  state.settings = await api.patchSettings(patch)
+  if (patch.theme) applyTheme(patch.theme)
+  if (sourceKey === 'dshHome' && state.settings.dshHome !== previousDshHome) state.skills = null
+  if (sourceKey.startsWith('jev')) state.jev = await api.getJevStatus()
+  if (['channel', 'host', 'port', 'dshHome'].includes(sourceKey)) await refreshStatus()
+  if (
+    [
+      'notificationsEnabled',
+      'classReminderMinutes',
+      'assignmentReminderDays',
+      'reviewReminderEnabled',
+      'dailyDigestTime',
+      'reviewReminderTime',
+    ].includes(sourceKey)
+  ) {
+    await loadReminders()
   }
-  return String(saved ?? '') === String(current ?? '')
 }
 
-function dirtySettingKeys() {
-  const changed = []
-  document.querySelectorAll('[data-setting]').forEach((element) => {
-    const key = element.dataset.setting
-    if (key && !savedSettingValue(key, element)) changed.push(key)
-  })
-  return changed
-}
-
-function syncSettingsDirtyBar() {
-  if (state.page !== 'settings') return
-  const bar = document.querySelector('[data-settings-save-bar]')
-  if (!bar) return
-  const changed = dirtySettingKeys()
-  state.settingsDirty = changed.length > 0
-  bar.hidden = !state.settingsDirty
-  const summary = bar.querySelector('[data-settings-dirty-summary]')
-  if (!summary || !state.settingsDirty) return
-  const labels = changed.slice(0, 3).map((key) => settingsFieldLabels[key] || key)
-  summary.textContent =
-    changed.length > 3
-      ? `已修改 ${changed.length} 项：${labels.join('、')} 等`
-      : `已修改 ${changed.length} 项：${labels.join('、')}`
-}
-
-function settingsSaveBar() {
-  return `
-    <div class="settings-save" data-settings-save-bar hidden>
-      <div class="settings-save-copy">
-        <span class="settings-save-badge"><i data-lucide="circle-dot"></i>未保存</span>
-        <strong data-settings-dirty-summary></strong>
-        <span class="settings-save-note">部分设置需重启工作台后生效</span>
-      </div>
-      <div class="button-row">
-        <button class="button secondary" type="button" data-action="discard-settings">撤销修改</button>
-        <button class="button primary" type="button" data-action="save-settings">
-          <i data-lucide="check"></i><span>保存设置</span>
-        </button>
-      </div>
-    </div>
-  `
+async function persistSettingField(element) {
+  const key = element.dataset.setting
+  if (!key) return
+  if (!element.checkValidity()) {
+    element.reportValidity()
+    render()
+    return
+  }
+  try {
+    await persistSettingsPatch({ [key]: readSettingFieldValue(element) }, key)
+    render()
+  } catch (error) {
+    toast(`保存设置失败：${error.message}`, 'error', 6500)
+    render()
+  }
 }
 
 async function handleAction(action, element) {
@@ -4692,7 +5856,7 @@ async function handleAction(action, element) {
       break
     case 'launch-models':
       await launchWorkbench()
-      toast('工作台已启动。请打开左下角“设置”，再选择“模型”填写 API。', 'info', 7600)
+      toast('DSH 工作台已启动。可在左下角“设置 → 模型”中调整默认模型和额外提供方。', 'info', 9000)
       break
     case 'open-assignment-composer':
       state.assignmentComposerOpen = true
@@ -4755,14 +5919,6 @@ async function handleAction(action, element) {
       )
       break
     }
-    case 'copy-focus-prompt': {
-      const assignments = (state.workspace?.assignments || [])
-        .filter((item) => item.status !== 'done')
-        .sort(assignmentSort)
-      if (!assignments.length) return
-      await copyPromptAndLaunch(focusPrompt(assignments), '已准备当前待办的处理顺序')
-      break
-    }
     case 'generate-knowledge': {
       const experimentId = element.dataset.id
       if (!experimentId || state.knowledgeGeneratingId) break
@@ -4778,13 +5934,26 @@ async function handleAction(action, element) {
         break
       }
       state.knowledgeGeneratingId = experimentId
+      const experiment = state.workspace?.experiments.find((item) => item.id === experimentId)
+      const taskId = beginUiTask(
+        '正在从资料生成知识点',
+        experiment
+          ? `正在解析“${experiment.originalName || experiment.title}”，文件较大时需要等待。`
+          : '正在解析资料内容。',
+      )
       render()
       try {
         const result = await api.generateKnowledge(experimentId)
         applyWorkspace(result.workspace)
         toast(`已从 ${result.source.fileName} 生成 ${result.generated} 个知识点。`, 'success', 6000)
+        completeUiTask(
+          taskId,
+          '知识点生成完成',
+          `已从 ${result.source.fileName} 生成 ${result.generated} 个知识点。`,
+        )
       } catch (error) {
         toast(`生成知识点失败：${error.message}`, 'error', 9000)
+        failUiTask(taskId, '知识点生成失败', error.message)
       } finally {
         state.knowledgeGeneratingId = null
         render()
@@ -4883,8 +6052,13 @@ async function handleAction(action, element) {
       break
     }
     case 'refresh-models':
-      await refreshModelConfig()
-      toast('模型配置状态已刷新。', 'success')
+      await refreshModelConfig({ start: true, notify: true })
+      break
+    case 'save-deepseek-key':
+      await saveDeepseekApiKey()
+      break
+    case 'clear-deepseek-key':
+      await clearDeepseekApiKey()
       break
     case 'stop':
       await guard(async () => {
@@ -4911,6 +6085,8 @@ async function handleAction(action, element) {
       break
     }
     case 'open-schedule-composer':
+      state.scheduleTimeEditorOpen = false
+      state.schedulePeriodDraft = null
       state.scheduleComposerOpen = true
       state.editingScheduleCourseId = null
       render()
@@ -4961,6 +6137,66 @@ async function handleAction(action, element) {
       toast(editing ? '课程已更新。' : '课程已添加。', 'success')
       break
     }
+    case 'open-schedule-time-editor': {
+      const schedule = state.workspace?.schedule
+      if (!schedule) return
+      state.scheduleComposerOpen = false
+      state.editingScheduleCourseId = null
+      state.schedulePeriodDraft = Array.from({ length: schedule.maxPeriod }, (_item, index) => {
+        const entry = schedule.periodTimes?.[index] || {}
+        return {
+          period: index + 1,
+          startTime: entry.startTime || '',
+          endTime: entry.endTime || '',
+        }
+      })
+      state.scheduleTimeEditorOpen = true
+      render()
+      requestAnimationFrame(() => document.querySelector('[data-schedule-period-start]')?.focus())
+      break
+    }
+    case 'close-schedule-time-editor':
+      state.scheduleTimeEditorOpen = false
+      state.schedulePeriodDraft = null
+      render()
+      break
+    case 'add-schedule-period': {
+      const rows = collectSchedulePeriodTimes()
+      if (rows.length >= 20) break
+      state.schedulePeriodDraft = [...rows, { period: rows.length + 1, startTime: '', endTime: '' }]
+      render()
+      requestAnimationFrame(() =>
+        document.querySelectorAll('[data-schedule-period-start]')[rows.length]?.focus(),
+      )
+      break
+    }
+    case 'remove-schedule-period': {
+      const rows = collectSchedulePeriodTimes()
+      const minimumPeriods = Math.max(
+        1,
+        ...(state.workspace?.schedule?.courses || []).map(
+          (course) => Number(course.endPeriod) || 0,
+        ),
+      )
+      if (rows.length <= minimumPeriods) break
+      state.schedulePeriodDraft = rows.slice(0, -1)
+      render()
+      break
+    }
+    case 'infer-schedule-period-times':
+      state.schedulePeriodDraft = inferPeriodTimesFromCourses(state.workspace?.schedule)
+      render()
+      toast('已根据课程时间更新节次表。', 'success')
+      break
+    case 'save-schedule-period-times': {
+      const result = await api.updateSchedulePeriodTimes(collectSchedulePeriodTimes())
+      applyWorkspace(result.workspace)
+      state.scheduleTimeEditorOpen = false
+      state.schedulePeriodDraft = null
+      render({ anchor: '.schedule-board' })
+      toast('节次时间已更新。', 'success')
+      break
+    }
     case 'delete-schedule-course': {
       const course = state.workspace?.schedule?.courses.find(
         (item) => item.id === element.dataset.id,
@@ -4969,6 +6205,8 @@ async function handleAction(action, element) {
       applyWorkspace(await api.deleteScheduleCourse(course.id))
       state.scheduleComposerOpen = false
       state.editingScheduleCourseId = null
+      state.scheduleTimeEditorOpen = false
+      state.schedulePeriodDraft = null
       state.highlightScheduleCourseId = null
       render({ anchor: '.schedule-board' })
       toast('课程已删除。', 'success')
@@ -4980,6 +6218,8 @@ async function handleAction(action, element) {
       state.scheduleWeek = 'all'
       state.scheduleComposerOpen = false
       state.editingScheduleCourseId = null
+      state.scheduleTimeEditorOpen = false
+      state.schedulePeriodDraft = null
       state.highlightScheduleCourseId = null
       render({ scroll: 'top' })
       toast('课表已清空。', 'success')
@@ -5029,23 +6269,22 @@ async function handleAction(action, element) {
     case 'edit-experiment-group': {
       const experiment = state.workspace?.experiments.find((item) => item.id === element.dataset.id)
       if (!experiment) return
-      const group = await openTextDialog({
-        title: '修改课程分组',
-        description: '这份资料会移动到这个分组，分组不存在时会自动创建。',
-        label: '课程分组名称',
-        value: experiment.group,
+      const targets = experimentGroups(state.workspace?.experiments || [])
+        .map((group) => group.name)
+        .filter((group) => group !== experiment.group)
+      if (!targets.length) {
+        toast('还没有其他课程文件夹。请先导入另一门课程的资料。', 'info', 6000)
+        return
+      }
+      const group = await openChoiceDialog({
+        title: '移动到课程文件夹',
+        description: '选择工作站里已经存在的课程文件夹，资料文件会同步移动到目标目录。',
+        label: '目标课程文件夹',
+        options: targets.map((name) => ({ value: name, label: name })),
         confirmLabel: '移动资料',
-        maxLength: 64,
       })
-      if (!group || group === experiment.group) return
-      const result = await guard(
-        () => api.updateExperiment(experiment.id, { group }),
-        '修改实验分组失败',
-      )
-      applyWorkspace(result.workspace)
-      state.experimentSelectedGroup = result.experiment.group || group
-      render()
-      toast(`已移动到“${result.experiment.group}”分组。`, 'success')
+      if (!group) return
+      await moveExperimentToGroup(experiment.id, group)
       break
     }
     case 'delete-experiment': {
@@ -5595,9 +6834,7 @@ async function handleAction(action, element) {
     case 'choose-dsh-home': {
       const selected = await api.chooseDshHome()
       if (selected) {
-        state.settings = await api.patchSettings({ ...collectSettings(), dshHome: selected })
-        state.settingsDirty = false
-        state.skills = null
+        await persistSettingsPatch({ dshHome: selected }, 'dshHome')
         render()
         if (state.page === 'skills') await loadSkills({ refresh: true })
       }
@@ -5606,37 +6843,66 @@ async function handleAction(action, element) {
     case 'choose-experiment-dir': {
       const selected = await api.chooseExperimentDir()
       if (selected) {
-        state.settings = await api.patchSettings({
-          ...collectSettings(),
-          experimentDir: selected,
-        })
-        state.settingsDirty = false
+        await persistSettingsPatch({ experimentDir: selected }, 'experimentDir')
         render()
         toast('资料库目录已更新。之后的资料会保存到新位置。', 'success')
       }
       break
     }
-    case 'save-settings':
-      {
-        const previousDshHome = state.settings?.dshHome
-        state.settings = await guard(() => api.patchSettings(collectSettings()), '保存设置失败')
-        state.settingsDirty = false
-        if (state.settings?.dshHome !== previousDshHome) {
-          state.skills = null
-          if (state.page === 'skills') await loadSkills({ refresh: true })
-        }
+    case 'save-jev-key': {
+      const input = document.querySelector('#jevApiKey')
+      const value = String(input?.value || '').trim()
+      if (!value && !state.jev?.hasApiKey) {
+        toast('请先输入 TypeSafe API Key。', 'error')
+        break
       }
-      applyTheme(state.settings.theme)
-      await refreshStatus()
-      await loadReminders()
+      if (value)
+        state.jev = await guard(() => api.setJevApiKey(value), '保存 TypeSafe API Key 失败')
+      if (input) input.value = ''
+      const taskId = beginUiTask('正在测试 Jev 连接', '正在读取模型列表并执行兼容性判断。')
+      try {
+        state.jev = await api.testJev()
+        completeUiTask(
+          taskId,
+          'Jev 连接正常',
+          `${state.jev?.model || 'jev-latest'} 当前实际使用 ${state.jev?.lastModel || '未知版本'}。`,
+        )
+        toast(
+          `Jev 连接正常，当前实际模型：${state.jev?.lastModel || '未知版本'}。`,
+          'success',
+          7000,
+        )
+      } catch (error) {
+        failUiTask(taskId, 'Jev 连接测试失败', error.message)
+        toast(error.message, 'error', 7600)
+      }
       render()
-      toast('设置已保存。下一次启动工作台时使用新配置。', 'success')
       break
-    case 'discard-settings':
-      state.settingsDirty = false
-      render({ ignoreSettingsDraft: true })
-      toast('已放弃未保存的修改。', 'info')
+    }
+    case 'test-jev': {
+      const taskId = beginUiTask('正在测试 Jev 连接', '正在读取模型列表并执行兼容性判断。')
+      try {
+        state.jev = await api.testJev()
+        completeUiTask(
+          taskId,
+          'Jev 连接正常',
+          `${state.jev.model} 当前实际使用 ${state.jev.lastModel}。`,
+        )
+        toast(`Jev 连接正常，当前实际模型：${state.jev.lastModel}。`, 'success', 7000)
+      } catch (error) {
+        failUiTask(taskId, 'Jev 连接测试失败', error.message)
+        toast(error.message, 'error', 7600)
+      }
+      render()
       break
+    }
+    case 'clear-jev-key': {
+      if (!window.confirm('清除已保存的 TypeSafe API Key 吗？这不会影响 DeepSeek API。')) break
+      state.jev = await guard(() => api.clearJevApiKey(), '清除 TypeSafe API Key 失败')
+      render()
+      toast('TypeSafe API Key 已从本机安全存储中清除。', 'success')
+      break
+    }
     case 'reset-settings':
       if (!window.confirm('恢复所有启动器设置到默认值吗？DSH 数据不会被删除。')) return
       state.settings = await api.patchSettings({
@@ -5650,13 +6916,17 @@ async function handleAction(action, element) {
         minimizeToTray: true,
         launchAtLogin: false,
         theme: 'system',
+        jevEnabled: true,
+        jevAutoClassify: true,
+        jevIncludeText: true,
+        jevApiBaseUrl: 'https://api.typesafe.ai/v1',
       })
-      state.settingsDirty = false
+      state.jev = await api.getJevStatus()
       state.skills = null
       applyTheme(state.settings.theme)
       await refreshStatus()
       if (state.page === 'skills') await loadSkills({ refresh: true })
-      render({ ignoreSettingsDraft: true })
+      render()
       break
     case 'toggle-theme': {
       const nextTheme = {
@@ -5795,6 +7065,13 @@ document.addEventListener('click', async (event) => {
     return
   }
 
+  if (event.target.matches('[data-schedule-time-editor-layer]')) {
+    state.scheduleTimeEditorOpen = false
+    state.schedulePeriodDraft = null
+    render()
+    return
+  }
+
   const nav = event.target.closest('.nav-item')
   if (nav) {
     state.page = nav.dataset.page
@@ -5803,7 +7080,9 @@ document.addEventListener('click', async (event) => {
     render()
     if (state.page === 'plugins' && !state.plugins) await loadPlugins()
     if (state.page === 'skills') await loadSkills()
-    if (state.page === 'models' && !state.modelConfig) await refreshModelConfig()
+    if (state.page === 'models' && (!state.modelConfig || state.modelState === null)) {
+      await refreshModelConfig()
+    }
     if (state.page === 'settings') await loadMaintenanceData()
     if (state.page === 'backup') await loadBackupCenter()
     return
@@ -5827,7 +7106,9 @@ document.addEventListener('click', async (event) => {
     render()
     if (state.page === 'plugins' && !state.plugins) await loadPlugins()
     if (state.page === 'skills') await loadSkills()
-    if (state.page === 'models' && !state.modelConfig) await refreshModelConfig()
+    if (state.page === 'models' && (!state.modelConfig || state.modelState === null)) {
+      await refreshModelConfig()
+    }
     if (state.page === 'assignments') scrollToHighlightedAssignment()
     if (state.page === 'schedule') scrollToHighlightedScheduleCourse()
     if (state.page === 'settings') await loadMaintenanceData()
@@ -5882,13 +7163,14 @@ document.addEventListener('click', async (event) => {
 
   const choice = event.target.closest('[data-setting-choice]')
   if (choice) {
-    const patch = {
-      ...collectSettings(),
-      [choice.dataset.settingChoice]: choice.dataset.value,
-    }
-    state.settings = await api.patchSettings(patch)
-    state.settingsDirty = false
-    if (patch.theme) applyTheme(patch.theme)
+    const value =
+      choice.dataset.value === 'true'
+        ? true
+        : choice.dataset.value === 'false'
+          ? false
+          : choice.dataset.value
+    const key = choice.dataset.settingChoice
+    await persistSettingsPatch({ [key]: value }, key)
     render()
     return
   }
@@ -5906,13 +7188,37 @@ document.addEventListener('click', async (event) => {
       event.preventDefault()
       event.stopPropagation()
     }
+    const actionLabel =
+      action.dataset.taskLabel ||
+      action.textContent.trim() ||
+      action.getAttribute('aria-label') ||
+      action.title ||
+      '正在处理'
+    const taskId = `ui-click-${Date.now()}-${++uiTaskSequence}`
+    const activeTaskBefore = state.activeTask?.taskId || null
+    let taskFeedbackActive = false
     action.disabled = true
+    action.classList.add('is-busy')
+    action.setAttribute('aria-busy', 'true')
+    const taskTimer = window.setTimeout(() => {
+      if (!action.isConnected) return
+      if (state.activeTask?.taskId && state.activeTask.taskId !== activeTaskBefore) return
+      taskFeedbackActive = true
+      beginUiTask(`正在${actionLabel.replace(/^正在/, '')}`, '请稍候，正在完成本地操作…', taskId)
+    }, 150)
     try {
       await handleAction(action.dataset.action, action)
+      if (taskFeedbackActive) completeUiTask(taskId, `${actionLabel}已完成`)
     } catch (error) {
+      if (taskFeedbackActive) failUiTask(taskId, `${actionLabel}失败`, error.message)
       toast(error.message, 'error', 6500)
     } finally {
-      if (action.isConnected) action.disabled = false
+      window.clearTimeout(taskTimer)
+      if (action.isConnected) {
+        action.disabled = false
+        action.classList.remove('is-busy')
+        action.removeAttribute('aria-busy')
+      }
     }
   }
 })
@@ -5921,31 +7227,51 @@ document.addEventListener(
   'toggle',
   (event) => {
     if (!event.target.matches?.('.ruka-accordion > details')) return
-    if (event.target.open) {
+    const accordion = event.target.parentElement
+    if (event.target.id === 'rukaDeepseekDetails') {
+      state.rukaDeepseekOpen = event.target.open
+    } else if (event.target.open) {
       state.rukaOpenSections.clear()
       if (event.target.id) state.rukaOpenSections.add(event.target.id)
-      for (const section of document.querySelectorAll('.ruka-accordion > details')) {
-        if (section !== event.target && section.open) section.open = false
-      }
     } else if (event.target.id) {
       state.rukaOpenSections.delete(event.target.id)
     }
-    if (event.target.id === 'rukaDeepseekDetails') {
-      state.rukaDeepseekOpen = event.target.open
+    if (event.target.open) {
+      for (const section of accordion.querySelectorAll(':scope > details')) {
+        if (section !== event.target && section.open) section.open = false
+      }
     }
   },
   true,
 )
 
 document.addEventListener('keydown', (event) => {
-  if (event.key !== 'Escape' || !state.scheduleComposerOpen) return
-  state.scheduleComposerOpen = false
-  state.editingScheduleCourseId = null
-  render()
+  if (event.key === 'Enter' && event.target.id === 'deepseekApiKey') {
+    event.preventDefault()
+    saveDeepseekApiKey()
+    return
+  }
+  if (event.key !== 'Escape') return
+  if (state.scheduleTimeEditorOpen) {
+    state.scheduleTimeEditorOpen = false
+    state.schedulePeriodDraft = null
+    render()
+    return
+  }
+  if (state.scheduleComposerOpen) {
+    state.scheduleComposerOpen = false
+    state.editingScheduleCourseId = null
+    render()
+  }
 })
 
 document.addEventListener('input', (event) => {
-  if (event.target.matches?.('[data-setting]')) syncSettingsDirtyBar()
+  if (event.target.matches?.('[data-time-input]')) {
+    event.target.value = formatTimeInputValue(event.target.value)
+    const control = event.target.closest('[data-time-control]')
+    const normalized = normalizeTimeValue(event.target.value)
+    if (control && normalized) control.dataset.timeValue = normalized
+  }
   if (event.target.id === 'knowledgeSearch') {
     state.knowledgeQuery = event.target.value
     filterKnowledgeCards(state.knowledgeQuery)
@@ -5960,8 +7286,50 @@ document.addEventListener('input', (event) => {
   }
 })
 
-document.addEventListener('change', (event) => {
-  if (event.target.matches?.('[data-setting]')) syncSettingsDirtyBar()
+document.addEventListener('focusin', (event) => {
+  if (event.target.id === 'deepseekApiKey' && event.target.readOnly) {
+    event.target.readOnly = false
+  }
+})
+
+document.addEventListener(
+  'change',
+  (event) => {
+    const input = event.target.closest?.('[data-time-input]')
+    if (!input) return
+    const control = input.closest('[data-time-control]')
+    const normalized = normalizeTimeValue(input.value)
+    if (normalized) {
+      input.value = normalized
+      if (control) control.dataset.timeValue = normalized
+      return
+    }
+    const invalidValue = input.value.trim()
+    const previous = control?.dataset.timeValue || ''
+    input.value = previous
+    if (invalidValue) toast('请输入 00:00 到 23:59 之间的时间。', 'error')
+  },
+  true,
+)
+
+document.addEventListener('change', async (event) => {
+  if (event.target.matches?.('[data-setting]')) await persistSettingField(event.target)
+  if (
+    event.target.matches?.('#scheduleStartPeriod, #scheduleEndPeriod') &&
+    state.workspace?.schedule
+  ) {
+    const periodTimes = schedulePeriodTimeMap(state.workspace.schedule)
+    const startPeriod = Number(document.querySelector('#scheduleStartPeriod')?.value || 0)
+    const endPeriod = Number(document.querySelector('#scheduleEndPeriod')?.value || 0)
+    const startInput = document.querySelector('#scheduleStartTime')
+    const endInput = document.querySelector('#scheduleEndTime')
+    if (startInput && !startInput.value && startPeriod) {
+      startInput.value = periodTimes.get(startPeriod)?.startTime || ''
+    }
+    if (endInput && !endInput.value && endPeriod) {
+      endInput.value = periodTimes.get(endPeriod)?.endTime || ''
+    }
+  }
 })
 
 let experimentDragDepth = 0
@@ -5985,6 +7353,38 @@ function setScheduleDropActive(active) {
   zone?.classList.toggle('is-dragging', active)
 }
 
+function isInternalExperimentDrag(event) {
+  return (
+    Boolean(state.experimentDraggingId) ||
+    draggedDataTypes(event).includes('application/x-zp-experiment-id')
+  )
+}
+
+function experimentGroupFromDropTarget(target) {
+  const element = target?.closest?.('[data-experiment-group-drop]')
+  return element?.dataset.experimentGroupDrop || ''
+}
+
+function setExperimentDropTargetGroup(group) {
+  const nextGroup = state.page === 'experiments' ? group || null : null
+  if (state.experimentDropTargetGroup === nextGroup) return
+  state.experimentDropTargetGroup = nextGroup
+  document.querySelectorAll('[data-experiment-group-drop]').forEach((element) => {
+    element.classList.toggle(
+      'is-drop-target',
+      Boolean(nextGroup) && element.dataset.experimentGroupDrop === nextGroup,
+    )
+  })
+  const copy = document.querySelector('.experiment-dropzone-copy strong')
+  if (copy && !state.experimentImporting) {
+    copy.textContent = nextGroup
+      ? `松手归档到“${nextGroup}”`
+      : state.experimentDropActive
+        ? '松手后生成分类建议'
+        : '把课程资料拖到这里'
+  }
+}
+
 function draggedDataTypes(event) {
   return [...(event.dataTransfer?.types || [])].map(String)
 }
@@ -5996,6 +7396,7 @@ function isKnownFileDragType(type) {
 }
 
 function hasDraggedFiles(event) {
+  if (isInternalExperimentDrag(event)) return false
   const types = draggedDataTypes(event)
   if (types.some(isKnownFileDragType)) return true
   if ([...(event.dataTransfer?.items || [])].some((item) => item.kind === 'file')) return true
@@ -6058,7 +7459,34 @@ async function resolveDroppedFilePath(file) {
   return staged?.path || ''
 }
 
+document.addEventListener('dragstart', (event) => {
+  const fileRow = event.target.closest?.('.experiment-file[data-experiment-id]')
+  if (!fileRow || state.page !== 'experiments' || state.experimentMovingId) {
+    return
+  }
+  const experimentId = fileRow.dataset.experimentId
+  state.experimentDraggingId = experimentId
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('application/x-zp-experiment-id', experimentId)
+  event.dataTransfer.setData(
+    'text/plain',
+    fileRow.querySelector('.experiment-file-copy strong')?.textContent || experimentId,
+  )
+  fileRow.classList.add('is-dragging')
+})
+
+document.addEventListener('dragend', (event) => {
+  state.experimentDraggingId = null
+  setExperimentDropTargetGroup(null)
+  event.target.closest?.('.experiment-file')?.classList.remove('is-dragging')
+})
+
 document.addEventListener('dragenter', (event) => {
+  if (isInternalExperimentDrag(event)) {
+    event.preventDefault()
+    setExperimentDropTargetGroup(experimentGroupFromDropTarget(event.target))
+    return
+  }
   if (!hasDraggedFiles(event)) return
   event.preventDefault()
   if (state.page === 'schedule') {
@@ -6073,15 +7501,27 @@ document.addEventListener('dragenter', (event) => {
   }
   experimentDragDepth += 1
   setExperimentDropActive(true)
+  setExperimentDropTargetGroup(experimentGroupFromDropTarget(event.target))
 })
 
 document.addEventListener('dragover', (event) => {
+  if (isInternalExperimentDrag(event)) {
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+    setExperimentDropTargetGroup(experimentGroupFromDropTarget(event.target))
+    return
+  }
   if (!hasDraggedFiles(event)) return
   event.preventDefault()
   event.dataTransfer.dropEffect = 'copy'
+  setExperimentDropTargetGroup(experimentGroupFromDropTarget(event.target))
 })
 
-document.addEventListener('dragleave', () => {
+document.addEventListener('dragleave', (event) => {
+  if (isInternalExperimentDrag(event)) {
+    setExperimentDropTargetGroup(experimentGroupFromDropTarget(event.relatedTarget))
+    return
+  }
   if (state.page === 'schedule') {
     scheduleDragDepth = Math.max(0, scheduleDragDepth - 1)
     if (scheduleDragDepth === 0) setScheduleDropActive(false)
@@ -6090,9 +7530,29 @@ document.addEventListener('dragleave', () => {
   if (state.page !== 'experiments') return
   experimentDragDepth = Math.max(0, experimentDragDepth - 1)
   if (experimentDragDepth === 0) setExperimentDropActive(false)
+  setExperimentDropTargetGroup(experimentGroupFromDropTarget(event.relatedTarget))
 })
 
 document.addEventListener('drop', async (event) => {
+  if (isInternalExperimentDrag(event)) {
+    event.preventDefault()
+    const experimentId = state.experimentDraggingId
+    const targetGroup = experimentGroupFromDropTarget(event.target)
+    state.experimentDraggingId = null
+    setExperimentDropTargetGroup(null)
+    document.querySelectorAll('.experiment-file.is-dragging').forEach((element) => {
+      element.classList.remove('is-dragging')
+    })
+    if (!experimentId || !targetGroup) return
+    const experiment = state.workspace?.experiments.find((item) => item.id === experimentId)
+    if (!experiment || experiment.group === targetGroup) return
+    try {
+      await moveExperimentToGroup(experimentId, targetGroup)
+    } catch (error) {
+      toast(error.message, 'error', 6500)
+    }
+    return
+  }
   if (!hasDraggedFiles(event)) return
   event.preventDefault()
   if (state.page === 'schedule') {
@@ -6131,8 +7591,10 @@ document.addEventListener('drop', async (event) => {
     state.page = 'experiments'
     render()
   }
+  const targetGroup = experimentGroupFromDropTarget(event.target)
   experimentDragDepth = 0
   setExperimentDropActive(false)
+  setExperimentDropTargetGroup(null)
   const files = droppedFiles(event)
   const entries = []
   const seenPaths = new Set()
@@ -6146,6 +7608,7 @@ document.addEventListener('drop', async (event) => {
       entries.push({
         name: file.name,
         path: filePath,
+        ...(targetGroup ? { group: targetGroup } : {}),
       })
     } catch (error) {
       toast(`“${file.name || '文件'}”读取失败：${error.message}`, 'error', 6500)
@@ -6156,7 +7619,11 @@ document.addEventListener('drop', async (event) => {
     const key = reference.path.toLowerCase()
     if (seenPaths.has(key)) continue
     seenPaths.add(key)
-    entries.push({ name: reference.name, path: reference.path })
+    entries.push({
+      name: reference.name,
+      path: reference.path,
+      ...(targetGroup ? { group: targetGroup } : {}),
+    })
   }
   if (!entries.length) {
     toast(
@@ -6249,25 +7716,24 @@ api.on('update:state', (update) => {
     })
   }
   updateChrome()
-  if (state.page === 'overview' || state.page === 'updates' || state.page === 'guide') render()
+  if (state.page === 'updates' || state.page === 'guide') render()
 })
 api.on('process:state', (processState) => {
   if (state.status) state.status.process = processState
   updateChrome()
-  if (state.page === 'overview' || state.page === 'guide') render()
+  if (state.page === 'guide') render()
 })
 api.on('settings:changed', (settings) => {
   state.settings = settings
   state.onboarding = settings.onboarding || state.onboarding
   if (settings.theme) applyTheme(settings.theme)
-  if (
-    state.page === 'settings' ||
-    state.page === 'overview' ||
-    state.page === 'guide' ||
-    state.page === 'backup'
-  ) {
+  if (state.page === 'settings' || state.page === 'guide' || state.page === 'backup') {
     render()
   }
+})
+api.on('jev:state', (jev) => {
+  state.jev = jev
+  if (state.page === 'settings' || state.page === 'models') render()
 })
 api.on('reminder:due', (reminder) => {
   if (!reminder?.title) return
@@ -6275,6 +7741,10 @@ api.on('reminder:due', (reminder) => {
 })
 
 async function start() {
+  const startupTaskId = beginUiTask(
+    '正在启动 ZP Workbench',
+    '正在读取本地设置、资料索引和运行状态…',
+  )
   try {
     const bootstrap = await api.bootstrap()
     state.settings = bootstrap.settings
@@ -6286,6 +7756,7 @@ async function start() {
     state.logs = bootstrap.logs || []
     state.history = bootstrap.history || []
     state.modelConfig = bootstrap.modelConfig || null
+    state.jev = bootstrap.jev || null
     state.workspace = bootstrap.workspace || {
       version: 2,
       courses: [],
@@ -6300,14 +7771,13 @@ async function start() {
       if (pageMeta[previewPage]) state.page = previewPage
     }
     if (state.page === 'guide' && launchParams.get('guide') === 'deepseek') {
-      state.rukaRoute = 'cli'
-      state.rukaOpenSections.add('rukaDeepseekDetails')
       state.rukaDeepseekOpen = true
     }
     const showWelcome = !state.onboarding?.welcomeSeen
     state.welcomeOverlayPinned = showWelcome
     applyTheme(state.settings.theme || 'system')
     render()
+    completeUiTask(startupTaskId, 'ZP Workbench 已就绪', '本地工作区已加载。')
     if (showWelcome) {
       patchOnboarding({
         welcomeSeen: true,
@@ -6344,6 +7814,7 @@ async function start() {
       )
     }
   } catch (error) {
+    failUiTask(startupTaskId, 'ZP Workbench 启动失败', error.message)
     document.querySelector('#view').innerHTML = `
       <section class="fatal-panel">
         <i data-lucide="circle-alert"></i>
@@ -6367,5 +7838,6 @@ setInterval(async () => {
 }, 15000)
 
 updateClock()
+refreshIcons()
 setInterval(updateClock, 30000)
 start()

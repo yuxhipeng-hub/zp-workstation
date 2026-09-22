@@ -155,9 +155,10 @@ async function uniqueDestination(directory, originalName) {
 }
 
 class ExperimentLibrary {
-  constructor({ settings, workspace }) {
+  constructor({ settings, workspace, jevManager = null }) {
     this.settings = settings
     this.workspace = workspace
+    this.jevManager = jevManager
   }
 
   getRoot() {
@@ -171,6 +172,50 @@ class ExperimentLibrary {
     const target = path.join(root, sanitizePathSegment(group))
     if (!isPathInside(root, target)) throw new Error('实验分组路径不安全。')
     return target
+  }
+
+  async suggestEntries(entries = []) {
+    const existingGroups = new Set(
+      (this.workspace.get().experiments || [])
+        .map((item) => String(item.group || '').trim())
+        .filter(Boolean),
+    )
+    const root = this.getRoot()
+    const directoryEntries = await fsp.readdir(root, { withFileTypes: true }).catch(() => [])
+    for (const entry of directoryEntries) {
+      if (entry.isDirectory()) existingGroups.add(entry.name)
+    }
+
+    if (this.jevManager) {
+      return this.jevManager.suggestEntries(entries, {
+        existingGroups: [...existingGroups],
+      })
+    }
+
+    const suggestions = []
+    for (const entry of entries || []) {
+      const fileName = String(entry?.name || path.basename(entry?.path || '')).trim()
+      const requestedGroup = String(entry?.group || '').trim()
+      const matchedGroup = resolveExperimentGroup(fileName, [...existingGroups])
+      const group = requestedGroup || matchedGroup || inferExperimentGroup(fileName)
+      suggestions.push({
+        ...entry,
+        name: fileName,
+        suggestion: {
+          group,
+          confidence: requestedGroup ? 1 : matchedGroup ? 0.7 : 0.35,
+          source: requestedGroup ? 'explicit' : 'local',
+          reason: requestedGroup
+            ? '使用了你指定的目标文件夹。'
+            : matchedGroup
+              ? '匹配到了已有的课程文件夹。'
+              : '根据文件名生成新的课程分类。',
+          model: '',
+          lowConfidence: !requestedGroup && !matchedGroup,
+        },
+      })
+    }
+    return { suggestions, usedJev: false, mode: 'local', model: '' }
   }
 
   async importEntries(entries) {
@@ -216,8 +261,12 @@ class ExperimentLibrary {
         }
 
         const originalName = path.basename(resolvedSource)
+        const requestedGroup =
+          typeof entry === 'object' && String(entry?.group || '').trim()
+            ? sanitizePathSegment(entry.group)
+            : ''
         const matchedGroup = resolveExperimentGroup(originalName, [...existingGroups])
-        const group = matchedGroup || inferExperimentGroup(originalName)
+        const group = requestedGroup || matchedGroup || inferExperimentGroup(originalName)
         if (!existingGroups.has(group)) {
           existingGroups.add(group)
           createdGroups.push(group)
