@@ -639,6 +639,8 @@ test('moves an experiment to an existing course folder from a select dialog', as
     await expect(fileRow).toBeVisible()
     const openFileButton = fileRow.getByRole('button', { name: '打开文件' })
     const moveFileButton = fileRow.getByRole('button', { name: '移动到其他课程文件夹' })
+    await openFileButton.scrollIntoViewIfNeeded()
+    await window.waitForTimeout(100)
     await openFileButton.hover()
     await expect(window.locator('#quickTooltip')).toHaveText('打开文件')
     await expect(window.locator('#quickTooltip')).toBeVisible()
