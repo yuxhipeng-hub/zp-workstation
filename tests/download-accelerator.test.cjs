@@ -184,6 +184,61 @@ test('download accelerator resumes an existing partial chunk', async (t) => {
   assert.deepEqual(fs.readFileSync(target), payload)
 })
 
+test('download accelerator splits tail chunks to keep connections busy', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-download-tail-'))
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }))
+  const payload = Buffer.alloc(16 * 1024 * 1024 + 73)
+  for (let index = 0; index < payload.length; index += 1) payload[index] = index % 233
+  const requests = []
+  const progress = []
+
+  const accelerator = new DownloadAccelerator({
+    concurrency: 4,
+    segments: 16,
+    idleTimeoutMs: 10000,
+    probeBytes: 32 * 1024,
+    probeConnections: 1,
+    probeTimeoutMs: 1000,
+    logger: { warn() {}, info() {} },
+    fetchImpl: async (url, options) => {
+      const range = readRequestedRange(options)
+      assert.ok(range, 'every request should use an HTTP range request')
+      requests.push({ url, range })
+      return rangeResponse(payload, range, 1)
+    },
+  })
+
+  const target = path.join(tempDir, 'ZP-Workbench-Setup-0.4.4-x64.exe')
+  const result = await accelerator.download({
+    name: path.basename(target),
+    size: payload.length,
+    sha256: sha256(payload),
+    target,
+    sources: [{ id: 'mirror', label: '国内加速', url: 'https://mirror.example/setup.exe' }],
+    onProgress: (event) => progress.push(event),
+  })
+
+  const transferRequests = requests.filter(({ range }) => range.end - range.start + 1 > 32 * 1024)
+  const tailRequests = transferRequests.filter(
+    ({ range }) => range.start >= Math.floor(payload.length * 0.9),
+  )
+
+  assert.equal(result.mode, 'segmented')
+  assert.deepEqual(fs.readFileSync(target), payload)
+  assert.ok(transferRequests.length > 16, 'tail splitting should create extra range requests')
+  assert.ok(tailRequests.length >= 8, 'the final 10% should use multiple smaller ranges')
+  assert.ok(
+    tailRequests.every(({ range }) => range.end - range.start + 1 < 1024 * 1024),
+    'tail ranges should be smaller than the initial one-megabyte chunks',
+  )
+  assert.ok(
+    progress.some(
+      (event) => event.percent >= 90 && event.percent < 100 && event.activeConnections === 4,
+    ),
+    'all four connections should remain active after 90%',
+  )
+})
+
 test('content range parser accepts standard byte ranges', () => {
   assert.deepEqual(parseContentRange('bytes 10-19/100'), {
     start: 10,

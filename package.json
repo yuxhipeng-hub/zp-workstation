@@ -1,6 +1,6 @@
 {
   "name": "zp-workstation",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "ZP Workbench：面向本地学习与知识整理的 DeepSeek Harness 工作站。",
   "main": "src/main/index.cjs",
   "author": "zp",
@@ -128,7 +128,7 @@
     "nodeMirror": "https://npmmirror.com/mirrors/node"
   },
   "build": {
-    "appId": "com.zp.workstation",
+    "appId": "com.zp.workbench",
     "productName": "ZP Workbench",
     "copyright": "Copyright © 2026 zp",
     "directories": {
@@ -186,6 +186,7 @@
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
+      "guid": "acc0f786-1437-5371-9173-93f7ff33fc77",
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,

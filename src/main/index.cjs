@@ -66,11 +66,13 @@ let knowledgeManager
 let reminderManager
 
 function iconPath() {
+  const preferred = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  const fallback = process.platform === 'win32' ? 'icon.png' : 'icon.ico'
   const candidates = [
-    path.join(process.resourcesPath, 'build', 'icon.png'),
-    path.join(process.resourcesPath, 'build', 'icon.ico'),
-    path.join(app.getAppPath(), 'build', 'icon.png'),
-    path.join(app.getAppPath(), 'build', 'icon.ico'),
+    path.join(process.resourcesPath, 'build', preferred),
+    path.join(app.getAppPath(), 'build', preferred),
+    path.join(process.resourcesPath, 'build', fallback),
+    path.join(app.getAppPath(), 'build', fallback),
   ]
   const { existsSync } = require('node:fs')
   return candidates.find((candidate) => existsSync(candidate)) || candidates[0]
