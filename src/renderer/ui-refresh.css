@@ -349,9 +349,9 @@ body[data-theme='light'] .nav-item.active {
   min-height: var(--topbar-height);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
   padding-inline: 24px;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
-  backdrop-filter: saturate(180%) blur(24px);
+  background: color-mix(in srgb, var(--bg) 94%, var(--panel));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .topbar-heading {
@@ -540,6 +540,7 @@ body[data-theme='light'] .nav-item.active {
 
 .view {
   padding: 28px 30px 88px;
+  overscroll-behavior: contain;
   scroll-padding-top: 20px;
 }
 
@@ -577,6 +578,23 @@ body[data-theme='light'] .nav-item.active {
 ) {
   border-radius: var(--radius);
   box-shadow: none;
+}
+
+:is(
+  .knowledge-card,
+  .assignment-card,
+  .experiment-file,
+  .plugin-item,
+  .skill-card,
+  .channel-item,
+  .model-status-card,
+  .schedule-course,
+  .today-task-list > button,
+  .today-timeline-row,
+  .today-file-list > button,
+  .today-review-row
+) {
+  contain: layout style;
 }
 
 .section h2,

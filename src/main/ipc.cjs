@@ -187,6 +187,9 @@ function registerIpc({
     workspace.updateKnowledge(id, patch),
   )
   ipcMain.handle('workspace:knowledge-delete', (_event, id) => workspace.deleteKnowledge(id))
+  ipcMain.handle('workspace:knowledge-delete-many', (_event, ids) =>
+    workspace.deleteKnowledgeMany(ids),
+  )
   ipcMain.handle('workspace:knowledge-generate', (_event, experimentId) =>
     knowledgeManager.generateFromExperiment(experimentId),
   )

@@ -661,11 +661,11 @@ class LauncherUpdater extends EventEmitter {
       downloading: true,
       downloaded: false,
       error: null,
-      message: `正在测速并使用多线路下载 ZP Workbench ${version} 安装包。`,
+      message: `正在测速并选择最快线路下载 ZP Workbench ${version} 安装包。`,
     })
     reportProgress(
       'starting',
-      { id: 'accelerated', label: '多线路分片加速' },
+      { id: 'accelerated', label: '更新线路测速' },
       {
         received: 0,
         total: Number(asset.size) || 0,
@@ -680,6 +680,8 @@ class LauncherUpdater extends EventEmitter {
       concurrency: this.config.downloadConcurrency,
       segments: this.config.downloadSegments,
       idleTimeoutMs: this.config.downloadIdleTimeoutMs,
+      slowChunkTimeoutMs: this.config.downloadSlowChunkTimeoutMs,
+      minChunkBytesPerSecond: this.config.downloadMinChunkBytesPerSecond,
     })
 
     try {
@@ -695,7 +697,7 @@ class LauncherUpdater extends EventEmitter {
             progress.phase || 'downloading',
             {
               id: progress.sourceId || 'accelerated',
-              label: progress.sourceLabel || '多线路分片加速',
+              label: progress.sourceLabel || '最快更新线路',
             },
             progress,
           )
@@ -727,7 +729,7 @@ class LauncherUpdater extends EventEmitter {
       const message = `更新下载失败：${error.message}`
       reportProgress(
         'error',
-        { id: 'accelerated', label: '多线路分片加速' },
+        { id: 'accelerated', label: '最快更新线路' },
         {
           error: message,
           received: 0,

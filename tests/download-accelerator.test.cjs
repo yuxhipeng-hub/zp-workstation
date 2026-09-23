@@ -40,7 +40,7 @@ function rangeResponse(payload, requestedRange, delayMs = 0) {
   })
 }
 
-test('download accelerator splits a large file across mirrors', async (t) => {
+test('download accelerator uses the fastest mirror for the first transfer pass', async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-download-accelerator-'))
   t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }))
   const payload = Buffer.alloc(4 * 1024 * 1024 + 73)
@@ -58,7 +58,7 @@ test('download accelerator splits a large file across mirrors', async (t) => {
       const range = readRequestedRange(options)
       requests.push({ url, range })
       assert.ok(range, 'every transfer should use an HTTP range request')
-      return rangeResponse(payload, range, url.includes('fast') ? 2 : 5)
+      return rangeResponse(payload, range, url.includes('fast') ? 1 : 250)
     },
   })
   const progress = []
@@ -81,9 +81,57 @@ test('download accelerator splits a large file across mirrors', async (t) => {
   assert.equal(progress.at(-1).phase, 'completed')
   assert.ok(progress.some((event) => Number(event.activeConnections) > 1))
 
-  const transferRequests = requests.filter((request) => request.range.end !== 64 * 1024 - 1)
+  const transferRequests = requests.filter(
+    (request) => request.range.end - request.range.start + 1 >= 256 * 1024,
+  )
   assert.equal(transferRequests.length, 4)
-  assert.ok(new Set(transferRequests.map((request) => request.url)).size > 1)
+  assert.equal(new Set(transferRequests.map((request) => request.url)).size, 1)
+})
+
+test('download accelerator falls back when the fastest mirror stops serving data', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-download-fallback-'))
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }))
+  const payload = Buffer.alloc(4 * 1024 * 1024 + 137)
+  for (let index = 0; index < payload.length; index += 1) payload[index] = index % 239
+  const transferUrls = []
+
+  const accelerator = new DownloadAccelerator({
+    concurrency: 4,
+    segments: 4,
+    idleTimeoutMs: 10000,
+    probeBytes: 64 * 1024,
+    probeTimeoutMs: 1000,
+    logger: { warn() {}, info() {} },
+    fetchImpl: async (url, options) => {
+      const range = readRequestedRange(options)
+      assert.ok(range, 'every transfer should use an HTTP range request')
+      const requestSize = range.end - range.start + 1
+      const isProbe = requestSize <= 64 * 1024
+      if (!isProbe) transferUrls.push(url)
+      if (url.includes('fast') && !isProbe) {
+        return new Response(null, { status: 503 })
+      }
+      return rangeResponse(payload, range, url.includes('fast') ? 1 : 60)
+    },
+  })
+
+  const target = path.join(tempDir, 'ZP-Workbench-Setup-0.4.3-x64.exe')
+  const result = await accelerator.download({
+    name: path.basename(target),
+    size: payload.length,
+    sha256: sha256(payload),
+    target,
+    sources: [
+      { id: 'fast', label: '快速线路', url: 'https://fast.example/setup.exe' },
+      { id: 'backup', label: '备用线路', url: 'https://backup.example/setup.exe' },
+    ],
+    onProgress() {},
+  })
+
+  assert.deepEqual(fs.readFileSync(target), payload)
+  assert.equal(result.sourceLabel, '备用线路')
+  assert.ok(transferUrls.includes('https://fast.example/setup.exe'))
+  assert.ok(transferUrls.includes('https://backup.example/setup.exe'))
 })
 
 test('download accelerator resumes an existing partial chunk', async (t) => {

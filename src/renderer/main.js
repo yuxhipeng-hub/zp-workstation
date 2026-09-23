@@ -49,6 +49,9 @@ const state = {
   knowledgeQuery: '',
   knowledgeSeed: null,
   knowledgeGeneratingId: null,
+  knowledgeSelecting: false,
+  selectedKnowledgeIds: new Set(),
+  knowledgeOpenGroups: null,
   highlightAssignmentId: null,
   experimentDropActive: false,
   experimentImporting: false,
@@ -2315,7 +2318,7 @@ function formatLauncherProgress(progress) {
   }
   if (progress.phase === 'starting') {
     return progress.mode === 'segmented'
-      ? '正在测速并建立多线路下载。'
+      ? '正在测速并选择最快下载线路。'
       : `正在连接${progress.sourceLabel || '更新线路'}。`
   }
   if (progress.phase === 'completed') {
@@ -3328,9 +3331,34 @@ function knowledgeGroups(cards) {
     .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
 }
 
+function knowledgeSearchText(card) {
+  return [
+    card.title,
+    card.course,
+    card.content,
+    card.source?.fileName,
+    ...normalizeKnowledgeTags(card.tags),
+  ]
+    .join(' ')
+    .toLocaleLowerCase('zh-CN')
+}
+
+function knowledgeMatchesQuery(card, query) {
+  const normalized = String(query || '')
+    .trim()
+    .toLocaleLowerCase('zh-CN')
+  return !normalized || knowledgeSearchText(card).includes(normalized)
+}
+
 function renderKnowledge() {
   if (!state.workspace) {
     return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取知识点</span></div>'
+  }
+  const currentGroups = [...document.querySelectorAll('.knowledge-group[data-knowledge-group]')]
+  if (currentGroups.length) {
+    state.knowledgeOpenGroups = new Set(
+      currentGroups.filter((group) => group.open).map((group) => group.dataset.knowledgeGroup),
+    )
   }
   const cards = [...state.workspace.knowledge].sort((left, right) =>
     String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')),
@@ -3343,6 +3371,16 @@ function renderKnowledge() {
   }).length
   const masteredCount = cards.filter((card) => Number(card.mastery) >= 3).length
   const masteryRate = cards.length ? Math.round((masteredCount / cards.length) * 100) : 0
+  const availableIds = new Set(cards.map((card) => card.id))
+  state.selectedKnowledgeIds = new Set(
+    [...state.selectedKnowledgeIds].filter((id) => availableIds.has(id)),
+  )
+  const selectedCount = state.selectedKnowledgeIds.size
+  const visibleCards = cards.filter((card) => knowledgeMatchesQuery(card, state.knowledgeQuery))
+  const visibleSelectedCount = visibleCards.filter((card) =>
+    state.selectedKnowledgeIds.has(card.id),
+  ).length
+  const allVisibleSelected = visibleCards.length > 0 && visibleSelectedCount === visibleCards.length
 
   return `
     <section class="page-intro action-intro">
@@ -3379,13 +3417,51 @@ function renderKnowledge() {
       </label>
     </section>
 
+    <section class="knowledge-selection-bar ${state.knowledgeSelecting ? 'is-active' : ''}" aria-label="知识点多选">
+      <div class="knowledge-selection-copy">
+        <span class="knowledge-selection-icon"><i data-lucide="${state.knowledgeSelecting ? 'list-checks' : 'mouse-pointer-2'}"></i></span>
+        <span>
+          <strong>${state.knowledgeSelecting ? `已选择 ${selectedCount} 个知识点` : '批量选择知识点'}</strong>
+          <small>${state.knowledgeSelecting ? '可选择当前搜索结果，并一次删除多个条目。' : '开启后可以勾选多个知识点一起删除。'}</small>
+        </span>
+      </div>
+      <div class="knowledge-selection-actions">
+        ${
+          state.knowledgeSelecting
+            ? `
+              <button class="button secondary compact" type="button" data-action="select-all-knowledge" ${visibleCards.length ? '' : 'disabled'}>
+                <i data-lucide="${allVisibleSelected ? 'circle-x' : 'check-check'}"></i>
+                <span>${allVisibleSelected ? '取消全选' : '全选当前结果'}</span>
+              </button>
+              <button class="button danger-outline compact" type="button" data-action="delete-selected-knowledge" ${selectedCount ? '' : 'disabled'}>
+                <i data-lucide="trash-2"></i><span>删除所选${selectedCount ? `（${selectedCount}）` : ''}</span>
+              </button>
+              <button class="button secondary compact" type="button" data-action="toggle-knowledge-selection">
+                <i data-lucide="x"></i><span>退出多选</span>
+              </button>`
+            : `
+              <button class="button secondary compact" type="button" data-action="toggle-knowledge-selection" ${cards.length ? '' : 'disabled'}>
+                <i data-lucide="list-checks"></i><span>多选删除</span>
+              </button>`
+        }
+      </div>
+    </section>
+
     ${
       cards.length
         ? `<div class="knowledge-tree">
             ${groups
               .map(
                 (group, index) => `
-                  <details class="knowledge-group" ${index === 0 ? 'open' : ''}>
+                  <details class="knowledge-group" data-knowledge-group="${escapeHtml(group.name)}" ${
+                    state.knowledgeOpenGroups
+                      ? state.knowledgeOpenGroups.has(group.name)
+                        ? 'open'
+                        : ''
+                      : index === 0
+                        ? 'open'
+                        : ''
+                  }>
                     <summary class="knowledge-group-head">
                       <span class="experiment-tree-chevron"><i data-lucide="chevron-right"></i></span>
                       <div class="experiment-folder">
@@ -3404,34 +3480,34 @@ function renderKnowledge() {
                           const tags = normalizeKnowledgeTags(card.tags)
                           const type = knowledgeTypeMeta[card.type] || knowledgeTypeMeta.concept
                           const mastery = knowledgeMasteryMeta(card.mastery)
-                          const searchText = [
-                            card.title,
-                            card.course,
-                            card.content,
-                            card.source?.fileName,
-                            ...tags,
-                          ]
-                            .join(' ')
-                            .toLocaleLowerCase('zh-CN')
+                          const searchText = knowledgeSearchText(card)
+                          const selected = state.selectedKnowledgeIds.has(card.id)
                           return `
-                            <article class="knowledge-card" data-knowledge-card data-search="${escapeHtml(searchText)}">
+                            <article class="knowledge-card ${selected ? 'is-selected' : ''} ${state.knowledgeSelecting ? 'is-selecting' : ''}" data-knowledge-card data-knowledge-id="${escapeHtml(card.id)}" data-search="${escapeHtml(searchText)}">
                               <div class="knowledge-card-head">
                                 <span class="knowledge-type"><i data-lucide="${type.icon}"></i>${type.label}</span>
                                 <div class="assignment-actions">
                                   ${
-                                    card.source?.experimentId
-                                      ? `<button class="icon-button compact" type="button" data-action="open-knowledge-source" data-id="${escapeHtml(card.source.experimentId)}" title="打开来源文件"><i data-lucide="file-search"></i></button>`
-                                      : ''
+                                    state.knowledgeSelecting
+                                      ? `<button class="knowledge-select-check ${selected ? 'is-selected' : ''}" type="button" data-action="select-knowledge" data-id="${escapeHtml(card.id)}" aria-pressed="${selected ? 'true' : 'false'}" title="${selected ? '取消选择' : '选择这个知识点'}">
+                                          <i data-lucide="${selected ? 'check' : 'plus'}"></i>
+                                        </button>`
+                                      : `
+                                        ${
+                                          card.source?.experimentId
+                                            ? `<button class="icon-button compact" type="button" data-action="open-knowledge-source" data-id="${escapeHtml(card.source.experimentId)}" title="打开来源文件"><i data-lucide="file-search"></i></button>`
+                                            : ''
+                                        }
+                                        <button class="icon-button compact" type="button" data-action="copy-knowledge-card" data-id="${escapeHtml(card.id)}" title="复制整理提示词">
+                                          <i data-lucide="sparkles"></i>
+                                        </button>
+                                        <button class="icon-button compact" type="button" data-action="edit-knowledge" data-id="${escapeHtml(card.id)}" title="编辑知识点">
+                                          <i data-lucide="pencil"></i>
+                                        </button>
+                                        <button class="icon-button compact danger" type="button" data-action="delete-knowledge" data-id="${escapeHtml(card.id)}" title="删除知识点">
+                                          <i data-lucide="trash-2"></i>
+                                        </button>`
                                   }
-                                  <button class="icon-button compact" type="button" data-action="copy-knowledge-card" data-id="${escapeHtml(card.id)}" title="复制整理提示词">
-                                    <i data-lucide="sparkles"></i>
-                                  </button>
-                                  <button class="icon-button compact" type="button" data-action="edit-knowledge" data-id="${escapeHtml(card.id)}" title="编辑知识点">
-                                    <i data-lucide="pencil"></i>
-                                  </button>
-                                  <button class="icon-button compact danger" type="button" data-action="delete-knowledge" data-id="${escapeHtml(card.id)}" title="删除知识点">
-                                    <i data-lucide="trash-2"></i>
-                                  </button>
                                 </div>
                               </div>
                               <h3>${escapeHtml(card.title)}</h3>
@@ -3444,14 +3520,18 @@ function renderKnowledge() {
                                 <div>${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>
                                 <span class="knowledge-mastery ${mastery.tone}">${mastery.label}</span>
                               </div>
-                              <div class="knowledge-review-row">
-                                <span>复习结果</span>
-                                <div>
-                                  <button type="button" data-action="review-knowledge" data-id="${escapeHtml(card.id)}" data-rating="forgot">忘了</button>
-                                  <button type="button" data-action="review-knowledge" data-id="${escapeHtml(card.id)}" data-rating="fuzzy">模糊</button>
-                                  <button type="button" data-action="review-knowledge" data-id="${escapeHtml(card.id)}" data-rating="known">掌握</button>
-                                </div>
-                              </div>
+                              ${
+                                state.knowledgeSelecting
+                                  ? ''
+                                  : `<div class="knowledge-review-row">
+                                      <span>复习结果</span>
+                                      <div>
+                                        <button type="button" data-action="review-knowledge" data-id="${escapeHtml(card.id)}" data-rating="forgot">忘了</button>
+                                        <button type="button" data-action="review-knowledge" data-id="${escapeHtml(card.id)}" data-rating="fuzzy">模糊</button>
+                                        <button type="button" data-action="review-knowledge" data-id="${escapeHtml(card.id)}" data-rating="known">掌握</button>
+                                      </div>
+                                    </div>`
+                              }
                             </article>`
                         })
                         .join('')}
@@ -6062,6 +6142,7 @@ async function handleAction(action, element) {
       const card = state.workspace?.knowledge.find((item) => item.id === element.dataset.id)
       if (!card || !window.confirm(`删除知识点“${card.title}”吗？`)) return
       applyWorkspace(await api.deleteKnowledge(card.id))
+      state.selectedKnowledgeIds.delete(card.id)
       if (state.editingKnowledgeId === card.id) {
         state.knowledgeComposerOpen = false
         state.editingKnowledgeId = null
@@ -6069,6 +6150,44 @@ async function handleAction(action, element) {
       }
       render()
       toast('知识点已删除。', 'success')
+      break
+    }
+    case 'toggle-knowledge-selection':
+      if (state.knowledgeSelecting) state.selectedKnowledgeIds.clear()
+      state.knowledgeSelecting = !state.knowledgeSelecting
+      render()
+      break
+    case 'select-knowledge': {
+      const id = element.dataset.id
+      if (!id) return
+      if (state.selectedKnowledgeIds.has(id)) state.selectedKnowledgeIds.delete(id)
+      else state.selectedKnowledgeIds.add(id)
+      render()
+      break
+    }
+    case 'select-all-knowledge': {
+      const visibleCards = (state.workspace?.knowledge || []).filter((card) =>
+        knowledgeMatchesQuery(card, state.knowledgeQuery),
+      )
+      const allVisibleSelected =
+        visibleCards.length > 0 &&
+        visibleCards.every((card) => state.selectedKnowledgeIds.has(card.id))
+      for (const card of visibleCards) {
+        if (allVisibleSelected) state.selectedKnowledgeIds.delete(card.id)
+        else state.selectedKnowledgeIds.add(card.id)
+      }
+      render()
+      break
+    }
+    case 'delete-selected-knowledge': {
+      const ids = [...state.selectedKnowledgeIds]
+      if (!ids.length) return
+      if (!window.confirm(`删除所选 ${ids.length} 个知识点吗？删除后无法撤销。`)) return
+      applyWorkspace(await api.deleteKnowledgeMany(ids))
+      state.selectedKnowledgeIds.clear()
+      state.knowledgeSelecting = true
+      render()
+      toast(`已删除 ${ids.length} 个知识点。`, 'success')
       break
     }
     case 'copy-knowledge-prompt': {

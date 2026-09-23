@@ -1,6 +1,6 @@
 {
   "name": "zp-workstation",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "ZP Workbench：面向本地学习与知识整理的 DeepSeek Harness 工作站。",
   "main": "src/main/index.cjs",
   "author": "zp",
@@ -66,8 +66,10 @@
     "repo": "zp-workstation",
     "assetPattern": "ZP-Workbench-Setup-${version}-x64.exe",
     "downloadConcurrency": 8,
-    "downloadSegments": 32,
+    "downloadSegments": 64,
     "downloadIdleTimeoutMs": 90000,
+    "downloadSlowChunkTimeoutMs": 8000,
+    "downloadMinChunkBytesPerSecond": 262144,
     "manifestUrls": [
       {
         "id": "manifest-direct",
@@ -83,6 +85,11 @@
         "id": "manifest-ghfast",
         "label": "国内加速更新清单备用",
         "url": "https://ghfast.top/https://github.com/yuxhipeng-hub/zp-workstation/releases/latest/download/latest.json"
+      },
+      {
+        "id": "manifest-xxooo",
+        "label": "国内高速更新清单",
+        "url": "https://gh.xxooo.cf/https://github.com/yuxhipeng-hub/zp-workstation/releases/latest/download/latest.json"
       }
     ],
     "apiMirrors": [
@@ -90,6 +97,11 @@
         "id": "github-api-gh-proxy",
         "label": "国内 GitHub API 加速",
         "prefix": "https://gh-proxy.com/"
+      },
+      {
+        "id": "github-api-xxooo",
+        "label": "国内 GitHub API 高速加速",
+        "prefix": "https://gh.xxooo.cf/"
       }
     ],
     "downloadMirrors": [
@@ -97,6 +109,11 @@
         "id": "github-download-gh-proxy",
         "label": "国内 GitHub 下载加速",
         "prefix": "https://gh-proxy.com/"
+      },
+      {
+        "id": "github-download-xxooo",
+        "label": "国内 GitHub 高速下载",
+        "prefix": "https://gh.xxooo.cf/"
       },
       {
         "id": "github-download-ghfast",

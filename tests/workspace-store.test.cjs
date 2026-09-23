@@ -40,6 +40,26 @@ test('persists assignments and knowledge points as separate local data', (t) => 
   assert.equal(reloaded.knowledge[0].mastery, 0)
 })
 
+test('deletes selected knowledge points in one persisted update', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const first = store.createKnowledge({ title: '矩阵的秩', course: '线性代数' }).knowledge[0]
+  const second = store.createKnowledge({ title: '特征值', course: '线性代数' }).knowledge[0]
+  store.createKnowledge({ title: '极限定义', course: '高等数学' })
+
+  const workspace = store.deleteKnowledgeMany([first.id, second.id, 'missing-id'])
+
+  assert.deepEqual(
+    workspace.knowledge.map((item) => item.title),
+    ['极限定义'],
+  )
+  assert.deepEqual(
+    new WorkspaceStore(directory).get().knowledge.map((item) => item.title),
+    ['极限定义'],
+  )
+})
+
 test('replaces generated knowledge by source and records review results', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

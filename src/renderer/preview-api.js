@@ -1665,6 +1665,11 @@ export function createPreviewLauncherApi() {
       state.workspace.knowledge = state.workspace.knowledge.filter((item) => item.id !== id)
       return clone(state.workspace)
     },
+    async deleteKnowledgeMany(ids) {
+      const targets = new Set(Array.isArray(ids) ? ids : [])
+      state.workspace.knowledge = state.workspace.knowledge.filter((item) => !targets.has(item.id))
+      return clone(state.workspace)
+    },
     async generateKnowledge(experimentId) {
       const experiment = state.workspace.experiments.find((item) => item.id === experimentId)
       if (!experiment) throw new Error('没有找到这份资料。')

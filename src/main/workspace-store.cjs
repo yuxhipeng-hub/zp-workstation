@@ -454,6 +454,16 @@ class WorkspaceStore {
     return this.get()
   }
 
+  deleteKnowledgeMany(ids = []) {
+    const targets = new Set(
+      (Array.isArray(ids) ? ids : []).map((id) => cleanString(id, 80)).filter(Boolean),
+    )
+    if (!targets.size) return this.get()
+    this.data.knowledge = this.data.knowledge.filter((item) => !targets.has(item.id))
+    this.save()
+    return this.get()
+  }
+
   replaceSourceKnowledge(experimentId, inputs = []) {
     const sourceId = cleanString(experimentId, 80)
     if (!sourceId) throw new Error('缺少资料文件标识。')

@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('launcher', {
   createKnowledge: (input) => ipcRenderer.invoke('workspace:knowledge-create', input),
   updateKnowledge: (id, patch) => ipcRenderer.invoke('workspace:knowledge-update', id, patch),
   deleteKnowledge: (id) => ipcRenderer.invoke('workspace:knowledge-delete', id),
+  deleteKnowledgeMany: (ids) => ipcRenderer.invoke('workspace:knowledge-delete-many', ids),
   generateKnowledge: (experimentId) =>
     ipcRenderer.invoke('workspace:knowledge-generate', experimentId),
   reviewKnowledge: (id, rating) => ipcRenderer.invoke('workspace:knowledge-review', id, rating),
