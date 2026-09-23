@@ -121,10 +121,14 @@ body {
 }
 
 body {
+  position: fixed;
+  inset: 0;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
   font-weight: 400;
+  overflow: clip;
+  overflow-anchor: none;
   -webkit-font-smoothing: subpixel-antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -2982,6 +2986,78 @@ code {
   font-size: 9px;
 }
 
+.knowledge-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 62px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  transition:
+    border-color var(--motion-base) var(--ease-out),
+    background-color var(--motion-base) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out);
+}
+
+.knowledge-selection-bar.is-active {
+  border-color: color-mix(in srgb, var(--info) 34%, var(--line));
+  background: color-mix(in srgb, var(--info) 5%, var(--panel-raised));
+  box-shadow: inset 3px 0 0 var(--info);
+}
+
+.knowledge-selection-copy {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.knowledge-selection-copy > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.knowledge-selection-copy strong {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.knowledge-selection-copy small {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.knowledge-selection-icon {
+  display: grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text-secondary);
+}
+
+.knowledge-selection-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.knowledge-selection-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .knowledge-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3111,6 +3187,55 @@ code {
 
 .knowledge-card[hidden] {
   display: none;
+}
+
+.knowledge-card.is-selecting {
+  cursor: pointer;
+}
+
+.knowledge-card.is-selected {
+  border-color: var(--info);
+  background: color-mix(in srgb, var(--info) 5%, var(--panel));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--info) 35%, transparent),
+    var(--shadow-sm);
+  transform: translateY(-2px);
+}
+
+.knowledge-select-check {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-emphasized);
+}
+
+.knowledge-select-check:hover {
+  border-color: var(--info);
+  color: var(--text);
+  transform: scale(1.04);
+}
+
+.knowledge-select-check.is-selected {
+  border-color: var(--info);
+  background: var(--info);
+  color: var(--ink-inverse);
+}
+
+.knowledge-select-check svg {
+  width: 14px;
+  height: 14px;
 }
 
 .knowledge-card-head {

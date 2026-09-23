@@ -67,10 +67,19 @@ let reminderManager
 
 function iconPath() {
   const candidates = [
-    path.join(process.resourcesPath, 'build', 'icon.ico'),
     path.join(process.resourcesPath, 'build', 'icon.png'),
-    path.join(app.getAppPath(), 'build', 'icon.ico'),
+    path.join(process.resourcesPath, 'build', 'icon.ico'),
     path.join(app.getAppPath(), 'build', 'icon.png'),
+    path.join(app.getAppPath(), 'build', 'icon.ico'),
+  ]
+  const { existsSync } = require('node:fs')
+  return candidates.find((candidate) => existsSync(candidate)) || candidates[0]
+}
+
+function shellIconPath() {
+  const candidates = [
+    path.join(process.resourcesPath, 'build', 'icon.ico'),
+    path.join(app.getAppPath(), 'build', 'icon.ico'),
   ]
   const { existsSync } = require('node:fs')
   return candidates.find((candidate) => existsSync(candidate)) || candidates[0]
@@ -79,6 +88,25 @@ function iconPath() {
 function appIcon() {
   const image = nativeImage.createFromPath(iconPath())
   return image.isEmpty() ? undefined : image
+}
+
+function applyWindowIdentity(window, title = APP_NAME) {
+  if (!window || window.isDestroyed()) return
+  const icon = appIcon()
+  if (icon) window.setIcon(icon)
+  window.setTitle(title)
+  if (process.platform !== 'win32') return
+  try {
+    window.setAppDetails({
+      appId: APP_ID,
+      appIconPath: shellIconPath(),
+      appIconIndex: 0,
+      relaunchCommand: process.execPath,
+      relaunchDisplayName: APP_NAME,
+    })
+  } catch (error) {
+    logger?.warn?.('window-icon', error.message)
+  }
 }
 
 function createMainWindow() {
@@ -106,10 +134,11 @@ function createMainWindow() {
       spellcheck: false,
     },
   })
-  const icon = appIcon()
-  if (icon) mainWindow.setIcon(icon)
-  mainWindow.setTitle(APP_NAME)
+  applyWindowIdentity(mainWindow)
   mainWindow.setMenuBarVisibility(false)
+  mainWindow.webContents.on('page-favicon-updated', () => {
+    applyWindowIdentity(mainWindow)
+  })
 
   const devServer = process.env.VITE_DEV_SERVER_URL
   if (devServer) {
@@ -118,7 +147,12 @@ function createMainWindow() {
     mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'renderer', 'index.html'))
   }
 
-  mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.once('ready-to-show', () => {
+    applyWindowIdentity(mainWindow)
+    mainWindow.show()
+  })
+  mainWindow.on('show', () => applyWindowIdentity(mainWindow))
+  mainWindow.on('focus', () => applyWindowIdentity(mainWindow))
   mainWindow.on('close', (event) => {
     if (!quitting && settings?.get().minimizeToTray) {
       event.preventDefault()
@@ -154,10 +188,21 @@ function openWorkbench(url) {
       sandbox: true,
     },
   })
-  const icon = appIcon()
-  if (icon) workbenchWindow.setIcon(icon)
+  applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`)
   workbenchWindow.setMenuBarVisibility(false)
+  workbenchWindow.webContents.on('page-favicon-updated', () => {
+    applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`)
+  })
+  workbenchWindow.webContents.on('did-finish-load', () => {
+    applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`)
+  })
   workbenchWindow.loadURL(url)
+  workbenchWindow.on('show', () =>
+    applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`),
+  )
+  workbenchWindow.on('focus', () =>
+    applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`),
+  )
   workbenchWindow.on('closed', () => {
     workbenchWindow = null
   })

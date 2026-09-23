@@ -187,6 +187,89 @@ test('keeps the knowledge search centered without a duplicate result count', asy
   }
 })
 
+test('selects and deletes multiple knowledge points', async () => {
+  const userDataDir = createUserDataDir()
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(userDataDir, 'workspace.json'),
+    JSON.stringify(
+      {
+        version: 2,
+        courses: [],
+        assignments: [],
+        knowledge: [
+          {
+            id: 'knowledge-1',
+            title: '矩阵的秩',
+            course: '线性代数',
+            content: '按行阶梯形判断。',
+            tags: ['矩阵'],
+            mastery: 0,
+            updatedAt: '2026-09-23T08:00:00.000Z',
+          },
+          {
+            id: 'knowledge-2',
+            title: '特征值',
+            course: '线性代数',
+            content: '求解特征方程。',
+            tags: ['矩阵'],
+            mastery: 0,
+            updatedAt: '2026-09-23T07:00:00.000Z',
+          },
+          {
+            id: 'knowledge-3',
+            title: '极限定义',
+            course: '高等数学',
+            content: '理解数列极限。',
+            tags: ['极限'],
+            mastery: 0,
+            updatedAt: '2026-09-23T06:00:00.000Z',
+          },
+        ],
+        experiments: [],
+        schedule: null,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav-item[data-page="knowledge"]').click()
+    const cards = window.locator('[data-knowledge-card]')
+    await expect(cards).toHaveCount(3)
+    await window.locator('.knowledge-group').evaluateAll((groups) => {
+      for (const group of groups) group.open = true
+    })
+
+    await window.getByRole('button', { name: '多选删除', exact: true }).click()
+    await expect(window.locator('[data-knowledge-card].is-selecting')).toHaveCount(3)
+    await cards.nth(0).locator('.knowledge-select-check').click()
+    await cards.nth(1).locator('.knowledge-select-check').click()
+    await expect(window.getByText('已选择 2 个知识点', { exact: true })).toBeVisible()
+
+    window.once('dialog', (dialog) => dialog.accept())
+    await window.getByRole('button', { name: '删除所选（2）', exact: true }).click()
+
+    await expect(cards).toHaveCount(1)
+    await expect(window.getByText('已选择 0 个知识点', { exact: true })).toBeVisible()
+    const workspace = JSON.parse(fs.readFileSync(path.join(userDataDir, 'workspace.json'), 'utf8'))
+    assert.deepEqual(
+      workspace.knowledge.map((item) => item.id),
+      ['knowledge-2'],
+    )
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
 test('keeps one assignment entry on today and opens the composer', async () => {
   const userDataDir = createUserDataDir()
   fs.writeFileSync(
@@ -337,6 +420,23 @@ test('updates the Jev mode immediately and labels the current switch state', asy
     await expect(modeTitle).toHaveText('Jev 增强待配置')
     await expect(modeSwitchTitle).toHaveText('Jev 已启用，待配置 Key')
     await expect(modeSwitch.locator('input')).toBeChecked()
+
+    await window.locator('.view').evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+    })
+    await modeSwitch.click()
+    await expect(modeTitle).toHaveText('免费本地模式（不使用 Jev）')
+    await window.locator('.view').evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+    })
+    await modeSwitch.click()
+    await expect(modeTitle).toHaveText('Jev 增强待配置')
+    const pagePosition = await window.evaluate(() => ({
+      documentScroll: globalThis.document.scrollingElement.scrollTop,
+      bodyScroll: globalThis.document.body.scrollTop,
+      appTop: Math.round(globalThis.document.querySelector('#app').getBoundingClientRect().top),
+    }))
+    expect(pagePosition).toEqual({ documentScroll: 0, bodyScroll: 0, appTop: 0 })
 
     await modeSwitch.locator('input').focus()
     await expect(modeSwitch).toHaveCSS('outline-style', 'none')
@@ -539,6 +639,8 @@ test('moves an experiment to an existing course folder from a select dialog', as
     await expect(fileRow).toBeVisible()
     const openFileButton = fileRow.getByRole('button', { name: '打开文件' })
     const moveFileButton = fileRow.getByRole('button', { name: '移动到其他课程文件夹' })
+    await openFileButton.scrollIntoViewIfNeeded()
+    await window.waitForTimeout(100)
     await openFileButton.hover()
     await expect(window.locator('#quickTooltip')).toHaveText('打开文件')
     await expect(window.locator('#quickTooltip')).toBeVisible()
