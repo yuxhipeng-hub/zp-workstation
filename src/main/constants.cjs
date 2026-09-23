@@ -7,7 +7,7 @@ const REGISTRY_URL = `${DEFAULT_REGISTRY}/${encodeURIComponent(DSH_PACKAGE)}`
 const RELEASE_URL = 'https://github.com/deepseek-ai/deepseek-harness/releases'
 const DOCS_URL = 'https://deepseek-harness.github.io/deepseek-harness/'
 const APP_NAME = 'ZP Workbench'
-const APP_ID = 'com.zp.workstation'
+const APP_ID = 'com.zp.workbench'
 const THEME_VALUES = new Set(['system', 'light', 'dark'])
 
 const CHANNELS = {

@@ -14,6 +14,9 @@ const DEFAULT_PROBE_BYTES = 256 * 1024
 const DEFAULT_PROBE_CONNECTIONS = 8
 const DEFAULT_PROBE_TIMEOUT = 6000
 const PROGRESS_INTERVAL = 120
+const DYNAMIC_PENDING_MULTIPLIER = 4
+const MIN_DYNAMIC_CHUNK_BYTES = 128 * 1024
+const MAX_DYNAMIC_SPLIT_PARTS = 64
 
 function parseContentRange(value) {
   const match = String(value || '').match(/^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i)
@@ -386,6 +389,8 @@ class DownloadAccelerator {
     }
 
     let completedChunks = chunks.filter((chunk) => chunk.bytes === chunk.length).length
+    const pendingChunks = chunks.filter((chunk) => chunk.bytes < chunk.length)
+    let nextChunkIndex = chunks.length
     let lastProgressAt = 0
     let lastBytes = chunks.reduce((sum, chunk) => sum + chunk.bytes, 0)
     let lastSampleAt = Date.now()
@@ -395,6 +400,96 @@ class DownloadAccelerator {
     const usedSourceLabels = new Set()
     const sourceLabel = () =>
       usedSourceLabels.size ? Array.from(usedSourceLabels).join(' + ') : sources[0].label
+
+    const createRangeChunk = (start, end) => {
+      const rangeChunk = {
+        index: nextChunkIndex,
+        start,
+        end,
+        length: end - start + 1,
+        bytes: 0,
+        filePath: path.join(metaDir, `range-${start}-${end}.part`),
+      }
+      nextChunkIndex += 1
+      const existingSize = fileSize(rangeChunk.filePath)
+      if (existingSize > rangeChunk.length) removeFile(rangeChunk.filePath)
+      rangeChunk.bytes = existingSize > rangeChunk.length ? 0 : existingSize
+      return rangeChunk
+    }
+
+    const splitTailChunk = (chunk, targetSize) => {
+      const remainingStart = chunk.start + chunk.bytes
+      const remainingEnd = chunk.end
+      const remainingLength = remainingEnd - remainingStart + 1
+      const maxParts = Math.floor(remainingLength / MIN_DYNAMIC_CHUNK_BYTES)
+      const partCount = Math.min(
+        MAX_DYNAMIC_SPLIT_PARTS,
+        maxParts,
+        Math.max(2, Math.ceil(remainingLength / Math.max(MIN_DYNAMIC_CHUNK_BYTES, targetSize))),
+      )
+      if (partCount < 2) return false
+
+      const pendingIndex = pendingChunks.indexOf(chunk)
+      if (pendingIndex >= 0) pendingChunks.splice(pendingIndex, 1)
+
+      if (chunk.bytes > 0) {
+        chunk.end = remainingStart - 1
+        chunk.length = chunk.bytes
+        completedChunks += 1
+      } else {
+        const chunkIndex = chunks.indexOf(chunk)
+        if (chunkIndex >= 0) chunks.splice(chunkIndex, 1)
+      }
+
+      const baseLength = Math.floor(remainingLength / partCount)
+      let start = remainingStart
+      for (let index = 0; index < partCount; index += 1) {
+        const end =
+          index === partCount - 1 ? remainingEnd : Math.min(remainingEnd, start + baseLength - 1)
+        const rangeChunk = createRangeChunk(start, end)
+        chunks.push(rangeChunk)
+        if (rangeChunk.bytes < rangeChunk.length) pendingChunks.push(rangeChunk)
+        start = end + 1
+      }
+      return true
+    }
+
+    const expandTailChunks = () => {
+      const targetPending = Math.max(
+        this.concurrency + 1,
+        this.concurrency * DYNAMIC_PENDING_MULTIPLIER,
+      )
+      const downloadedBytes = chunks.reduce((sum, chunk) => sum + chunk.bytes, 0)
+      if (downloadedBytes < size * 0.75) return
+
+      while (pendingChunks.length > 0 && pendingChunks.length < targetPending) {
+        let target = pendingChunks[0]
+        let targetRemaining = target.length - target.bytes
+        for (const chunk of pendingChunks.slice(1)) {
+          const remaining = chunk.length - chunk.bytes
+          if (remaining > targetRemaining) {
+            target = chunk
+            targetRemaining = remaining
+          }
+        }
+        if (targetRemaining < MIN_DYNAMIC_CHUNK_BYTES * 2) break
+
+        const totalRemaining = pendingChunks.reduce(
+          (sum, chunk) => sum + (chunk.length - chunk.bytes),
+          0,
+        )
+        const targetSize = Math.max(
+          MIN_DYNAMIC_CHUNK_BYTES,
+          Math.ceil(totalRemaining / targetPending),
+        )
+        if (!splitTailChunk(target, targetSize)) break
+      }
+    }
+
+    const claimNextChunk = () => {
+      expandTailChunks()
+      return pendingChunks.shift() || null
+    }
 
     const reportProgress = (phase = 'downloading') => {
       const now = Date.now()
@@ -418,23 +513,19 @@ class DownloadAccelerator {
         etaSeconds: speed > 0 ? Math.max(0, (size - received) / speed) : null,
         activeConnections: activeTransfers,
         completedChunks,
-        totalChunks: chunkCount,
+        totalChunks: chunks.length,
         mode: 'segmented',
       })
     }
 
     const runController = new AbortController()
-    let nextChunk = 0
     let firstError = null
     const workerCount = Math.min(this.concurrency, chunks.length)
     const workers = Array.from({ length: workerCount }, () =>
       (async () => {
         while (!firstError) {
-          const index = nextChunk
-          nextChunk += 1
-          if (index >= chunks.length) return
-          const chunk = chunks[index]
-          if (chunk.bytes === chunk.length) continue
+          const chunk = claimNextChunk()
+          if (!chunk) return
           activeTransfers += 1
           try {
             const usedSource = await this.downloadChunk(
@@ -471,7 +562,19 @@ class DownloadAccelerator {
       throw new Error('部分下载分片不完整，请重新下载。')
     }
 
-    const actualSha256 = await assembleChunks(chunks, target, size, sha256)
+    const orderedChunks = [...chunks].sort((left, right) => left.start - right.start)
+    let expectedStart = 0
+    for (const chunk of orderedChunks) {
+      if (chunk.start !== expectedStart) {
+        throw new Error('下载分片范围不连续，请重新下载。')
+      }
+      expectedStart = chunk.end + 1
+    }
+    if (expectedStart !== size) {
+      throw new Error('下载分片没有覆盖完整安装包，请重新下载。')
+    }
+
+    const actualSha256 = await assembleChunks(orderedChunks, target, size, sha256)
     fs.rmSync(metaDir, { recursive: true, force: true })
     reportProgress('completed')
     return {
