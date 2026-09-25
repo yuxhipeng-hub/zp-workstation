@@ -8,7 +8,7 @@ export default defineConfig({
   build: {
     outDir: resolve(import.meta.dirname, 'dist/renderer'),
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: false,
     rollupOptions: {
       input: {
         main: resolve(import.meta.dirname, 'src/renderer/index.html'),

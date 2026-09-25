@@ -2,6 +2,7 @@ const path = require('node:path')
 const {
   app,
   BrowserWindow,
+  desktopCapturer,
   Menu,
   Tray,
   nativeImage,
@@ -24,6 +25,7 @@ const { DshManager } = require('./dsh-manager.cjs')
 const { LauncherUpdater } = require('./launcher-updater.cjs')
 const { SkillsManager } = require('./skills-manager.cjs')
 const { BackupManager } = require('./backup-manager.cjs')
+const { AppHostManager } = require('./app-host-manager.cjs')
 const { KnowledgeManager } = require('./knowledge-manager.cjs')
 const { ReminderManager } = require('./reminder-manager.cjs')
 const { registerIpc } = require('./ipc.cjs')
@@ -62,6 +64,7 @@ let dshManager
 let launcherUpdater
 let skillsManager
 let backupManager
+let appHostManager
 let knowledgeManager
 let reminderManager
 
@@ -138,6 +141,31 @@ function createMainWindow() {
   })
   applyWindowIdentity(mainWindow)
   mainWindow.setMenuBarVisibility(false)
+  mainWindow.webContents.session.setDisplayMediaRequestHandler(async (_request, callback) => {
+    try {
+      const sourceId = appHostManager?.getPendingCaptureSource(mainWindow.webContents.id)
+      if (!sourceId) {
+        callback({})
+        return
+      }
+      const sources = await desktopCapturer.getSources({
+        types: ['window'],
+        thumbnailSize: { width: 1, height: 1 },
+      })
+      const source = sources.find((item) => item.id === sourceId)
+      callback(source ? { video: { id: source.id, name: source.name } } : {})
+    } catch (error) {
+      logger?.warn?.('app-capture', error.message)
+      callback({})
+    }
+  })
+  const syncFullScreenState = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window:fullscreen-changed', mainWindow.isFullScreen())
+    }
+  }
+  mainWindow.on('enter-full-screen', syncFullScreenState)
+  mainWindow.on('leave-full-screen', syncFullScreenState)
   mainWindow.webContents.on('page-favicon-updated', () => {
     applyWindowIdentity(mainWindow)
   })
@@ -287,6 +315,7 @@ async function bootstrap() {
     logger,
     skillRegistryFile,
   })
+  appHostManager = new AppHostManager({ app, logger, desktopCapturer })
   knowledgeManager = new KnowledgeManager({ app, workspace, dshManager, logger })
   reminderManager = new ReminderManager({
     settings,
@@ -320,6 +349,7 @@ async function bootstrap() {
     launcherUpdater,
     skillsManager,
     backupManager,
+    appHostManager,
     knowledgeManager,
     reminderManager,
     getMainWindow: () => mainWindow,
@@ -363,6 +393,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', async (event) => {
   quitting = true
+  await appHostManager?.shutdown()
   backupManager?.stopAuto()
   jevManager?.stop()
   if (dshManager) {

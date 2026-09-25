@@ -18,26 +18,31 @@ GitHub 地址：
 
 ## 自动发布
 
-仓库已经包含 `.github/workflows/release.yml`。发布新版本时只需要：
+仓库已经包含 `.github/workflows/release.yml`。正常发布不需要在本机运行
+`npm run dist`、手工创建 Tag 或上传 Release，安装包构建和上传都由 GitHub Actions
+完成。推荐在 GitHub Actions 页面打开 `Release ZP Workbench`，点击 `Run workflow`，
+填写版本号和更新说明后运行。
+
+也可以从已登录 GitHub CLI 的终端触发同一条流水线：
 
 ```powershell
-npm version 0.3.1 --no-git-tag-version
-npm test
-git add package.json package-lock.json
-git commit -m "release: ZP Workbench 0.3.1"
-git tag v0.3.1
-git push origin v3
-git push origin v0.3.1
+gh workflow run release.yml --ref main -f version=0.3.1 -f notes="修复课表编辑和更新线路"
+gh run watch
 ```
 
-Tag 推送到 GitHub 后，工作流会自动：
+工作流会自动：
 
 1. 将构建版本对齐为 `0.3.1`。
-2. 执行全部测试。
-3. 下载并校验内置的 Node.js 与 npm 运行时。
+2. 复用缓存的 Node.js、npm、Electron 和 NSIS 构建工具。
+3. 执行全部测试。
 4. 生成 `ZP-Workbench-Setup-0.3.1-x64.exe`。
 5. 生成 `latest.json` 和安装包 `.sha256` 文件。
-6. 创建 GitHub Release，并上传安装包、blockmap、校验文件和更新清单。
+6. 上传构建产物到 workflow artifact，发布失败时可只重跑上传步骤。
+7. 创建 GitHub Release，并上传安装包、blockmap、校验文件和更新清单。
+
+如果团队需要“Tag 即发布”的审计记录，也可以推送 `v0.3.1` 形式的 Tag 触发同一
+工作流。普通开发提交仍按正常 PR 流程推送；发布动作不再把 180 MB 安装包从本机
+传到 GitHub。
 
 工作流使用 GitHub 自动提供的 `GITHUB_TOKEN`，不需要额外创建发布密钥。
 GitHub 仓库需要在 `Settings → Actions → General → Workflow permissions`
@@ -135,13 +140,16 @@ CDN 不需要更换更新协议，只需追加 `manifestUrls`，已有客户端�
 
 ## 验证
 
-发布前至少验证：
+本地只做快速验证，不重复执行正式打包：
 
 ```powershell
+npm run lint
+npm run typecheck
 npm test
-npm run build:renderer
-npm run dist
+npm run build
 ```
 
-发布后使用旧版本设备验证“检查更新 → 查看线路 → 下载 → SHA-256 校验 → 打开安装向导”。
+GitHub Actions 的 `Release ZP Workbench` 工作流负责完整构建和产物校验。发布后可下载
+Release 资产，使用旧版本设备验证“检查更新 → 查看线路 → 下载 → SHA-256 校验 →
+打开安装向导”。
 如果本机没有 VPN，应单独确认国内清单、GitHub API 加速和下载加速至少有一条可用。

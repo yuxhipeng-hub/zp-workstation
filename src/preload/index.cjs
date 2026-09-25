@@ -12,6 +12,7 @@ const allowedEvents = new Set([
   'launcher:update-state',
   'launcher:download-progress',
   'jev:state',
+  'window:fullscreen-changed',
 ])
 
 contextBridge.exposeInMainWorld('launcher', {
@@ -35,6 +36,26 @@ contextBridge.exposeInMainWorld('launcher', {
   getDshModelState: (options) => ipcRenderer.invoke('dsh:model-state', options),
   setDeepseekApiKey: (value) => ipcRenderer.invoke('dsh:set-deepseek-key', value),
   clearDeepseekApiKey: () => ipcRenderer.invoke('dsh:clear-deepseek-key'),
+  listTools: (options) => ipcRenderer.invoke('apphost:list', options),
+  launchTool: (id) => ipcRenderer.invoke('apphost:launch', id),
+  stopTool: (sessionId) => ipcRenderer.invoke('apphost:stop', sessionId),
+  prepareToolCapture: (sessionId) => ipcRenderer.invoke('apphost:prepare-capture', sessionId),
+  setToolFavorite: (id, favorite) => ipcRenderer.invoke('apphost:favorite', id, favorite),
+  removeTool: (id) => ipcRenderer.invoke('apphost:remove', id),
+  getToolIcon: (id) => ipcRenderer.invoke('apphost:icon', id),
+  inspectToolSession: (sessionId) => ipcRenderer.invoke('apphost:inspect', sessionId),
+  executeToolAction: (sessionId, request) =>
+    ipcRenderer.invoke('apphost:action', sessionId, request),
+  openToolPath: (sessionId, targetPath, line) =>
+    ipcRenderer.invoke('apphost:open-path', sessionId, targetPath, line),
+  listVSCodeCommands: (sessionId, query) =>
+    ipcRenderer.invoke('apphost:vscode-commands', sessionId, query),
+  runVSCodeCommand: (sessionId, query, options) =>
+    ipcRenderer.invoke('apphost:vscode-run', sessionId, query, options),
+  readVSCodeOutput: (sessionId) => ipcRenderer.invoke('apphost:vscode-output', sessionId),
+  getToolActionLog: (options) => ipcRenderer.invoke('apphost:action-log', options),
+  clearToolActionLog: () => ipcRenderer.invoke('apphost:action-log-clear'),
+  setFullScreen: (fullscreen) => ipcRenderer.invoke('window:set-fullscreen', fullscreen),
   listSkills: (options) => ipcRenderer.invoke('skills:list', options),
   searchSkills: (query) => ipcRenderer.invoke('skills:search', query),
   installSkill: (spec) => ipcRenderer.invoke('skills:install', spec),
@@ -95,6 +116,8 @@ contextBridge.exposeInMainWorld('launcher', {
   stageDroppedFile: (payload) => ipcRenderer.invoke('file:stage-drop', payload),
   resolveDropReferences: (values) => ipcRenderer.invoke('file:resolve-drop-references', values),
   chooseDshHome: () => ipcRenderer.invoke('dialog:choose-dsh-home'),
+  chooseToolPath: () => ipcRenderer.invoke('dialog:choose-tool-path'),
+  addToolManually: () => ipcRenderer.invoke('dialog:add-tool-manually'),
   chooseExperimentDir: () => ipcRenderer.invoke('dialog:choose-experiment-dir'),
   chooseSyncDir: () => ipcRenderer.invoke('dialog:choose-sync-dir'),
   chooseExperimentFiles: () => ipcRenderer.invoke('dialog:choose-experiment-files'),

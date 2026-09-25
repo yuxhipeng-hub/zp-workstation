@@ -14,6 +14,35 @@ const api = window.launcher || previewModule?.createPreviewLauncherApi()
 
 const state = {
   page: 'today',
+  tools: null,
+  toolIcons: new Map(),
+  toolIconPending: new Set(),
+  toolQuery: '',
+  toolLoading: false,
+  toolRefreshing: false,
+  toolLaunchingId: null,
+  activeToolId: null,
+  activeToolSession: null,
+  toolSessions: {},
+  toolPreviewStatus: 'idle',
+  toolPreviewMessage: '',
+  toolStream: null,
+  toolInspection: null,
+  toolInspectionBusy: false,
+  toolInspectionOpen: false,
+  selectedInspectionPath: '',
+  toolActionBusy: false,
+  toolActionMessage: '',
+  toolActionLog: [],
+  toolActionLogBusy: false,
+  toolActionLogOpen: false,
+  toolCommandQuery: '',
+  toolCommandBusy: false,
+  toolCommandMessage: '',
+  vscodeCommandCandidates: [],
+  toolOutput: '',
+  toolOutputBusy: false,
+  toolViewerImmersive: false,
   settings: null,
   status: null,
   channels: {},
@@ -84,8 +113,12 @@ const state = {
   rukaDeepseekOpen: false,
 }
 
+let toolResizeState = null
+let toolIconObserver = null
+
 const pageMeta = {
   today: ['今天', '今日', '把今天要上的课、要交的作业和要复习的知识点集中在一页。'],
+  tools: ['工作', '工具台', '自动识别本机可用软件，在工作站内启动、查看和接管。'],
   schedule: ['学习', '课表', '导入课表文件，自动抓取上课时间并生成可自由调整的周课表。'],
   assignments: ['学习', '作业收件箱', '收集零碎任务，按截止时间和处理状态逐项清空。'],
   experiments: ['学习', '资料库', '按课程归纳文件，像 Windows 文件夹一样逐层展开。'],
@@ -2514,6 +2547,7 @@ function render(options = {}) {
 
   const renderers = {
     today: renderToday,
+    tools: renderTools,
     schedule: renderSchedule,
     assignments: renderAssignments,
     experiments: renderExperiments,
@@ -2534,9 +2568,16 @@ function render(options = {}) {
     state.page === 'today'
       ? content
       : `<div class="workbench-canvas route-canvas" data-route-canvas>${content}</div>`
+  syncToolViewerImmersive()
   syncOnboardingOverlay()
   refreshIcons()
   syncExperimentMorph()
+  if (state.page === 'tools') {
+    requestAnimationFrame(() => {
+      syncToolPreviewElement()
+      observeToolIcons()
+    })
+  }
   if (state.page === 'logs') scrollLogs()
   requestAnimationFrame(() => {
     const nextView = document.querySelector('#view')
@@ -3550,6 +3591,875 @@ function renderKnowledge() {
           </div>`
     }
   `
+}
+
+const TOOL_CATEGORY_ORDER = ['engineering', 'productivity', 'other', 'entertainment']
+const TOOL_CATEGORY_FALLBACKS = {
+  engineering: { label: '工程与开发', icon: 'wrench' },
+  productivity: { label: '办公与效率', icon: 'briefcase-business' },
+  other: { label: '其他应用', icon: 'shapes' },
+  entertainment: { label: '娱乐应用', icon: 'gamepad-2' },
+}
+
+function toolSearchText(tool) {
+  return [
+    tool.displayName,
+    tool.publisher,
+    tool.version,
+    tool.executableName,
+    tool.sourceLabel,
+    tool.categoryLabel,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase('zh-CN')
+}
+
+function renderToolRow(tool) {
+  const active = state.activeToolId === tool.id
+  const icon = state.toolIcons.get(tool.id)
+  return `
+    <div
+      class="tool-row ${active ? 'active' : ''} ${tool.running ? 'is-running' : ''}"
+      data-tool-row
+      data-tool-search="${escapeHtml(toolSearchText(tool))}"
+    >
+      <button
+        class="tool-row-main"
+        type="button"
+        data-action="select-tool"
+        data-id="${escapeHtml(tool.id)}"
+      >
+        <span class="tool-row-icon" data-tool-icon="${escapeHtml(tool.id)}">
+          ${
+            icon
+              ? `<img src="${escapeHtml(icon)}" alt="" />`
+              : `<i data-lucide="${tool.running ? 'monitor-up' : 'app-window'}"></i>`
+          }
+        </span>
+        <span class="tool-row-copy">
+          <strong>${escapeHtml(tool.displayName)}</strong>
+          <small>${escapeHtml(tool.publisher || tool.executableName)}${tool.version ? ` · ${escapeHtml(tool.version)}` : ''}</small>
+        </span>
+        <span class="tool-adapter-badge ${escapeHtml(tool.adapterTier || 'generic')}">
+          ${escapeHtml(tool.adapterLabel || '通用控制')}
+        </span>
+        ${tool.running ? '<span class="tool-running-dot" title="运行中"></span>' : ''}
+      </button>
+      <button
+        class="icon-button compact tool-favorite ${tool.favorite ? 'active' : ''}"
+        type="button"
+        data-action="toggle-tool-favorite"
+        data-id="${escapeHtml(tool.id)}"
+        data-favorite="${tool.favorite ? 'false' : 'true'}"
+        title="${tool.favorite ? '取消固定' : '固定到常用'}"
+        aria-label="${tool.favorite ? '取消固定' : '固定到常用'}"
+      >
+        <i data-lucide="star"></i>
+      </button>
+    </div>
+  `
+}
+
+function renderToolList() {
+  const tools = state.tools || []
+  if (state.toolLoading && !tools.length) {
+    return `
+      <div class="tool-list-state">
+        <i data-lucide="loader"></i>
+        <strong>正在识别本机工具</strong>
+        <span>读取开始菜单和应用路径，不会扫描整个硬盘。</span>
+      </div>
+    `
+  }
+  if (!tools.length) {
+    return `
+      <div class="tool-list-state">
+        <i data-lucide="search-x"></i>
+        <strong>没有发现可启动工具</strong>
+        <span>重新扫描后再试。</span>
+      </div>
+    `
+  }
+  const grouped = new Map(TOOL_CATEGORY_ORDER.map((category) => [category, []]))
+  for (const tool of tools) {
+    const category = grouped.has(tool.category) ? tool.category : 'other'
+    grouped.get(category).push(tool)
+  }
+  return TOOL_CATEGORY_ORDER.map((category) => {
+    const categoryTools = grouped.get(category)
+    if (!categoryTools.length) return ''
+    const fallback = TOOL_CATEGORY_FALLBACKS[category]
+    const label = categoryTools[0].categoryLabel || fallback.label
+    return `
+      <section class="tool-category" data-tool-category="${category}">
+        <div class="tool-category-head">
+          <span><i data-lucide="${fallback.icon}"></i>${escapeHtml(label)}</span>
+          <small data-tool-category-count>${categoryTools.length}</small>
+        </div>
+        <div class="tool-category-rows">${categoryTools.map(renderToolRow).join('')}</div>
+      </section>
+    `
+  }).join('')
+}
+
+function renderRunningToolSessions() {
+  const sessions = Object.values(state.toolSessions).sort(
+    (left, right) => Date.parse(right.startedAt || 0) - Date.parse(left.startedAt || 0),
+  )
+  if (!sessions.length) return ''
+  return `
+    <div class="tool-running-sessions">
+      <span>运行中</span>
+      ${sessions
+        .map(
+          (session) => `
+            <div class="tool-running-session ${state.activeToolSession?.id === session.id ? 'active' : ''}">
+              <button
+                type="button"
+                data-action="activate-tool-session"
+                data-id="${escapeHtml(session.id)}"
+              >
+                <i data-lucide="monitor-up"></i>
+                <span>${escapeHtml(session.displayName || session.executableName || '工具')}</span>
+              </button>
+              <button
+                class="icon-button compact danger"
+                type="button"
+                data-action="stop-tool"
+                data-id="${escapeHtml(session.id)}"
+                title="停止工具"
+                aria-label="停止工具"
+              >
+                <i data-lucide="square"></i>
+              </button>
+            </div>
+          `,
+        )
+        .join('')}
+    </div>
+  `
+}
+
+function inspectionActionsForNode(node) {
+  if (!node || node.enabled === false || node.offscreen) return []
+  const patterns = (node.patterns || []).join(' ')
+  const actions = [{ id: 'focus', label: '聚焦' }]
+  if (/InvokePattern/.test(patterns)) actions.unshift({ id: 'invoke', label: '调用' })
+  if (/SelectionItemPattern/.test(patterns)) actions.push({ id: 'select', label: '选择' })
+  if (/ExpandCollapsePattern/.test(patterns)) {
+    actions.push({ id: 'expand', label: '展开' }, { id: 'collapse', label: '折叠' })
+  }
+  return actions
+}
+
+function renderToolInspection(session) {
+  const inspection = state.toolInspection
+  if (!session?.running || inspection?.sessionId !== session.id) return ''
+  const summary = inspection.summary || {}
+  const selectedNode = inspection.nodes?.find((node) => node.path === state.selectedInspectionPath)
+  const availableActions = inspectionActionsForNode(selectedNode)
+  const metrics = [
+    ['按钮', summary.buttons],
+    ['输入', summary.edits],
+    ['菜单', summary.menus],
+    ['列表', summary.lists],
+    ['树', summary.trees],
+    ['文档', summary.documents],
+  ].filter(([, value]) => Number(value) > 0)
+  return `
+    <details class="tool-inspector" ${state.toolInspectionOpen ? 'open' : ''}>
+      <summary>
+        <span><i data-lucide="scan-search"></i>界面结构</span>
+        <small>${inspection.available ? `${summary.total || 0} 个元素` : '未读取到可访问元素'}</small>
+      </summary>
+      <div class="tool-inspector-body">
+        <div class="tool-inspector-metrics">
+          ${metrics.map(([label, value]) => `<span><strong>${Number(value)}</strong>${escapeHtml(label)}</span>`).join('')}
+        </div>
+        <div class="tool-inspector-actions">
+          <span>${
+            selectedNode
+              ? escapeHtml(selectedNode.name || selectedNode.automationId || '未命名元素')
+              : '选择一个元素'
+          }</span>
+          ${
+            availableActions.length
+              ? availableActions
+                  .map(
+                    (item) => `
+                      <button
+                        class="button secondary compact"
+                        type="button"
+                        data-action="execute-inspection-action"
+                        data-operation="${item.id}"
+                        ${state.toolActionBusy ? 'disabled' : ''}
+                      >${item.label}</button>
+                    `,
+                  )
+                  .join('')
+              : ''
+          }
+          ${state.toolActionMessage ? `<small>${escapeHtml(state.toolActionMessage)}</small>` : ''}
+        </div>
+        <div class="tool-inspector-list">
+          ${
+            inspection.nodes?.length
+              ? inspection.nodes
+                  .slice(0, 160)
+                  .map(
+                    (node) => `
+                      <button
+                        class="tool-inspector-row ${node.path === state.selectedInspectionPath ? 'active' : ''}"
+                        type="button"
+                        data-action="select-inspection-node"
+                        data-path="${escapeHtml(node.path || '')}"
+                        style="--tool-depth:${Math.min(10, Number(node.depth) || 0)}"
+                      >
+                        <span>${escapeHtml(node.controlType || 'Unknown')}</span>
+                        <strong>${escapeHtml(node.name || node.automationId || node.className || '未命名元素')}</strong>
+                        ${node.automationId ? `<code>${escapeHtml(node.automationId)}</code>` : ''}
+                      </button>
+                    `,
+                  )
+                  .join('')
+              : '<div class="tool-inspector-empty">目标程序没有暴露可读取的界面元素。</div>'
+          }
+        </div>
+      </div>
+    </details>
+  `
+}
+
+function renderToolActionLog(session) {
+  if (!session?.running || !state.toolActionLogOpen) return ''
+  const records = state.toolActionLog.filter((entry) => entry.sessionId === session.id)
+  return `
+    <div class="tool-action-log">
+      <div class="tool-action-log-head">
+        <span><i data-lucide="scroll-text"></i>执行记录</span>
+        <span class="tool-action-log-head-actions">
+          <small>${records.length} 条</small>
+          <button class="text-button" type="button" data-action="clear-tool-action-log">清空</button>
+        </span>
+      </div>
+      <div class="tool-action-log-list">
+        ${
+          records.length
+            ? records
+                .slice(0, 80)
+                .map(
+                  (entry) => `
+                    <div class="tool-action-log-row">
+                      <time>${formatTime(entry.at)}</time>
+                      <strong>${escapeHtml(entry.action || entry.kind || '动作')}</strong>
+                      <span class="${escapeHtml(entry.effect || '')}">${escapeHtml(entry.effect || entry.kind || '')}</span>
+                    </div>
+                  `,
+                )
+                .join('')
+            : '<div class="tool-action-log-empty">还没有动作记录。</div>'
+        }
+      </div>
+    </div>
+  `
+}
+
+function renderVSCodeControls(session) {
+  if (!session?.running) return ''
+  return `
+    <div class="tool-vscode-panel">
+      <div class="tool-vscode-command">
+        <label class="input-shell">
+          <i data-lucide="terminal-square"></i>
+          <input
+            id="toolCommandQuery"
+            type="text"
+            autocomplete="off"
+            placeholder="输入 VS Code 命令"
+            value="${escapeHtml(state.toolCommandQuery)}"
+          />
+        </label>
+        <button
+          class="button primary"
+          type="button"
+          data-action="run-vscode-command"
+          ${state.toolCommandBusy ? 'disabled' : ''}
+        >
+          <i data-lucide="${state.toolCommandBusy ? 'loader' : 'play'}"></i>
+          <span>${state.toolCommandBusy ? '执行中' : '执行'}</span>
+        </button>
+      </div>
+      <div class="tool-vscode-quick">
+        <button class="text-button" type="button" data-action="run-vscode-preset" data-query="终端: 创建新终端">打开终端</button>
+        <button class="text-button" type="button" data-action="run-vscode-preset" data-query="运行当前文件">运行当前文件</button>
+        <button class="text-button" type="button" data-action="open-vscode-path">
+          <i data-lucide="folder-open"></i><span>打开文件或文件夹</span>
+        </button>
+        <button class="text-button" type="button" data-action="read-vscode-output" ${state.toolOutputBusy ? 'disabled' : ''}>
+          <i data-lucide="${state.toolOutputBusy ? 'loader' : 'file-output'}"></i>
+          <span>读取输出</span>
+        </button>
+      </div>
+      ${
+        state.toolCommandMessage
+          ? `<p class="tool-vscode-message">${escapeHtml(state.toolCommandMessage)}</p>`
+          : ''
+      }
+      ${
+        state.vscodeCommandCandidates.length
+          ? `
+            <div class="tool-vscode-candidates">
+              ${state.vscodeCommandCandidates
+                .map(
+                  (command) => `
+                    <button
+                      type="button"
+                      data-action="run-vscode-candidate"
+                      data-query="${escapeHtml(command.name || command)}"
+                    >
+                      <i data-lucide="command"></i>
+                      <span>${escapeHtml(command.name || command)}</span>
+                    </button>
+                  `,
+                )
+                .join('')}
+            </div>
+          `
+          : ''
+      }
+      ${
+        state.toolOutput
+          ? `<pre class="tool-vscode-output">${escapeHtml(state.toolOutput)}</pre>`
+          : ''
+      }
+    </div>
+  `
+}
+
+function renderToolPreview(tool, session) {
+  if (!tool) {
+    return `
+      <div class="tool-preview-empty">
+        <span><i data-lucide="monitor"></i></span>
+        <strong>选择一个工具</strong>
+        <p>软件画面会固定显示在这里。</p>
+      </div>
+    `
+  }
+
+  const streamActive = Boolean(
+    state.toolStream &&
+    state.activeToolSession?.id &&
+    state.activeToolSession.id === session?.id &&
+    state.toolPreviewStatus === 'live',
+  )
+  const statusCopy =
+    state.toolPreviewMessage ||
+    (session?.capture
+      ? '正在连接窗口画面'
+      : session?.running
+        ? '当前窗口暂未识别，可重新连接'
+        : '启动后在这里观看')
+  const isVSCode = tool.executableName?.toLocaleLowerCase('en-US') === 'code.exe'
+
+  return `
+    <div class="tool-preview-head">
+      <div>
+        <span>${escapeHtml(tool.sourceLabel || '本机工具')}</span>
+        <h2>${escapeHtml(tool.displayName)}</h2>
+        <p>${escapeHtml(tool.publisher || tool.executableName)}${tool.version ? ` · ${escapeHtml(tool.version)}` : ''}</p>
+      </div>
+      <div class="tool-preview-head-actions">
+        <span class="tool-adapter-badge ${escapeHtml(tool.adapterTier || 'generic')}">
+          ${escapeHtml(tool.adapterLabel || '通用控制')}
+        </span>
+        <span class="tool-preview-state ${streamActive ? 'live' : session?.running ? 'running' : ''}">
+          <span></span>${streamActive ? '实时画面' : session?.running ? '运行中' : '未启动'}
+        </span>
+        <button
+          class="icon-button tool-immersive-button"
+          type="button"
+          data-action="toggle-tool-immersive"
+          title="${state.toolViewerImmersive ? '退出全屏画面' : '全屏画面'}"
+          aria-label="${state.toolViewerImmersive ? '退出全屏画面' : '全屏画面'}"
+          aria-pressed="${state.toolViewerImmersive ? 'true' : 'false'}"
+        >
+          <i data-lucide="${state.toolViewerImmersive ? 'minimize-2' : 'maximize-2'}"></i>
+        </button>
+      </div>
+    </div>
+    <div class="tool-preview-stage ${streamActive ? 'is-live' : ''}">
+      <video id="toolPreviewVideo" autoplay muted playsinline></video>
+      <div class="tool-preview-overlay">
+        <i data-lucide="${state.toolPreviewStatus === 'connecting' ? 'loader' : session?.running ? 'scan-search' : 'monitor'}"></i>
+        <strong>${streamActive ? '画面已连接' : session?.running ? '等待窗口画面' : '工具尚未启动'}</strong>
+        <span>${escapeHtml(statusCopy)}</span>
+      </div>
+    </div>
+    ${isVSCode ? renderVSCodeControls(session) : ''}
+    ${renderToolInspection(session)}
+    ${renderToolActionLog(session)}
+    <div class="tool-preview-actions">
+      ${
+        session?.running
+          ? `
+            <button class="button secondary" type="button" data-action="inspect-tool" data-id="${escapeHtml(session.id)}" ${state.toolInspectionBusy ? 'disabled' : ''}>
+              <i data-lucide="${state.toolInspectionBusy ? 'loader' : 'scan-search'}"></i>
+              <span>${state.toolInspectionBusy ? '正在读取' : '读取界面'}</span>
+            </button>
+            <button class="button secondary" type="button" data-action="toggle-tool-action-log" data-id="${escapeHtml(session.id)}" ${state.toolActionLogBusy ? 'disabled' : ''}>
+              <i data-lucide="${state.toolActionLogBusy ? 'loader' : 'scroll-text'}"></i>
+              <span>执行记录</span>
+            </button>
+            <button class="button secondary" type="button" data-action="connect-tool-preview" data-id="${escapeHtml(session.id)}">
+              <i data-lucide="refresh-cw"></i><span>重新连接画面</span>
+            </button>
+            <button class="button danger-outline" type="button" data-action="stop-tool" data-id="${escapeHtml(session.id)}">
+              <i data-lucide="square"></i><span>停止工具</span>
+            </button>
+          `
+          : `
+            <button class="button primary" type="button" data-action="launch-tool" data-id="${escapeHtml(tool.id)}" ${state.toolLaunchingId === tool.id ? 'disabled' : ''}>
+              <i data-lucide="${state.toolLaunchingId === tool.id ? 'loader' : 'play'}"></i>
+              <span>${state.toolLaunchingId === tool.id ? '正在启动' : '启动并观看'}</span>
+            </button>
+            <button class="button danger-outline" type="button" data-action="remove-tool" data-id="${escapeHtml(tool.id)}">
+              <i data-lucide="trash-2"></i><span>移除</span>
+            </button>
+          `
+      }
+    </div>
+  `
+}
+
+const TOOL_PANEL_WIDTH_KEY = 'zp-workbench-tool-panel-width'
+const TOOL_PANEL_MIN_WIDTH = 200
+const TOOL_PANEL_MAX_WIDTH = 760
+const TOOL_PANEL_DEFAULT_WIDTH = 380
+
+function readToolPanelWidth() {
+  try {
+    const storedValue = window.localStorage.getItem(TOOL_PANEL_WIDTH_KEY)
+    if (storedValue !== null) {
+      const stored = Number(storedValue)
+      if (Number.isFinite(stored)) {
+        return Math.min(TOOL_PANEL_MAX_WIDTH, Math.max(TOOL_PANEL_MIN_WIDTH, stored))
+      }
+    }
+  } catch {
+    // Resizing still works when storage is unavailable.
+  }
+  return TOOL_PANEL_DEFAULT_WIDTH
+}
+
+function toolPanelWidthRange(layout) {
+  const width = layout?.getBoundingClientRect().width || window.innerWidth
+  return {
+    min: TOOL_PANEL_MIN_WIDTH,
+    max: Math.max(TOOL_PANEL_MIN_WIDTH, Math.min(TOOL_PANEL_MAX_WIDTH, width - 420)),
+  }
+}
+
+function applyToolPanelWidth(layout, width, { persist = false } = {}) {
+  if (!layout) return
+  const range = toolPanelWidthRange(layout)
+  const nextWidth = Math.min(range.max, Math.max(range.min, Math.round(width)))
+  layout.style.setProperty('--tool-browser-width', `${nextWidth}px`)
+  const resizer = layout.querySelector('[data-tool-resizer]')
+  resizer?.setAttribute('aria-valuenow', String(nextWidth))
+  resizer?.setAttribute('aria-valuemax', String(range.max))
+  if (persist) {
+    try {
+      window.localStorage.setItem(TOOL_PANEL_WIDTH_KEY, String(nextWidth))
+    } catch {
+      // Ignore storage failures and keep the in-memory width for this render.
+    }
+  }
+  return nextWidth
+}
+
+function resetToolPanelWidth(layout) {
+  const range = toolPanelWidthRange(layout)
+  const nextWidth = Math.min(range.max, Math.max(range.min, TOOL_PANEL_DEFAULT_WIDTH))
+  applyToolPanelWidth(layout, nextWidth, { persist: true })
+}
+
+function syncToolViewerImmersive() {
+  document.body.classList.toggle(
+    'tool-viewer-immersive',
+    Boolean(state.toolViewerImmersive && state.page === 'tools'),
+  )
+}
+
+async function setToolViewerImmersive(active) {
+  state.toolViewerImmersive = Boolean(active)
+  syncToolViewerImmersive()
+  if (state.page === 'tools') render()
+  try {
+    await api.setFullScreen?.(state.toolViewerImmersive)
+  } catch {
+    // Keep the in-app focus layout when the native fullscreen request fails.
+  }
+}
+
+function renderTools() {
+  const tools = state.tools || []
+  const selected = tools.find((tool) => tool.id === state.activeToolId) || null
+  const toolPanelWidth = readToolPanelWidth()
+  const session =
+    state.activeToolSession && state.activeToolSession.appId === selected?.id
+      ? state.activeToolSession
+      : null
+  return `
+    <section class="page-intro action-intro tools-intro">
+      <div>
+        <h2>${tools.length ? `已识别 ${tools.length} 个工具` : '工具台'}</h2>
+        <p>选择软件即可启动、观看和操作，也可以在右侧恢复运行会话。</p>
+      </div>
+      <div class="tool-intro-actions">
+        <button class="button secondary" type="button" data-action="add-tool-manually">
+          <i data-lucide="plus"></i><span>添加应用</span>
+        </button>
+        <button class="button secondary" type="button" data-action="refresh-tools" ${state.toolRefreshing ? 'disabled' : ''}>
+          <i data-lucide="${state.toolRefreshing ? 'loader' : 'refresh-cw'}"></i>
+          <span>${state.toolRefreshing ? '正在扫描' : '重新扫描'}</span>
+        </button>
+      </div>
+    </section>
+    <section class="tool-deck">
+      <div
+        class="tool-deck-layout"
+        data-tool-deck-layout
+        style="--tool-browser-width: ${toolPanelWidth}px"
+      >
+        <div class="tool-browser">
+          <div class="tool-browser-head">
+            <label class="input-shell tool-search">
+              <i data-lucide="search"></i>
+              <input
+                id="toolSearch"
+                type="search"
+                autocomplete="off"
+                placeholder="搜索软件、类别、发布者或版本"
+                value="${escapeHtml(state.toolQuery)}"
+              />
+            </label>
+            <span id="toolSearchCount">${tools.length} 个工具</span>
+          </div>
+          ${renderRunningToolSessions()}
+          <div class="tool-list" id="toolList">${renderToolList()}</div>
+        </div>
+        <div
+          class="tool-deck-resizer"
+          role="separator"
+          aria-label="调整工具列表和实时画面宽度"
+          aria-orientation="vertical"
+          aria-valuemin="200"
+          aria-valuemax="760"
+          aria-valuenow="${toolPanelWidth}"
+          tabindex="0"
+          data-tool-resizer
+          title="拖动调整宽度，双击恢复默认"
+        ></div>
+        <div class="tool-viewer">${renderToolPreview(selected, session)}</div>
+      </div>
+    </section>
+  `
+}
+
+async function loadTools({ refresh = false } = {}) {
+  if (state.toolLoading || state.toolRefreshing) return
+  if (!refresh && state.tools !== null) return
+  if (refresh) state.toolRefreshing = true
+  else state.toolLoading = true
+  if (state.page === 'tools') render()
+  try {
+    state.tools = await api.listTools({ refresh })
+    syncToolSessions(state.tools)
+    const currentIds = new Set(state.tools.map((tool) => tool.id))
+    for (const id of state.toolIcons.keys()) {
+      if (!currentIds.has(id)) state.toolIcons.delete(id)
+    }
+    if (!state.activeToolId && state.tools.length) state.activeToolId = state.tools[0].id
+  } catch (error) {
+    state.tools = []
+    toast(`工具扫描失败：${error.message}`, 'error', 7000)
+  } finally {
+    state.toolLoading = false
+    state.toolRefreshing = false
+    if (state.page === 'tools') render()
+  }
+}
+
+function updateToolIconElement(id) {
+  const container = document.querySelector(`[data-tool-icon="${CSS.escape(id)}"]`)
+  const icon = state.toolIcons.get(id)
+  if (!container || !icon) return
+  const image = document.createElement('img')
+  image.src = icon
+  image.alt = ''
+  container.replaceChildren(image)
+}
+
+async function loadToolIcon(id) {
+  if (!id || state.toolIcons.has(id) || state.toolIconPending.has(id)) return
+  state.toolIconPending.add(id)
+  try {
+    const icon = await api.getToolIcon?.(id)
+    state.toolIcons.set(id, icon || null)
+    if (icon) updateToolIconElement(id)
+  } catch {
+    state.toolIcons.set(id, null)
+  } finally {
+    state.toolIconPending.delete(id)
+  }
+}
+
+function observeToolIcons() {
+  toolIconObserver?.disconnect()
+  const root = document.querySelector('.tool-list')
+  if (!root || !('IntersectionObserver' in window)) return
+  toolIconObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        const id = entry.target.dataset.toolIcon
+        if (id) loadToolIcon(id)
+      }
+    },
+    {
+      root,
+      rootMargin: '240px 0px',
+    },
+  )
+  for (const row of root.querySelectorAll('[data-tool-icon]')) {
+    const id = row.dataset.toolIcon
+    if (state.toolIcons.has(id)) updateToolIconElement(id)
+    else toolIconObserver.observe(row)
+  }
+}
+
+function filterToolRows(query = state.toolQuery) {
+  const normalized = String(query || '')
+    .trim()
+    .toLocaleLowerCase('zh-CN')
+  let visible = 0
+  for (const category of document.querySelectorAll('[data-tool-category]')) {
+    let categoryVisible = 0
+    for (const row of category.querySelectorAll('[data-tool-row]')) {
+      const matches = !normalized || row.dataset.toolSearch.includes(normalized)
+      row.classList.toggle('hidden', !matches)
+      if (matches) categoryVisible += 1
+    }
+    category.classList.toggle('hidden', categoryVisible === 0)
+    const categoryCount = category.querySelector('[data-tool-category-count]')
+    if (categoryCount) categoryCount.textContent = String(categoryVisible)
+    visible += categoryVisible
+  }
+  const count = document.querySelector('#toolSearchCount')
+  if (count)
+    count.textContent = normalized ? `${visible} 个结果` : `${state.tools?.length || 0} 个工具`
+}
+
+function stopToolPreview() {
+  const stream = state.toolStream
+  state.toolStream = null
+  state.toolPreviewStatus = 'idle'
+  state.toolPreviewMessage = ''
+  if (stream) {
+    for (const track of stream.getTracks()) track.stop()
+  }
+}
+
+function syncToolPreviewElement() {
+  if (state.page !== 'tools') return
+  const video = document.querySelector('#toolPreviewVideo')
+  if (!video) return
+  if (state.toolStream && video.srcObject !== state.toolStream) {
+    video.srcObject = state.toolStream
+    video.play().catch(() => {})
+  }
+}
+
+async function connectToolPreview(sessionId) {
+  if (!sessionId) return
+  stopToolPreview()
+  state.toolPreviewStatus = 'connecting'
+  state.toolPreviewMessage = '正在查找并连接目标窗口'
+  if (state.page === 'tools') render()
+
+  try {
+    const capture = await api.prepareToolCapture(sessionId)
+    if (!capture) {
+      state.toolPreviewStatus = 'unavailable'
+      state.toolPreviewMessage = '没有识别到可见窗口，软件仍在外部正常运行'
+      if (state.page === 'tools') render()
+      return
+    }
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    })
+    const track = stream.getVideoTracks()[0]
+    if (track && 'contentHint' in track) track.contentHint = 'detail'
+    state.toolStream = stream
+    state.toolPreviewStatus = 'live'
+    state.toolPreviewMessage = capture.sourceName || '窗口画面已连接'
+    track?.addEventListener('ended', () => {
+      if (state.toolStream !== stream) return
+      state.toolStream = null
+      state.toolPreviewStatus = 'idle'
+      state.toolPreviewMessage = '画面连接已结束'
+      if (state.page === 'tools') render()
+    })
+    if (state.page === 'tools') render()
+    requestAnimationFrame(() => syncToolPreviewElement())
+  } catch (error) {
+    state.toolPreviewStatus = 'error'
+    state.toolPreviewMessage = `画面连接失败：${error.message}`
+    if (state.page === 'tools') render()
+  }
+}
+
+function syncToolSessions(tools = state.tools || []) {
+  const runningTools = new Map(
+    tools.filter((tool) => tool.running && tool.sessionId).map((tool) => [tool.sessionId, tool]),
+  )
+  for (const [sessionId] of Object.entries(state.toolSessions)) {
+    if (!runningTools.has(sessionId)) delete state.toolSessions[sessionId]
+  }
+  for (const tool of runningTools.values()) {
+    const existing = state.toolSessions[tool.sessionId]
+    state.toolSessions[tool.sessionId] = {
+      ...(existing || {}),
+      id: tool.sessionId,
+      appId: tool.id,
+      displayName: tool.displayName,
+      executableName: tool.executableName,
+      running: true,
+    }
+  }
+  return runningTools
+}
+
+function sessionForTool(tool) {
+  return Object.values(state.toolSessions).find((session) => session.appId === tool?.id) || null
+}
+
+async function activateToolSession(session) {
+  const tool = state.tools?.find((item) => item.id === session.appId)
+  if (!tool) return
+  if (state.activeToolSession?.id !== session.id) stopToolPreview()
+  state.activeToolId = tool.id
+  state.activeToolSession = session
+  state.toolInspection = null
+  state.toolActionLogOpen = false
+  render()
+  await connectToolPreview(session.id)
+}
+
+function updateToolInState(session, running = true) {
+  if (!state.tools) return
+  state.tools = state.tools.map((tool) =>
+    tool.id === session.appId
+      ? {
+          ...tool,
+          running,
+          sessionId: running ? session.id : null,
+          lastLaunchedAt: session.startedAt || tool.lastLaunchedAt,
+        }
+      : tool,
+  )
+}
+
+async function launchTool(id) {
+  const tool = state.tools?.find((item) => item.id === id)
+  if (!tool || state.toolLaunchingId) return
+  state.toolLaunchingId = id
+  state.activeToolId = id
+  state.toolInspection = null
+  state.selectedInspectionPath = ''
+  state.toolActionMessage = ''
+  state.toolCommandQuery = ''
+  state.toolCommandMessage = ''
+  state.vscodeCommandCandidates = []
+  state.toolOutput = ''
+  state.toolActionLog = []
+  state.toolActionLogOpen = false
+  if (state.page === 'tools') render()
+  try {
+    const result = await api.launchTool(id)
+    state.activeToolSession = { ...result.session, running: true }
+    state.toolSessions[result.session.id] = { ...state.activeToolSession }
+    updateToolInState(result.session, true)
+    if (state.page === 'tools') render()
+    await connectToolPreview(result.session.id)
+  } catch (error) {
+    state.toolPreviewStatus = 'error'
+    state.toolPreviewMessage = error.message
+    toast(`启动失败：${error.message}`, 'error', 7000)
+    if (state.page === 'tools') render()
+  } finally {
+    state.toolLaunchingId = null
+    if (state.page === 'tools') render()
+  }
+}
+
+async function stopToolSession(sessionId) {
+  await api.stopTool(sessionId)
+  delete state.toolSessions[sessionId]
+  stopToolPreview()
+  state.toolInspection = null
+  state.selectedInspectionPath = ''
+  state.toolActionMessage = ''
+  state.toolCommandQuery = ''
+  state.toolCommandMessage = ''
+  state.vscodeCommandCandidates = []
+  state.toolOutput = ''
+  state.toolActionLog = []
+  state.toolActionLogOpen = false
+  if (state.activeToolSession?.id === sessionId) {
+    updateToolInState(state.activeToolSession, false)
+    state.activeToolSession = null
+  }
+  if (state.page === 'tools') render()
+}
+
+async function executeVSCodeCommand(query, { confirmed = false } = {}) {
+  const sessionId = state.activeToolSession?.id
+  const commandQuery = String(query || '').trim()
+  if (!sessionId || !commandQuery || state.toolCommandBusy) return
+  state.toolCommandBusy = true
+  state.toolCommandMessage = ''
+  state.vscodeCommandCandidates = []
+  render()
+  try {
+    const result = await api.runVSCodeCommand(sessionId, commandQuery, { confirmed })
+    if (result?.needsSelection) {
+      state.vscodeCommandCandidates = result.candidates || []
+      state.toolCommandMessage = `匹配到 ${state.vscodeCommandCandidates.length} 个命令，请选择。`
+      return
+    }
+    if (result?.requiresConfirmation) {
+      const accepted = window.confirm(`“${result.command}”可能修改、发布或删除数据。确认执行吗？`)
+      state.toolCommandBusy = false
+      render()
+      if (accepted) await executeVSCodeCommand(commandQuery, { confirmed: true })
+      else state.toolCommandMessage = '已取消危险命令。'
+      return
+    }
+    state.toolCommandMessage = `${result.status || 'COMPLETED_UNVERIFIED'} · 已执行：${result.command}`
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    state.toolInspection = await api.inspectToolSession(sessionId)
+  } catch (error) {
+    state.toolCommandMessage = error.message
+  } finally {
+    if (state.toolCommandBusy) {
+      state.toolCommandBusy = false
+      render()
+    }
+  }
 }
 
 function renderUpdates() {
@@ -5953,6 +6863,227 @@ async function persistSettingField(element) {
 
 async function handleAction(action, element) {
   switch (action) {
+    case 'select-tool': {
+      const id = element.dataset.id
+      const tool = state.tools?.find((item) => item.id === id)
+      if (!tool) return
+      if (state.activeToolId !== id) stopToolPreview()
+      state.toolInspection = null
+      state.selectedInspectionPath = ''
+      state.toolActionMessage = ''
+      state.toolCommandQuery = ''
+      state.toolCommandMessage = ''
+      state.vscodeCommandCandidates = []
+      state.toolOutput = ''
+      state.toolActionLog = []
+      state.toolActionLogOpen = false
+      state.activeToolId = id
+      state.activeToolSession = sessionForTool(tool)
+      render()
+      break
+    }
+    case 'launch-tool':
+      await launchTool(element.dataset.id)
+      break
+    case 'activate-tool-session': {
+      const session = state.toolSessions[element.dataset.id]
+      if (session) await activateToolSession(session)
+      break
+    }
+    case 'connect-tool-preview':
+      await connectToolPreview(element.dataset.id)
+      break
+    case 'toggle-tool-immersive':
+      await setToolViewerImmersive(!state.toolViewerImmersive)
+      break
+    case 'run-vscode-command':
+    case 'run-vscode-preset':
+    case 'run-vscode-candidate': {
+      const query =
+        action === 'run-vscode-preset' || action === 'run-vscode-candidate'
+          ? String(element.dataset.query || '')
+          : String(state.toolCommandQuery || '').trim()
+      if (!query || state.toolCommandBusy) break
+      state.toolCommandQuery = query
+      await executeVSCodeCommand(query)
+      break
+    }
+    case 'open-vscode-path': {
+      const sessionId = state.activeToolSession?.id
+      if (!sessionId) break
+      const grant = await api.chooseToolPath?.()
+      if (!grant?.grantId) break
+      try {
+        const result = await api.openToolPath(sessionId, grant.grantId, 1)
+        state.toolCommandMessage = `${result.status || 'COMPLETED_UNVERIFIED'} · 已打开：${grant.path || result.path}`
+      } catch (error) {
+        state.toolCommandMessage = error.message
+      }
+      render()
+      break
+    }
+    case 'read-vscode-output': {
+      const sessionId = state.activeToolSession?.id
+      if (!sessionId || state.toolOutputBusy) break
+      state.toolOutputBusy = true
+      render()
+      try {
+        const result = await api.readVSCodeOutput(sessionId)
+        state.toolOutput = result.text || '没有读取到终端或输出面板文本。'
+        state.toolCommandMessage = [
+          result.activePanel || result.source,
+          result.lines?.length ? `${result.lines.length} 行` : '',
+          Number.isFinite(result.exitCode) ? `退出码 ${result.exitCode}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      } catch (error) {
+        state.toolOutput = `读取输出失败：${error.message}`
+      } finally {
+        state.toolOutputBusy = false
+        render()
+      }
+      break
+    }
+    case 'toggle-tool-action-log': {
+      if (state.toolActionLogOpen) {
+        state.toolActionLogOpen = false
+        render()
+        break
+      }
+      state.toolActionLogBusy = true
+      render()
+      try {
+        state.toolActionLog = await api.getToolActionLog({
+          sessionId: element.dataset.id,
+          limit: 100,
+        })
+        state.toolActionLogOpen = true
+      } catch (error) {
+        toast(`读取执行记录失败：${error.message}`, 'error', 7000)
+      } finally {
+        state.toolActionLogBusy = false
+        render()
+      }
+      break
+    }
+    case 'clear-tool-action-log':
+      if (!window.confirm('清空全部工具执行记录吗？')) break
+      await api.clearToolActionLog()
+      state.toolActionLog = []
+      render()
+      toast('工具执行记录已清空。', 'success')
+      break
+    case 'inspect-tool': {
+      if (state.toolInspectionBusy) break
+      state.toolInspectionBusy = true
+      render()
+      try {
+        state.toolInspection = await api.inspectToolSession(element.dataset.id)
+        state.toolInspectionOpen = true
+        state.selectedInspectionPath =
+          state.toolInspection.nodes?.find((node) => inspectionActionsForNode(node).length)?.path ||
+          ''
+        state.toolActionMessage = ''
+        if (!state.toolInspection.available) {
+          toast('目标程序没有暴露可访问界面元素。', 'info', 6000)
+        }
+      } catch (error) {
+        state.toolInspection = null
+        toast(`读取界面失败：${error.message}`, 'error', 7000)
+      } finally {
+        state.toolInspectionBusy = false
+        render()
+      }
+      break
+    }
+    case 'select-inspection-node':
+      state.selectedInspectionPath = element.dataset.path || ''
+      state.toolActionMessage = ''
+      render()
+      break
+    case 'execute-inspection-action': {
+      const sessionId = state.activeToolSession?.id
+      const node = state.toolInspection?.nodes?.find(
+        (item) => item.path === state.selectedInspectionPath,
+      )
+      if (!sessionId || !node || state.toolActionBusy) break
+      state.toolActionBusy = true
+      state.toolActionMessage = ''
+      render()
+      try {
+        const result = await api.executeToolAction(sessionId, {
+          action: element.dataset.operation,
+          selector: {
+            path: node.path,
+            automationId: node.automationId,
+            name: node.name,
+            controlType: node.controlType,
+          },
+        })
+        state.toolActionMessage = result.confirmed
+          ? '动作已确认'
+          : result.ok
+            ? '动作已发送，等待界面确认'
+            : result.error || '动作执行失败'
+        await new Promise((resolve) => setTimeout(resolve, 320))
+        state.toolInspection = await api.inspectToolSession(sessionId)
+      } catch (error) {
+        state.toolActionMessage = error.message
+      } finally {
+        state.toolActionBusy = false
+        render()
+      }
+      break
+    }
+    case 'stop-tool':
+      await stopToolSession(element.dataset.id)
+      toast('工具已停止。', 'success')
+      break
+    case 'refresh-tools':
+      await loadTools({ refresh: true })
+      toast('本机工具已重新扫描。', 'success')
+      break
+    case 'add-tool-manually': {
+      const tool = await api.addToolManually?.()
+      if (!tool) break
+      state.tools = [...(state.tools || []).filter((item) => item.id !== tool.id), tool]
+      state.activeToolId = tool.id
+      state.activeToolSession = sessionForTool(tool)
+      render()
+      toast(`${tool.displayName} 已添加到工具台。`, 'success')
+      break
+    }
+    case 'remove-tool': {
+      const tool = state.tools?.find((item) => item.id === element.dataset.id)
+      if (!tool || !window.confirm(`从工具台移除“${tool.displayName}”吗？不会删除软件本身。`)) {
+        break
+      }
+      await api.removeTool(tool.id)
+      state.tools = state.tools.filter((item) => item.id !== tool.id)
+      if (state.activeToolId === tool.id) {
+        state.activeToolId = state.tools[0]?.id || null
+        state.activeToolSession = null
+      }
+      render()
+      toast('工具已从工作站移除，软件本身保持不变。', 'success')
+      break
+    }
+    case 'toggle-tool-favorite': {
+      const id = element.dataset.id
+      const favorite = element.dataset.favorite === 'true'
+      await api.setToolFavorite(id, favorite)
+      state.tools = (state.tools || []).map((tool) =>
+        tool.id === id ? { ...tool, favorite } : tool,
+      )
+      state.tools.sort((left, right) => {
+        if (left.running !== right.running) return left.running ? -1 : 1
+        if (left.favorite !== right.favorite) return left.favorite ? -1 : 1
+        return left.displayName.localeCompare(right.displayName, 'zh-CN')
+      })
+      render()
+      break
+    }
     case 'check-update':
       await refreshStatus({ check: true })
       toast('版本检查完成。', 'success')
@@ -7203,6 +8334,77 @@ systemThemeQuery.addEventListener('change', () => {
   if (state.settings?.theme === 'system') applyTheme('system')
 })
 
+window.addEventListener('resize', () => {
+  const layout = document.querySelector('[data-tool-deck-layout]')
+  if (!layout) return
+  const currentWidth = layout.querySelector('.tool-browser')?.getBoundingClientRect().width
+  if (!Number.isFinite(currentWidth)) return
+  const range = toolPanelWidthRange(layout)
+  if (currentWidth > range.max) applyToolPanelWidth(layout, range.max)
+})
+
+document.addEventListener('pointerdown', (event) => {
+  const resizer = event.target.closest?.('[data-tool-resizer]')
+  if (!resizer || event.button !== 0) return
+  const layout = resizer.closest('[data-tool-deck-layout]')
+  if (!layout) return
+  event.preventDefault()
+  toolResizeState = {
+    pointerId: event.pointerId,
+    resizer,
+    layout,
+    startX: event.clientX,
+    startWidth: layout.querySelector('.tool-browser')?.getBoundingClientRect().width || 0,
+  }
+  resizer.setPointerCapture?.(event.pointerId)
+  resizer.classList.add('is-active')
+  document.body.classList.add('is-tool-resizing')
+})
+
+document.addEventListener('pointermove', (event) => {
+  if (!toolResizeState || event.pointerId !== toolResizeState.pointerId) return
+  event.preventDefault()
+  const nextWidth = toolResizeState.startWidth + event.clientX - toolResizeState.startX
+  applyToolPanelWidth(toolResizeState.layout, nextWidth)
+})
+
+function finishToolResize(event) {
+  if (!toolResizeState || event.pointerId !== toolResizeState.pointerId) return
+  const { layout, resizer } = toolResizeState
+  resizer.classList.remove('is-active')
+  if (resizer.hasPointerCapture?.(event.pointerId)) {
+    resizer.releasePointerCapture(event.pointerId)
+  }
+  document.body.classList.remove('is-tool-resizing')
+  const width = layout.querySelector('.tool-browser')?.getBoundingClientRect().width
+  if (Number.isFinite(width)) applyToolPanelWidth(layout, width, { persist: true })
+  toolResizeState = null
+}
+
+document.addEventListener('pointerup', finishToolResize)
+document.addEventListener('pointercancel', finishToolResize)
+
+document.addEventListener('dblclick', (event) => {
+  const resizer = event.target.closest?.('[data-tool-resizer]')
+  if (!resizer) return
+  resetToolPanelWidth(resizer.closest('[data-tool-deck-layout]'))
+})
+
+document.addEventListener('keydown', (event) => {
+  const resizer = event.target.closest?.('[data-tool-resizer]')
+  if (!resizer || !['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return
+  event.preventDefault()
+  const layout = resizer.closest('[data-tool-deck-layout]')
+  const currentWidth =
+    layout?.querySelector('.tool-browser')?.getBoundingClientRect().width || readToolPanelWidth()
+  if (event.key === 'Home') {
+    resetToolPanelWidth(layout)
+    return
+  }
+  const delta = event.key === 'ArrowLeft' ? -24 : 24
+  applyToolPanelWidth(layout, currentWidth + delta, { persist: true })
+})
+
 document.addEventListener('click', async (event) => {
   const openStatusMenu = document.querySelector('.topbar-status-menu[open]')
   if (openStatusMenu && !event.target.closest('.topbar-status-menu')) {
@@ -7225,6 +8427,10 @@ document.addEventListener('click', async (event) => {
 
   const nav = event.target.closest('.nav-item')
   if (nav) {
+    if (state.page === 'tools' && nav.dataset.page !== 'tools') stopToolPreview()
+    if (state.toolViewerImmersive && nav.dataset.page !== 'tools') {
+      await setToolViewerImmersive(false)
+    }
     state.page = nav.dataset.page
     state.highlightAssignmentId = null
     state.highlightScheduleCourseId = null
@@ -7236,11 +8442,16 @@ document.addEventListener('click', async (event) => {
     }
     if (state.page === 'settings') await loadMaintenanceData()
     if (state.page === 'backup') await loadBackupCenter()
+    if (state.page === 'tools') await loadTools()
     return
   }
 
   const pageJump = event.target.closest('[data-page-jump]')
   if (pageJump) {
+    if (state.page === 'tools' && pageJump.dataset.pageJump !== 'tools') stopToolPreview()
+    if (state.toolViewerImmersive && pageJump.dataset.pageJump !== 'tools') {
+      await setToolViewerImmersive(false)
+    }
     closeTopbarStatusMenu()
     state.page = pageJump.dataset.pageJump
     if (pageJump.dataset.focusAssignment) {
@@ -7264,6 +8475,7 @@ document.addEventListener('click', async (event) => {
     if (state.page === 'schedule') scrollToHighlightedScheduleCourse()
     if (state.page === 'settings') await loadMaintenanceData()
     if (state.page === 'backup') await loadBackupCenter()
+    if (state.page === 'tools') await loadTools()
     return
   }
 
@@ -7377,6 +8589,10 @@ document.addEventListener('click', async (event) => {
 document.addEventListener(
   'toggle',
   (event) => {
+    if (event.target.matches?.('.tool-inspector')) {
+      state.toolInspectionOpen = event.target.open
+      return
+    }
     if (!event.target.matches?.('.ruka-accordion > details')) return
     const accordion = event.target.parentElement
     if (event.target.id === 'rukaDeepseekDetails') {
@@ -7403,6 +8619,10 @@ document.addEventListener('keydown', (event) => {
     return
   }
   if (event.key !== 'Escape') return
+  if (state.toolViewerImmersive) {
+    setToolViewerImmersive(false)
+    return
+  }
   if (state.scheduleTimeEditorOpen) {
     state.scheduleTimeEditorOpen = false
     state.schedulePeriodDraft = null
@@ -7430,6 +8650,13 @@ document.addEventListener('input', (event) => {
   if (event.target.id === 'skillSearch') {
     state.skillQuery = event.target.value
     filterSkillCards(state.skillQuery)
+  }
+  if (event.target.id === 'toolSearch') {
+    state.toolQuery = event.target.value
+    filterToolRows(state.toolQuery)
+  }
+  if (event.target.id === 'toolCommandQuery') {
+    state.toolCommandQuery = event.target.value
   }
   if (event.target.matches('[data-schedule-week]')) {
     state.scheduleWeek = event.target.value
@@ -7890,7 +9117,6 @@ api.on('reminder:due', (reminder) => {
   if (!reminder?.title) return
   toast(`${reminder.title}：${reminder.body || ''}`.replace(/：$/, ''), 'info', 9000)
 })
-
 async function start() {
   const startupTaskId = beginUiTask(
     '正在启动 ZP Workbench',
@@ -7955,6 +9181,7 @@ async function start() {
     }
     if (state.page === 'skills') await loadSkills({ refresh: true })
     if (state.page === 'backup') await loadBackupCenter({ refresh: true })
+    if (state.page === 'tools') await loadTools()
     if (state.settings.autoCheckDsh) {
       setTimeout(
         () =>
