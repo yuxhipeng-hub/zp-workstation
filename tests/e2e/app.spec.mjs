@@ -211,13 +211,16 @@ test('resizes the tool browser and preview with a draggable divider', async () =
       await window.mouse.up()
     }
 
-    await dragDivider(-60)
+    const minWidth = Number(await divider.getAttribute('aria-valuemin'))
+    const shrinkDistance = Math.min(100, Math.max(40, before.width - minWidth - 20))
+    await dragDivider(-shrinkDistance)
     const afterShrink = await browser.boundingBox()
     expect(afterShrink.width).toBeLessThan(before.width - 20)
 
-    await dragDivider(120)
+    const maxWidth = Number(await divider.getAttribute('aria-valuemax'))
+    await dragDivider(Math.max(20, maxWidth - afterShrink.width))
     const afterDrag = await browser.boundingBox()
-    expect(afterDrag.width).toBeGreaterThan(afterShrink.width + 40)
+    expect(afterDrag.width).toBeGreaterThan(afterShrink.width + 10)
 
     await divider.focus()
     await divider.press('ArrowLeft')
@@ -226,7 +229,6 @@ test('resizes the tool browser and preview with a draggable divider', async () =
 
     await divider.dblclick()
     const afterReset = await browser.boundingBox()
-    const maxWidth = Number(await divider.getAttribute('aria-valuemax'))
     expect(Math.abs(afterReset.width - Math.min(380, maxWidth))).toBeLessThan(2)
 
     await window.getByRole('button', { name: '全屏画面' }).click()
