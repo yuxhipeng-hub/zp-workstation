@@ -5,7 +5,7 @@
 
 ## 当前状态
 
-- 版本：`0.4.5`，`main` 已提交，正在通过 GitHub Actions `Release ZP Workbench` 发布。
+- 版本：`0.4.5`，`main` 已发布并同步，GitHub Release `v0.4.5` 已设为 Latest。
 - 结构：Electron 桌面应用，主进程 `src/main/`、渲染层 `src/renderer/`（原生 JS + CSS）。
 - 用户数据：`%APPDATA%\deepseek-harness-launcher\workspace.json`，由 `WorkspaceStore` 维护，
   自动备份在 `backups/` 目录。
@@ -16,6 +16,7 @@
 
 | 日期       | 内容                                                                                           | 涉及文件                                                                                      |
 | ---------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 2026-09-25 | 发布 0.4.5，安装包、blockmap、SHA-256 与 `latest.json` 已上传并由 Release Actions 校验         | `package.json`、`.github/workflows/release.yml`                                               |
 | 2026-09-25 | 发布改为 Actions 缓存构建、artifact 中转和独立上传，精简语言包与运行时依赖，安装包缩小约 14 MB | `.github/workflows/release.yml`、`RELEASE.md`、`package.json`、`vite.config.mjs`              |
 | 2026-09-25 | 工具台按工程、办公、其他、娱乐分组，工程软件优先展示且搜索支持类别筛选                         | `src/main/app-host-manager.cjs`、`src/renderer/main.js`、`src/renderer/ui-refresh.css`        |
 | 2026-09-25 | 工具台产品化：手动添加/移除应用、适配等级标识、简化首页状态和运行会话入口                      | `src/main/app-host-manager.cjs`、`src/renderer/main.js`、`src/renderer/ui-refresh.css`        |
