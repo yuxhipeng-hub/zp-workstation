@@ -101,6 +101,7 @@ test('groups every non-today route inside one workbench canvas', async () => {
     await dismissWelcome(window)
 
     const pages = [
+      'tools',
       'schedule',
       'assignments',
       'experiments',
@@ -147,6 +148,150 @@ test('groups every non-today route inside one workbench canvas', async () => {
 
     await window.locator('.nav-item[data-page="today"]').click()
     await expect(window.locator('#view > [data-route-canvas]')).toHaveCount(0)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('resizes the tool browser and preview with a draggable divider', async () => {
+  const userDataDir = createUserDataDir()
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(userDataDir, 'app-host.json'),
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        catalog: {
+          scannedAt: new Date().toISOString(),
+          apps: [
+            {
+              id: '0123456789abcdef0123',
+              displayName: 'Notepad',
+              publisher: 'Microsoft',
+              version: '1.0',
+              executableName: 'notepad.exe',
+              executablePath: path.join(process.env.WINDIR, 'System32', 'notepad.exe'),
+              iconPath: path.join(process.env.WINDIR, 'System32', 'notepad.exe'),
+              workingDirectory: path.join(process.env.WINDIR, 'System32'),
+              source: 'test',
+              sourceLabel: '测试工具',
+            },
+          ],
+        },
+        preferences: {},
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await dismissWelcome(window)
+    await window.locator('.nav-item[data-page="tools"]').click()
+    await expect(window.locator('[data-tool-icon] img')).toBeVisible()
+    const divider = window.getByRole('separator', { name: '调整工具列表和实时画面宽度' })
+    await expect(divider).toBeVisible()
+    const browser = window.locator('.tool-browser')
+    const before = await browser.boundingBox()
+    const dividerBox = await divider.boundingBox()
+
+    await window.mouse.move(dividerBox.x + dividerBox.width / 2, dividerBox.y + 120)
+    await window.mouse.down()
+    await window.mouse.move(dividerBox.x + dividerBox.width / 2 + 90, dividerBox.y + 120)
+    await window.mouse.up()
+
+    const afterDrag = await browser.boundingBox()
+    expect(afterDrag.width).toBeGreaterThan(before.width + 70)
+
+    await divider.focus()
+    await divider.press('ArrowLeft')
+    const afterKeyboard = await browser.boundingBox()
+    expect(afterKeyboard.width).toBeLessThan(afterDrag.width)
+
+    await divider.dblclick()
+    const afterReset = await browser.boundingBox()
+    expect(Math.abs(afterReset.width - 380)).toBeLessThan(2)
+
+    await window.getByRole('button', { name: '全屏画面' }).click()
+    await expect(window.locator('.sidebar')).toBeHidden()
+    await expect(window.getByRole('button', { name: '退出全屏画面' })).toBeVisible()
+    await window.keyboard.press('Escape')
+    await expect(window.locator('.sidebar')).toBeVisible()
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('shows engineering tools first and keeps entertainment in the last group', async () => {
+  const userDataDir = createUserDataDir()
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(userDataDir, 'app-host.json'),
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        catalog: {
+          scannedAt: new Date().toISOString(),
+          apps: [
+            {
+              id: '11111111111111111111',
+              displayName: 'Steam',
+              executableName: 'steam.exe',
+              executablePath: 'C:\\Games\\Steam\\steam.exe',
+            },
+            {
+              id: '22222222222222222222',
+              displayName: 'MATLAB R2024b',
+              executableName: 'matlab.exe',
+              executablePath: 'C:\\MATLAB\\matlab.exe',
+            },
+            {
+              id: '33333333333333333333',
+              displayName: 'Microsoft Excel',
+              executableName: 'excel.exe',
+              executablePath: 'C:\\Office\\excel.exe',
+            },
+          ],
+        },
+        preferences: {
+          '11111111111111111111': { favorite: true, lastLaunchedAt: '' },
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await dismissWelcome(window)
+    await window.locator('.nav-item[data-page="tools"]').click()
+
+    const categories = window.locator('[data-tool-category]')
+    await expect(categories).toHaveCount(3)
+    await expect(categories.nth(0)).toHaveAttribute('data-tool-category', 'engineering')
+    await expect(categories.nth(1)).toHaveAttribute('data-tool-category', 'productivity')
+    await expect(categories.nth(2)).toHaveAttribute('data-tool-category', 'entertainment')
+    await expect(categories.nth(0)).toContainText('MATLAB R2024b')
+
+    const search = window.locator('#toolSearch')
+    await search.fill('娱乐')
+    await expect(window.locator('[data-tool-category="engineering"]')).toHaveClass(/hidden/)
+    await expect(window.locator('[data-tool-category="entertainment"]')).not.toHaveClass(/hidden/)
+    await expect(window.locator('#toolSearchCount')).toHaveText('1 个结果')
   } finally {
     await closeWorkstation(app, userDataDir)
   }

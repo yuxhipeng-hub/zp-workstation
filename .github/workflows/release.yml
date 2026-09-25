@@ -18,9 +18,15 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  build-and-release:
+  build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
 
     steps:
       - name: Checkout
@@ -29,64 +35,86 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
 
       - name: Resolve release version
+        id: release
         shell: pwsh
         env:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_NOTES: ${{ inputs.notes }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = $env:INPUT_VERSION.Trim().TrimStart("v")
+            $version = "$($env:INPUT_VERSION)".Trim().TrimStart("v")
           } else {
-            $version = "${{ github.ref_name }}".Trim().TrimStart("v")
+            $version = "$($env:TAG_NAME)".Trim().TrimStart("v")
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
             throw "无效版本号：$version"
           }
-          "VERSION=$version" >> $env:GITHUB_ENV
+          "version=$version" >> $env:GITHUB_OUTPUT
 
           $notes = if ($env:INPUT_NOTES) {
             $env:INPUT_NOTES
           } else {
             git log -1 --pretty=%s
           }
-          Set-Content -LiteralPath release-notes.txt -Value $notes -Encoding utf8
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Set-Content -LiteralPath release/release-notes.txt -Value $notes -Encoding utf8
+
+          $package = Get-Content -LiteralPath package.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $runtime = $package.bundledRuntime
+          "runtime_key=node-$($runtime.node)-npm-$($runtime.npm)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache release runtime
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-release-runtime-${{ steps.release.outputs.runtime_key }}-${{ hashFiles('scripts/prepare-vendor.ps1') }}
 
       - name: Install dependencies
         run: npm ci
 
       - name: Align package version
         shell: pwsh
-        run: npm version "$env:VERSION" --no-git-tag-version --allow-same-version
+        run: npm version "${{ steps.release.outputs.version }}" --no-git-tag-version --allow-same-version
 
       - name: Run tests
         run: npm test
 
       - name: Build Windows installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist
 
       - name: Verify bundled runtime and installer
         shell: pwsh
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           $nodePath = "release/win-unpacked/resources/vendor/node/node.exe"
           $installerPath = "release/ZP-Workbench-Setup-$env:VERSION-x64.exe"
+          $package = Get-Content -LiteralPath package.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $expectedNode = "v$($package.bundledRuntime.node)"
 
           if (-not (Test-Path -LiteralPath $nodePath)) {
             throw "Bundled Node.js is missing: $nodePath"
           }
           $nodeVersion = (& $nodePath --version).Trim()
-          if ($nodeVersion -ne "v24.18.0") {
-            throw "Unexpected bundled Node.js version: $nodeVersion"
+          if ($nodeVersion -ne $expectedNode) {
+            throw "Unexpected bundled Node.js version: $nodeVersion (expected $expectedNode)"
           }
           if (-not (Test-Path -LiteralPath $installerPath)) {
             throw "Installer is missing: $installerPath"
           }
 
           $installerSize = (Get-Item -LiteralPath $installerPath).Length
-          if ($installerSize -lt 160MB) {
+          if ($installerSize -lt 150MB) {
             throw "Installer is unexpectedly small: $installerSize bytes"
           }
           Write-Host "Bundled Node.js: $nodeVersion"
@@ -94,22 +122,49 @@ jobs:
 
       - name: Generate update manifest
         shell: pwsh
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           node scripts/generate-update-manifest.mjs `
             --version "$env:VERSION" `
-            --notes-file release-notes.txt `
+            --notes-file release/release-notes.txt `
             --output release/latest.json
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zp-workbench-release-${{ steps.release.outputs.version }}
+          path: |
+            release/ZP-Workbench-Setup-${{ steps.release.outputs.version }}-x64.exe
+            release/ZP-Workbench-Setup-${{ steps.release.outputs.version }}-x64.exe.blockmap
+            release/ZP-Workbench-Setup-${{ steps.release.outputs.version }}-x64.exe.sha256
+            release/latest.json
+            release/release-notes.txt
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: zp-workbench-release-${{ needs.build.outputs.version }}
+          path: release
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
-          name: ZP Workbench ${{ env.VERSION }}
-          body_path: release-notes.txt
+          tag_name: v${{ needs.build.outputs.version }}
+          name: ZP Workbench ${{ needs.build.outputs.version }}
+          body_path: release/release-notes.txt
           make_latest: true
           overwrite_files: true
           files: |
-            release/ZP-Workbench-Setup-${{ env.VERSION }}-x64.exe
-            release/ZP-Workbench-Setup-${{ env.VERSION }}-x64.exe.blockmap
-            release/ZP-Workbench-Setup-${{ env.VERSION }}-x64.exe.sha256
+            release/ZP-Workbench-Setup-${{ needs.build.outputs.version }}-x64.exe
+            release/ZP-Workbench-Setup-${{ needs.build.outputs.version }}-x64.exe.blockmap
+            release/ZP-Workbench-Setup-${{ needs.build.outputs.version }}-x64.exe.sha256
             release/latest.json

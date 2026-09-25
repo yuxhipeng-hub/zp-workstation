@@ -1098,6 +1098,80 @@ function createPreviewState() {
 export function createPreviewLauncherApi() {
   const state = createPreviewState()
   linkPreviewCourses(state)
+  const previewTools = [
+    {
+      id: '0123456789abcdef0123',
+      displayName: 'MATLAB R2024b',
+      publisher: 'MathWorks',
+      version: '24.2',
+      executableName: 'matlab.exe',
+      sourceLabel: '开始菜单',
+      favorite: true,
+      lastLaunchedAt: '',
+      running: false,
+      sessionId: null,
+      adapter: 'generic',
+      adapterLabel: '通用控制',
+      adapterTier: 'generic',
+      category: 'engineering',
+      categoryLabel: '工程与开发',
+      categoryOrder: 0,
+    },
+    {
+      id: '0123456789abcdef0124',
+      displayName: 'Multisim',
+      publisher: 'NI',
+      version: '14.3',
+      executableName: 'Multisim.exe',
+      sourceLabel: '开始菜单',
+      favorite: false,
+      lastLaunchedAt: '',
+      running: false,
+      sessionId: null,
+      adapter: 'generic',
+      adapterLabel: '通用控制',
+      adapterTier: 'generic',
+      category: 'engineering',
+      categoryLabel: '工程与开发',
+      categoryOrder: 0,
+    },
+    {
+      id: '0123456789abcdef0125',
+      displayName: 'Visual Studio Code',
+      publisher: 'Microsoft',
+      version: '1.104',
+      executableName: 'Code.exe',
+      sourceLabel: '开始菜单',
+      favorite: false,
+      lastLaunchedAt: '',
+      running: false,
+      sessionId: null,
+      adapter: 'vscode',
+      adapterLabel: '深度适配',
+      adapterTier: 'deep',
+      category: 'engineering',
+      categoryLabel: '工程与开发',
+      categoryOrder: 0,
+    },
+    {
+      id: '0123456789abcdef0126',
+      displayName: 'Steam',
+      publisher: 'Valve',
+      version: '1.0',
+      executableName: 'steam.exe',
+      sourceLabel: '开始菜单',
+      favorite: true,
+      lastLaunchedAt: '',
+      running: false,
+      sessionId: null,
+      adapter: 'generic',
+      adapterLabel: '通用控制',
+      adapterTier: 'generic',
+      category: 'entertainment',
+      categoryLabel: '娱乐应用',
+      categoryOrder: 3,
+    },
+  ]
   const createId = () =>
     globalThis.crypto?.randomUUID?.() ||
     `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -1112,6 +1186,112 @@ export function createPreviewLauncherApi() {
     },
     async getSettings() {
       return clone(state.settings)
+    },
+    async listTools() {
+      return clone(previewTools)
+    },
+    async launchTool(id) {
+      const tool = previewTools.find((item) => item.id === id)
+      if (!tool) throw new Error('没有找到这个工具。')
+      tool.running = true
+      tool.sessionId = `tool-session-${Date.now()}-1`
+      tool.lastLaunchedAt = new Date().toISOString()
+      return {
+        session: {
+          id: tool.sessionId,
+          appId: tool.id,
+          displayName: tool.displayName,
+          pid: 1234,
+          executableName: tool.executableName,
+          startedAt: tool.lastLaunchedAt,
+          capture: null,
+        },
+        capture: null,
+      }
+    },
+    async stopTool(sessionId) {
+      const tool = previewTools.find((item) => item.sessionId === sessionId)
+      if (tool) {
+        tool.running = false
+        tool.sessionId = null
+      }
+      return { stopped: Boolean(tool) }
+    },
+    async prepareToolCapture() {
+      return null
+    },
+    async setToolFavorite(id, favorite) {
+      const tool = previewTools.find((item) => item.id === id)
+      if (!tool) throw new Error('没有找到这个工具。')
+      tool.favorite = Boolean(favorite)
+      return true
+    },
+    async removeTool(id) {
+      return { id, removed: true }
+    },
+    async getToolIcon() {
+      return null
+    },
+    async inspectToolSession(sessionId) {
+      return {
+        sessionId,
+        available: true,
+        nodes: [],
+        summary: {
+          total: 0,
+          buttons: 0,
+          edits: 0,
+          menus: 0,
+          lists: 0,
+          trees: 0,
+          documents: 0,
+          panes: 0,
+          windows: 0,
+        },
+      }
+    },
+    async executeToolAction(_sessionId, request) {
+      return {
+        ok: true,
+        action: request?.action || '',
+        effect: 'unverifiable',
+        confirmed: false,
+      }
+    },
+    async openToolPath(_sessionId, grantId) {
+      return { opened: true, path: grantId, kind: 'file' }
+    },
+    async listVSCodeCommands() {
+      return { commands: [] }
+    },
+    async runVSCodeCommand(_sessionId, query, options = {}) {
+      return {
+        command: query,
+        effect: 'unverifiable',
+        confirmed: false,
+        options,
+      }
+    },
+    async readVSCodeOutput() {
+      return { text: '', candidates: 0 }
+    },
+    async getToolActionLog() {
+      return []
+    },
+    async clearToolActionLog() {
+      return true
+    },
+    async chooseToolPath() {
+      return {
+        grantId: 'preview-tool-path-grant',
+        path: 'C:\\Preview\\project',
+      }
+    },
+    async addToolManually() {
+      return null
+    },
+    async setFullScreen() {
+      return false
     },
     async patchSettings(patch) {
       state.settings = { ...state.settings, ...patch }

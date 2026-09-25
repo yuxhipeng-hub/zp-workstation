@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="./icon.svg" />
@@ -23,6 +23,19 @@
         </div>
 
         <nav class="nav" aria-label="主导航">
+          <div class="nav-section nav-section-work">
+            <p class="nav-label">工作</p>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="tools"
+              aria-label="工具台"
+              title="工具台"
+            >
+              <i data-lucide="panels-top-left"></i><span>工具台</span>
+            </button>
+          </div>
+
           <div class="nav-section nav-section-learning">
             <p class="nav-label">学习</p>
             <button

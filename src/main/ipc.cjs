@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto')
 const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = require('electron')
 const { CHANNELS, DOCS_URL, RELEASE_URL, THEME_VALUES } = require('./constants.cjs')
 const { resolveDropReferences } = require('./drop-reference.cjs')
+const { ToolPathGrantStore } = require('./tool-path-grants.cjs')
 
 function isSafeExternalUrl(value) {
   try {
@@ -35,6 +36,7 @@ function registerIpc({
   launcherUpdater,
   skillsManager,
   backupManager,
+  appHostManager,
   knowledgeManager,
   reminderManager,
   getMainWindow,
@@ -44,6 +46,7 @@ function registerIpc({
       if (!window.isDestroyed()) window.webContents.send(channel, payload)
     }
   }
+  const toolPathGrants = new ToolPathGrantStore()
 
   logger.on('entry', (entry) => send('log:entry', entry))
   launcherUpdater.on('state', (state) => send('launcher:update-state', state))
@@ -95,6 +98,100 @@ function registerIpc({
   ipcMain.handle('dsh:model-state', (_event, options = {}) => dshManager.getDshModelState(options))
   ipcMain.handle('dsh:set-deepseek-key', (_event, value) => dshManager.setDeepseekApiKey(value))
   ipcMain.handle('dsh:clear-deepseek-key', () => dshManager.clearDeepseekApiKey())
+  ipcMain.handle('apphost:list', (_event, options = {}) => {
+    if (!options || typeof options !== 'object') throw new Error('工具台参数无效。')
+    return appHostManager.list({ refresh: Boolean(options.refresh) })
+  })
+  ipcMain.handle('apphost:launch', async (event, id) => {
+    const appId = String(id || '')
+    if (!/^[a-f0-9]{20}$/.test(appId)) throw new Error('工具标识无效。')
+    const result = await appHostManager.launch(appId)
+    if (result.capture) {
+      await appHostManager.prepareCapture(result.session.id, event.sender.id)
+    }
+    return result
+  })
+  ipcMain.handle('apphost:stop', (_event, sessionId) => {
+    const value = String(sessionId || '')
+    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
+    return appHostManager.stop(value)
+  })
+  ipcMain.handle('apphost:prepare-capture', (event, sessionId) => {
+    const value = String(sessionId || '')
+    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
+    return appHostManager.prepareCapture(value, event.sender.id)
+  })
+  ipcMain.handle('apphost:favorite', (_event, id, favorite) => {
+    const appId = String(id || '')
+    if (!/^[a-f0-9]{20}$/.test(appId)) throw new Error('工具标识无效。')
+    return appHostManager.setFavorite(appId, Boolean(favorite))
+  })
+  ipcMain.handle('apphost:remove', (_event, id) => {
+    const appId = String(id || '')
+    if (!/^[a-f0-9]{20}$/.test(appId)) throw new Error('工具标识无效。')
+    return appHostManager.removeApp(appId)
+  })
+  ipcMain.handle('apphost:icon', (_event, id) => {
+    const appId = String(id || '')
+    if (!/^[a-f0-9]{20}$/.test(appId)) throw new Error('工具标识无效。')
+    return appHostManager.getIcon(appId)
+  })
+  ipcMain.handle('apphost:inspect', (_event, sessionId) => {
+    const value = String(sessionId || '')
+    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
+    return appHostManager.inspectSession(value)
+  })
+  ipcMain.handle('apphost:action', (_event, sessionId, request = {}) => {
+    const value = String(sessionId || '')
+    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
+    if (!request || typeof request !== 'object') throw new Error('界面动作参数无效。')
+    return appHostManager.executeSessionAction(value, request)
+  })
+  ipcMain.handle('apphost:open-path', (event, sessionId, grantId, line) => {
+    const value = String(sessionId || '')
+    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
+    return appHostManager.openSessionPath(
+      value,
+      toolPathGrants.consume(grantId, event.sender.id),
+      line,
+    )
+  })
+  ipcMain.handle('apphost:vscode-commands', (_event, sessionId, query) => {
+    const value = String(sessionId || '')
+    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
+    return appHostManager.listVSCodeCommands(value, String(query || '').slice(0, 240))
+  })
+  ipcMain.handle('apphost:vscode-run', (_event, sessionId, query, options = {}) => {
+    const value = String(sessionId || '')
+    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
+    const command = String(query || '').trim()
+    if (!command) throw new Error('请输入要执行的 VS Code 命令。')
+    return appHostManager.runVSCodeCommand(value, command.slice(0, 240), {
+      confirmed: Boolean(options?.confirmed),
+    })
+  })
+  ipcMain.handle('apphost:vscode-output', (_event, sessionId) => {
+    const value = String(sessionId || '')
+    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
+    return appHostManager.readVSCodeOutput(value)
+  })
+  ipcMain.handle('apphost:action-log', (_event, options = {}) => {
+    const sessionId = String(options?.sessionId || '')
+    if (sessionId && !/^tool-session-\d+-\d+$/.test(sessionId)) {
+      throw new Error('工具会话标识无效。')
+    }
+    return appHostManager.listActionLog({
+      sessionId,
+      limit: Number(options?.limit) || 100,
+    })
+  })
+  ipcMain.handle('apphost:action-log-clear', () => appHostManager.clearActionLog())
+  ipcMain.handle('window:set-fullscreen', (event, fullscreen) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window || window.isDestroyed()) return false
+    window.setFullScreen(Boolean(fullscreen))
+    return window.isFullScreen()
+  })
   ipcMain.handle('skills:list', (_event, options = {}) => skillsManager.list(options))
   ipcMain.handle('skills:search', (_event, query) => skillsManager.searchGithub(query))
   ipcMain.handle('skills:install', (_event, spec) => skillsManager.installFromGithub(spec))
@@ -375,6 +472,24 @@ function registerIpc({
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
+  })
+  ipcMain.handle('dialog:choose-tool-path', async (event) => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      title: '打开文件或文件夹',
+      properties: ['openFile', 'openDirectory'],
+    })
+    const selectedPath = result.canceled ? null : result.filePaths[0] || null
+    if (!selectedPath) return null
+    return toolPathGrants.issue(selectedPath, event.sender.id)
+  })
+  ipcMain.handle('dialog:add-tool-manually', async () => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      title: '选择要添加到工具台的应用程序',
+      properties: ['openFile'],
+      filters: [{ name: 'Windows 应用程序', extensions: ['exe'] }],
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    return appHostManager.addManualApp(result.filePaths[0])
   })
 
   ipcMain.handle('dialog:choose-experiment-dir', async () => {
