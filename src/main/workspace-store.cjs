@@ -4,18 +4,6 @@ const { randomUUID } = require('node:crypto')
 
 const ASSIGNMENT_STATUSES = new Set(['inbox', 'doing', 'done'])
 const ASSIGNMENT_PRIORITIES = new Set(['low', 'medium', 'high'])
-const KNOWLEDGE_TYPES = new Set([
-  'concept',
-  'definition',
-  'formula',
-  'method',
-  'pitfall',
-  'example',
-  'fact',
-])
-const KNOWLEDGE_REVIEW_RATINGS = new Set(['forgot', 'fuzzy', 'known'])
-const REVIEW_INTERVAL_DAYS = [0, 1, 3, 7, 14, 30]
-
 const DEFAULT_WORKSPACE = {
   version: 2,
   courses: [],
@@ -38,11 +26,6 @@ function cleanString(value, maxLength) {
 function cleanDate(value) {
   const text = cleanString(value, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ''
-}
-
-function cleanTags(value) {
-  const source = Array.isArray(value) ? value : String(value ?? '').split(',')
-  return [...new Set(source.map((tag) => cleanString(tag, 24)).filter(Boolean))].slice(0, 12)
 }
 
 function courseKey(value) {
@@ -75,23 +58,6 @@ function cleanCourse(input = {}, existing = {}) {
   }
 }
 
-function cleanKnowledgeSource(input = {}) {
-  const experimentId = cleanString(input.experimentId, 80)
-  if (!experimentId) return null
-  const pageStart = Number(input.pageStart)
-  const pageEnd = Number(input.pageEnd)
-  return {
-    experimentId,
-    filePath: cleanString(input.filePath, 2048),
-    fileName: cleanString(input.fileName, 260),
-    group: cleanString(input.group, 64),
-    pageStart: Number.isInteger(pageStart) && pageStart > 0 ? pageStart : null,
-    pageEnd:
-      Number.isInteger(pageEnd) && pageEnd > 0 ? Math.max(pageStart || pageEnd, pageEnd) : null,
-    excerpt: cleanString(input.excerpt, 1000),
-  }
-}
-
 function cleanAssignment(input, existing = {}) {
   const title = cleanString(input.title, 120)
   if (!title) throw new Error('作业标题不能为空。')
@@ -112,45 +78,6 @@ function cleanAssignment(input, existing = {}) {
     priority,
     status,
     notes: cleanString(input.notes, 2000),
-    createdAt: existing.createdAt || now,
-    updatedAt: now,
-  }
-}
-
-function cleanKnowledge(input, existing = {}) {
-  const title = cleanString(input.title, 120)
-  if (!title) throw new Error('知识点标题不能为空。')
-  const now = new Date().toISOString()
-  const mastery = Number(input.mastery)
-  const reviewStage = Number(input.reviewStage)
-  const type = KNOWLEDGE_TYPES.has(input.type) ? input.type : existing.type || 'concept'
-  return {
-    id: existing.id || randomUUID(),
-    title,
-    content: cleanString(input.content || input.summary, 12000),
-    course: cleanString(input.course, 80),
-    courseId: cleanString(
-      Object.hasOwn(input, 'courseId') ? input.courseId : existing.courseId,
-      80,
-    ),
-    tags: cleanTags(input.tags),
-    type,
-    source: cleanKnowledgeSource(input.source || existing.source || {}),
-    mastery:
-      Number.isInteger(mastery) && mastery >= 0 && mastery <= 3
-        ? mastery
-        : Number.isInteger(existing.mastery)
-          ? existing.mastery
-          : 0,
-    reviewStage:
-      Number.isInteger(reviewStage) && reviewStage >= 0 && reviewStage <= 5
-        ? reviewStage
-        : Number.isInteger(existing.reviewStage)
-          ? existing.reviewStage
-          : 0,
-    dueAt: cleanString(input.dueAt || existing.dueAt, 40) || now,
-    lastReviewedAt: cleanString(input.lastReviewedAt || existing.lastReviewedAt, 40),
-    generatedBy: input.generatedBy || existing.generatedBy || (input.source ? 'dsh' : 'manual'),
     createdAt: existing.createdAt || now,
     updatedAt: now,
   }
@@ -266,13 +193,6 @@ function cleanSchedule(input) {
     periodTimes,
     courses,
   }
-}
-
-function knowledgeKey(item) {
-  return String(item?.title || '')
-    .normalize('NFKC')
-    .toLocaleLowerCase('zh-CN')
-    .replace(/\s+/g, '')
 }
 
 class WorkspaceStore {
@@ -427,106 +347,6 @@ class WorkspaceStore {
 
   deleteAssignment(id) {
     this.data.assignments = this.data.assignments.filter((item) => item.id !== id)
-    this.save()
-    return this.get()
-  }
-
-  createKnowledge(input) {
-    this.data.knowledge.unshift(cleanKnowledge(input || {}))
-    this.save()
-    return this.get()
-  }
-
-  updateKnowledge(id, patch) {
-    const index = this.data.knowledge.findIndex((item) => item.id === id)
-    if (index === -1) throw new Error('没有找到这个知识点。')
-    this.data.knowledge[index] = cleanKnowledge(
-      { ...this.data.knowledge[index], ...(patch || {}) },
-      this.data.knowledge[index],
-    )
-    this.save()
-    return this.get()
-  }
-
-  deleteKnowledge(id) {
-    this.data.knowledge = this.data.knowledge.filter((item) => item.id !== id)
-    this.save()
-    return this.get()
-  }
-
-  deleteKnowledgeMany(ids = []) {
-    const targets = new Set(
-      (Array.isArray(ids) ? ids : []).map((id) => cleanString(id, 80)).filter(Boolean),
-    )
-    if (!targets.size) return this.get()
-    this.data.knowledge = this.data.knowledge.filter((item) => !targets.has(item.id))
-    this.save()
-    return this.get()
-  }
-
-  replaceSourceKnowledge(experimentId, inputs = []) {
-    const sourceId = cleanString(experimentId, 80)
-    if (!sourceId) throw new Error('缺少资料文件标识。')
-    const existing = this.data.knowledge.filter(
-      (item) => String(item.source?.experimentId || '') === sourceId,
-    )
-    const existingByTitle = new Map(existing.map((item) => [knowledgeKey(item), item]))
-    const generated = inputs
-      .map((input) => {
-        const previous = existingByTitle.get(knowledgeKey(input))
-        return cleanKnowledge(
-          {
-            ...input,
-            mastery: previous?.mastery,
-            reviewStage: previous?.reviewStage,
-            dueAt: previous?.dueAt,
-            lastReviewedAt: previous?.lastReviewedAt,
-          },
-          previous || {},
-        )
-      })
-      .filter(Boolean)
-    this.data.knowledge = [
-      ...generated,
-      ...this.data.knowledge.filter((item) => String(item.source?.experimentId || '') !== sourceId),
-    ]
-    this.save()
-    return this.get()
-  }
-
-  reviewKnowledge(id, rating) {
-    const index = this.data.knowledge.findIndex((item) => item.id === id)
-    if (index === -1) throw new Error('没有找到这个知识点。')
-    const normalizedRating = KNOWLEDGE_REVIEW_RATINGS.has(rating) ? rating : 'fuzzy'
-    const current = this.data.knowledge[index]
-    const currentStage = Number.isInteger(current.reviewStage) ? current.reviewStage : 0
-    const currentMastery = Number.isInteger(current.mastery) ? current.mastery : 0
-    const nextStage =
-      normalizedRating === 'forgot'
-        ? 1
-        : normalizedRating === 'fuzzy'
-          ? Math.min(5, currentStage + 1)
-          : Math.min(5, currentStage + 2)
-    const nextMastery =
-      normalizedRating === 'forgot'
-        ? 0
-        : normalizedRating === 'fuzzy'
-          ? Math.max(1, Math.min(2, currentMastery))
-          : Math.min(3, Math.max(2, currentMastery + 1))
-    const now = new Date()
-    const dueAt = new Date(
-      now.getTime() + REVIEW_INTERVAL_DAYS[nextStage] * 24 * 60 * 60 * 1000,
-    ).toISOString()
-    this.data.knowledge[index] = cleanKnowledge(
-      {
-        ...current,
-        mastery: nextMastery,
-        reviewStage: nextStage,
-        dueAt,
-        lastReviewedAt: now.toISOString(),
-      },
-      current,
-    )
     this.save()
     return this.get()
   }
@@ -708,12 +528,11 @@ class WorkspaceStore {
   describeBackup(fileName) {
     const filePath = path.join(this.backupDir, fileName)
     const stat = fs.statSync(filePath)
-    let summary = { assignments: 0, knowledge: 0, experiments: 0, courses: 0 }
+    let summary = { assignments: 0, experiments: 0, courses: 0 }
     try {
       const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'))
       summary = {
         assignments: Array.isArray(parsed.assignments) ? parsed.assignments.length : 0,
-        knowledge: Array.isArray(parsed.knowledge) ? parsed.knowledge.length : 0,
         experiments: Array.isArray(parsed.experiments) ? parsed.experiments.length : 0,
         courses: Array.isArray(parsed.courses) ? parsed.courses.length : 0,
       }

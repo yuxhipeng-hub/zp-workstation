@@ -23,11 +23,6 @@ function writePreviewWelcomeSeen(value) {
   }
 }
 
-function normalizeTags(value) {
-  const source = Array.isArray(value) ? value : String(value ?? '').split(/[，,]/)
-  return [...new Set(source.map((tag) => String(tag).trim()).filter(Boolean))].slice(0, 12)
-}
-
 function parsePreviewWeeks(value) {
   const source = String(value ?? '').normalize('NFKC')
   if (!source.trim()) return []
@@ -266,10 +261,7 @@ function previewReminderSummary(state, now = new Date()) {
       return due.getTime() - now.getTime() <= 7 * 86400000
     })
     .sort((left, right) => left.dueAt.localeCompare(right.dueAt))
-  const knowledge = (workspace.knowledge || []).filter(
-    (item) => item.dueAt && new Date(item.dueAt).getTime() <= now.getTime(),
-  )
-  return { at: now.toISOString(), courses, assignments, knowledge }
+  return { at: now.toISOString(), courses, assignments }
 }
 
 function inferPreviewExperimentGroup(fileName) {
@@ -331,6 +323,402 @@ function subscribe(channel, callback) {
   return () => channelListeners.delete(callback)
 }
 
+function createPreviewAihotItems() {
+  const now = Date.now()
+  const rows = [
+    [
+      'ai-models',
+      'Google 发布 Gemini 4 Argon：面向复杂工程与科研任务的前沿模型',
+      'Google 发布 Gemini 4 Argon，面向开发者、企业、科学家和消费者全球开放，可经 Gemini API 与 AI Studio 使用。',
+      'Google Blog：AI（RSS）',
+      'https://blog.google/innovation-and-ai/models-and-research/gemini-models/',
+      42,
+      '作者实测了新开放模型在编程、写作和产品体验上的真实表现，读者可以据此判断是否值得订阅。',
+    ],
+    [
+      'ai-models',
+      '面壁智能开源 MiniCPM-V 4.7，35B-A3B MoE 模型端侧流畅运行',
+      '面壁智能联合 OpenBMB 社区发布并开源 MiniCPM-V 4.7，包含 35B-A3B 和 1B 两个版本，主打端侧多模态。',
+      '公众号：面壁智能（MiniCPM）',
+      'https://mp.weixin.qq.com/s?__biz=Mzg3Mzg2MTg2NQ%3D%3D',
+      95,
+      '端侧开源多模态模型的一次实质进步，附带权重和内存占用数据，适合关注本地推理的读者。',
+    ],
+    [
+      'ai-models',
+      'Liquid AI 发布 LFM2.5-24B-A2B 端侧推理模型',
+      '总参数 24B、每 token 激活 2B，定位端侧快速智能体，权重同步开源。',
+      'Liquid AI 模型与工程博客（网页）',
+      'https://www.liquid.ai/blog/lfm2-5-24b-a2b',
+      190,
+      '激活参数只有 2B 却能跑在本地，对推理成本和隐私敏感的场景有直接参考价值。',
+    ],
+    [
+      'ai-products',
+      'Gemini 4 Argon 上线 OpenRouter',
+      '可通过 Google AI Studio 与 Google Cloud 调用，上线定价为输入 $2/M、输出 $10/M。',
+      'X：OpenRouter (@OpenRouter)',
+      'https://x.com/OpenRouter/status/2110044453977403412',
+      240,
+      '给出了明确的定价与基准分数，是判断要不要把新模型接进工作流的直接依据。',
+    ],
+    [
+      'ai-products',
+      'Apple 发布 7 英寸智能音箱 HomeView，售价 299 美元',
+      '配备 7 英寸 Liquid Retina 显示屏，集娱乐、FaceTime、家庭监控和语音自动化于一体。',
+      'The Verge：AI（RSS）',
+      'https://www.theverge.com/homeview',
+      130,
+      '硬件形态变化往往先影响交互习惯，这条适合当作端侧 AI 落地的观察样本。',
+    ],
+    [
+      'ai-products',
+      'Cursor 2.3 带来后台 Agent 与并行任务',
+      '编辑器开始支持把长任务丢到后台，多个 Agent 可以并行处理不同文件。',
+      'Cursor 更新日志（网页）',
+      'https://cursor.com/changelog',
+      480,
+      '编码 Agent 的工作方式在变，并行与后台执行是这一代工具的分水岭。',
+    ],
+    [
+      'industry',
+      'OpenAI 工程师涉在会议室装窃听装置被捕',
+      '多家媒体跟进报道，OpenAI 官方尚未给出完整说明。',
+      'X：OpenAI Newsroom (@OpenAINewsroom)',
+      'https://x.com/OpenAINewsroom/status/2110095403198849132',
+      300,
+      '多来源交叉报道，属于值得单独跟进的行业事件，而不是单条传闻。',
+    ],
+    [
+      'industry',
+      'Meta 成立超级智能实验室并扩大招募',
+      '新实验室聚焦前沿模型与算力扩张，首批招募覆盖研究与工程岗位。',
+      'Artificial Analysis 完整文章（网页）',
+      'https://artificialanalysis.ai/articles/meta-superintelligence',
+      660,
+      '人才与算力的流向往往预示下一年的模型格局，适合放进长期观察。',
+    ],
+    [
+      'paper',
+      'Visual Studio Copilot 与 SSMS 远程代码执行漏洞技术分析',
+      '作者披露利用文件名末尾多加一个点绕过路径校验，写入受保护配置文件实现任意命令执行的利用链。',
+      'Johann Rehberger / Embrace The Red（RSS）',
+      'https://embracethered.com/blog/posts/2026/visual-studio-copilot-rce/',
+      160,
+      '作者亲述漏洞原理与利用链，可以学到 Windows 路径规范化缺陷如何绕过智能体安全检查。',
+    ],
+    [
+      'paper',
+      '论文：长上下文检索的稀疏注意力重构',
+      '提出把长上下文检索拆成稀疏注意力与缓存复用的组合，在 1M 上下文下降低显存占用。',
+      'arXiv cs.CL（RSS）',
+      'https://arxiv.org/abs/2610.00001',
+      840,
+      '方法可迁移性高，适合与现有推理优化方案对比阅读。',
+    ],
+    [
+      'tip',
+      '教程：把 Codex 接进本地工作流的五个步骤',
+      '从配置模型目录到固定提示词前缀，给出可复制的配置片段。',
+      '开发者博客（RSS）',
+      'https://example.com/codex-local-workflow',
+      360,
+      '步骤可以直接照做，适合把日常重复操作收敛成固定流程。',
+    ],
+    [
+      'tip',
+      '实操：用 MCP 把本地数据库接进智能体',
+      '演示如何用 MCP server 暴露只读查询，并限制表与字段范围。',
+      '公众号：AI 工程实践',
+      'https://mp.weixin.qq.com/s/mcp-database',
+      1200,
+      '给了权限收敛的具体做法，是把智能体接进真实数据的必要一步。',
+    ],
+    [
+      'opinion',
+      '观点：模型能力的瓶颈已经从训练转向评估',
+      '作者认为继续堆算力的边际收益下降，评估方法与数据质量才是当前瓶颈。',
+      'Simon Willison 博客',
+      'https://simonwillison.net/2026/oct/13/evaluation-bottleneck/',
+      540,
+      '结论有争议但论证清晰，适合用来检验自己的判断依据。',
+    ],
+    [
+      'opinion',
+      '观点：端侧模型会先吃掉哪类应用',
+      '作者按延迟、隐私和成本三个维度给出端侧落地的优先顺序。',
+      'X：indigo (@indigox)',
+      'https://x.com/indigox/status/2110000000000000000',
+      1560,
+      '用一个可复用的判断框架讨论端侧机会，比单看榜单更有参考价值。',
+    ],
+  ]
+  const items = rows.map(
+    ([category, title, summary, source, original, minutesAgo, reason], index) => ({
+      id: `preview-aihot-${index + 1}`,
+      title,
+      summary,
+      reason,
+      source: { name: source },
+      links: {
+        aihot: `https://aihot.news/items/preview-${index + 1}`,
+        original,
+      },
+      publishedAt: new Date(now - minutesAgo * 60 * 1000).toISOString(),
+      category,
+    }),
+  )
+  return { data: items, fetchedAt: Date.now(), source: 'preview', stale: false }
+}
+
+function createPreviewAihotDaily() {
+  const items = createPreviewAihotItems().data
+  return {
+    data: {
+      date: '2026-10-14',
+      generatedAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+      links: { aihot: 'https://aihot.news/daily/2026-10-14', original: '' },
+      attribution: { name: 'AIHOT' },
+      lead: {
+        title: 'Google 发布 Gemini 4 Argon：面向复杂工程与科研任务的前沿模型',
+        leadParagraph:
+          'Google 发布 Gemini 4 Argon，面向开发者、企业、科学家和消费者全球开放，可经 Gemini API、AI Studio 与 Google Antigravity 使用。',
+      },
+      sections: [
+        { label: '模型发布/更新', items: items.slice(0, 2) },
+        { label: '产品发布/更新', items: items.slice(1, 3) },
+        { label: '行业动态', items: items.slice(2, 3) },
+      ],
+    },
+    fetchedAt: Date.now(),
+    source: 'preview',
+    stale: false,
+  }
+}
+
+function createPreviewAihotHot() {
+  const hotspots = [
+    {
+      rank: 1,
+      id: 'preview-hot-1',
+      title: 'Google 发布 Gemini 4 Argon，仅付费用户可用',
+      publicId: 'b9d1e480-fac1-479a-9209-5241ad001528',
+      source: { name: 'Google Blog：AI（RSS）' },
+      links: {
+        aihot: 'https://aihot.news/story/b9d1e480-fac1-479a-9209-5241ad001528',
+        original: '',
+      },
+      sourceCount: 28,
+      participantCount: 91,
+      latestAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+    },
+    {
+      rank: 2,
+      id: 'preview-hot-2',
+      title: 'Meta 发布首批前沿模型 Muse Wonder 系列',
+      publicId: 'f7f99eb7-84e6-4450-a43f-668dca988b22',
+      source: { name: 'Artificial Analysis（网页）' },
+      links: {
+        aihot: 'https://aihot.news/story/f7f99eb7-84e6-4450-a43f-668dca988b22',
+        original: '',
+      },
+      sourceCount: 17,
+      participantCount: 83,
+      latestAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+    },
+    {
+      rank: 3,
+      id: 'preview-hot-3',
+      title: 'Gemini 4 Argon 上线 OpenRouter',
+      publicId: 'c1a2b3c4-d5e6-4f70-8a9b-0c1d2e3f4a5b',
+      source: { name: 'X：OpenRouter (@OpenRouter)' },
+      links: {
+        aihot: 'https://aihot.news/story/c1a2b3c4-d5e6-4f70-8a9b-0c1d2e3f4a5b',
+        original: '',
+      },
+      sourceCount: 12,
+      participantCount: 44,
+      latestAt: new Date(Date.now() - 1000 * 60 * 200).toISOString(),
+    },
+    {
+      rank: 4,
+      id: 'preview-hot-4',
+      title: '面壁智能开源 MiniCPM-V 4.7，端侧多模态再进一步',
+      publicId: 'd2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d',
+      source: { name: '公众号：面壁智能（MiniCPM）' },
+      links: {
+        aihot: 'https://aihot.news/story/d2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d',
+        original: '',
+      },
+      sourceCount: 11,
+      participantCount: 39,
+      latestAt: new Date(Date.now() - 1000 * 60 * 260).toISOString(),
+    },
+    {
+      rank: 5,
+      id: 'preview-hot-5',
+      title: 'Cursor 2.3 支持后台 Agent 与并行任务',
+      publicId: 'e3c4d5e6-f7a8-4b9c-8d1e-2f3a4b5c6d7e',
+      source: { name: 'Cursor 更新日志（网页）' },
+      links: {
+        aihot: 'https://aihot.news/story/e3c4d5e6-f7a8-4b9c-8d1e-2f3a4b5c6d7e',
+        original: '',
+      },
+      sourceCount: 9,
+      participantCount: 31,
+      latestAt: new Date(Date.now() - 1000 * 60 * 420).toISOString(),
+    },
+    {
+      rank: 6,
+      id: 'preview-hot-6',
+      title: 'Visual Studio Copilot 远程代码执行漏洞披露',
+      publicId: 'f4d5e6f7-a8b9-4c0d-9e2f-3a4b5c6d7e8f',
+      source: { name: 'Embrace The Red（RSS）' },
+      links: {
+        aihot: 'https://aihot.news/story/f4d5e6f7-a8b9-4c0d-9e2f-3a4b5c6d7e8f',
+        original: '',
+      },
+      sourceCount: 7,
+      participantCount: 24,
+      latestAt: new Date(Date.now() - 1000 * 60 * 500).toISOString(),
+    },
+    {
+      rank: 7,
+      id: 'preview-hot-7',
+      title: 'Meta 超级智能实验室首批招募名单流出',
+      publicId: 'a5e6f7a8-b9c0-4d1e-8f2a-4b5c6d7e8f9a',
+      source: { name: 'Artificial Analysis（网页）' },
+      links: {
+        aihot: 'https://aihot.news/story/a5e6f7a8-b9c0-4d1e-8f2a-4b5c6d7e8f9a',
+        original: '',
+      },
+      sourceCount: 6,
+      participantCount: 22,
+      latestAt: new Date(Date.now() - 1000 * 60 * 640).toISOString(),
+    },
+    {
+      rank: 8,
+      id: 'preview-hot-8',
+      title: 'Liquid AI 开源 LFM2.5-24B-A2B 端侧推理模型',
+      publicId: 'b6f7a8b9-c0d1-4e2f-9a3b-5c6d7e8f9a0b',
+      source: { name: 'Liquid AI（网页）' },
+      links: {
+        aihot: 'https://aihot.news/story/b6f7a8b9-c0d1-4e2f-9a3b-5c6d7e8f9a0b',
+        original: '',
+      },
+      sourceCount: 5,
+      participantCount: 18,
+      latestAt: new Date(Date.now() - 1000 * 60 * 720).toISOString(),
+    },
+    {
+      rank: 9,
+      id: 'preview-hot-9',
+      title: '论文讨论：长上下文检索的注意力重构方案',
+      publicId: 'c7a8b9c0-d1e2-4f3a-8b4c-6d7e8f9a0b1c',
+      source: { name: 'arXiv cs.CL（RSS）' },
+      links: {
+        aihot: 'https://aihot.news/story/c7a8b9c0-d1e2-4f3a-8b4c-6d7e8f9a0b1c',
+        original: '',
+      },
+      sourceCount: 4,
+      participantCount: 15,
+      latestAt: new Date(Date.now() - 1000 * 60 * 800).toISOString(),
+    },
+    {
+      rank: 10,
+      id: 'preview-hot-10',
+      title: '行业讨论：端侧模型会先吃掉哪类应用',
+      publicId: 'd8b9c0d1-e2f3-4a4b-9c5d-7e8f9a0b1c2d',
+      source: { name: 'X：indigo (@indigox)' },
+      links: {
+        aihot: 'https://aihot.news/story/d8b9c0d1-e2f3-4a4b-9c5d-7e8f9a0b1c2d',
+        original: '',
+      },
+      sourceCount: 3,
+      participantCount: 12,
+      latestAt: new Date(Date.now() - 1000 * 60 * 900).toISOString(),
+    },
+  ]
+  return { data: hotspots, fetchedAt: Date.now(), source: 'preview', stale: false }
+}
+
+function createPreviewAihotStory(publicId) {
+  const topic = createPreviewAihotHot().data.find((entry) => entry.publicId === publicId)
+  if (!topic) {
+    return {
+      data: null,
+      fetchedAt: Date.now(),
+      source: 'preview',
+      stale: false,
+      error: '预览数据里没有这个事件',
+    }
+  }
+  const beats = [
+    [
+      '官方口径与首批实测',
+      'Google Blog：AI（RSS）',
+      '官方页面给出可用范围与定价，首批实测者补充了真实延迟数据。',
+    ],
+    [
+      '多来源交叉核对',
+      'MarkTechPost（RSS）',
+      '三家科技媒体独立核对发布信息，确认了开放地区与订阅门槛。',
+    ],
+    [
+      '评测者给出第一手基准',
+      'X：Rohan Paul (@rohanpaul_ai)',
+      '评测者贴出编码与推理基准分数，并说明测试条件。',
+    ],
+    [
+      '定价与可用范围确认',
+      'The Decoder：AI News（RSS）',
+      '免费额度、缓存折扣和涨价时间点被逐条列出。',
+    ],
+    [
+      '开发者社区开始接入',
+      'X：OpenRouter (@OpenRouter)',
+      '模型上线聚合平台，开发者可以直接切换调用。',
+    ],
+    ['社区反馈与质疑', '公众号：机器之心', '评论集中在稳定性与长任务表现，官方尚未逐条回应。'],
+  ]
+  const reports = beats.map(([beat, source, summary], index) => ({
+    id: `${topic.publicId}-report-${index + 1}`,
+    title: `${topic.title}：${beat}`,
+    summary,
+    source: { name: source, firstParty: false },
+    publishedAt: new Date(Date.now() - (18 + index * 95) * 60 * 1000).toISOString(),
+    links: {
+      aihot: `https://aihot.news/items/${topic.publicId}-${index + 1}`,
+      original: `https://example.com/${topic.publicId.slice(0, 8)}/${index + 1}`,
+    },
+  }))
+  return {
+    data: {
+      publicId,
+      title: topic.title,
+      status: 'active',
+      sourceCount: topic.sourceCount,
+      reportCount: reports.length,
+      firstReportAt: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(),
+      latestAt: topic.latestAt,
+      latest: reports[0]?.title || topic.title,
+      digest: [
+        `围绕「${topic.title}」，48 小时内共 ${topic.sourceCount} 个独立来源跟进报道，是当前讨论度最高的事件之一。`,
+        '下面按时间顺序列出可追溯的报道，每条都保留了来源与原文入口；事件仍在演化，综述会随新报道更新。',
+      ].join('\n\n'),
+      digestUpdatedAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
+      links: {
+        aihot: topic.links.aihot,
+        original: '',
+      },
+      reports,
+    },
+    fetchedAt: Date.now(),
+    source: 'preview',
+    stale: false,
+  }
+}
+
 function createPreviewState() {
   const now = Date.now()
   const dshHome = 'C:\\Users\\小zp\\.dsh'
@@ -340,14 +728,8 @@ function createPreviewState() {
   const theme = ['system', 'dark', 'light'].includes(requestedTheme) ? requestedTheme : 'dark'
   return {
     settings: {
-      channel: 'latest',
-      npmRegistry: 'https://registry.npmmirror.com',
       dshHome,
       experimentDir: 'C:\\Users\\小zp\\ZP Workbench\\实验资料',
-      host: '127.0.0.1',
-      port: 3080,
-      openMode: 'embedded',
-      autoCheckDsh: true,
       autoCheckLauncher: true,
       minimizeToTray: true,
       launchAtLogin: false,
@@ -356,20 +738,7 @@ function createPreviewState() {
       notificationsEnabled: true,
       classReminderMinutes: 15,
       assignmentReminderDays: 1,
-      reviewReminderEnabled: true,
       dailyDigestTime: '08:00',
-      reviewReminderTime: '19:00',
-      jevEnabled: true,
-      jevAutoClassify: true,
-      jevIncludeText: true,
-      jevApiBaseUrl: 'https://api.typesafe.ai/v1',
-      jevModel: 'jev-latest',
-      jevLastModel: '',
-      jevLastAlias: '',
-      jevLatestReleaseDate: '',
-      jevLastCheckedAt: '',
-      jevLastError: '',
-      jevCompatibilityPassed: false,
       backupEnabled: true,
       backupIntervalHours: 24,
       backupRetention: 20,
@@ -392,29 +761,12 @@ function createPreviewState() {
       },
       updateHistory: [],
     },
-    jev: {
-      enabled: true,
-      autoClassify: true,
-      includeText: true,
-      apiBaseUrl: 'https://api.typesafe.ai/v1',
-      model: 'jev-latest',
-      hasApiKey: false,
-      safeStorageAvailable: true,
-      lastModel: '',
-      lastAlias: '',
-      latestReleaseDate: '',
-      lastCheckedAt: '',
-      lastError: '',
-      compatibilityPassed: false,
-      checking: false,
-      cacheEntries: 0,
-    },
     backups: [
       {
         fileName: 'workspace-preview-auto.json',
         size: 18432,
         createdAt: new Date(now - 1000 * 60 * 90).toISOString(),
-        summary: { assignments: 3, knowledge: 5, experiments: 3, courses: 4 },
+        summary: { assignments: 3, experiments: 3, courses: 4 },
       },
     ],
     backupArchives: [
@@ -425,7 +777,7 @@ function createPreviewState() {
         label: 'manual',
         encrypted: true,
         includeMaterials: false,
-        summary: { assignments: 3, knowledge: 5, experiments: 3, courses: 4 },
+        summary: { assignments: 3, experiments: 3, courses: 4 },
       },
     ],
     backupStatus: {
@@ -449,51 +801,9 @@ function createPreviewState() {
       lastError: '',
       lastSyncAt: null,
     },
-    skillCatalog: null,
-    skillUpdates: [],
     status: {
-      installed: true,
-      installedVersion: '0.1.4-rc.2',
-      selectedVersion: '0.1.4-rc.2',
-      updateState: 'current',
-      updateAvailable: false,
-      channel: 'latest',
-      channelLabel: '稳定版',
-      registryError: null,
-      dshHome,
-      runtimeDir: 'D:\\dsh壳\\vendor',
+      launcherVersion: '0.5.0',
       logsDir: 'C:\\Users\\小zp\\AppData\\Roaming\\deepseek-harness-launcher\\logs',
-      nodeVersion: '24.18.0',
-      npmVersion: '12.0.2',
-      systemNode: true,
-      launcherVersion: '0.3.0',
-      channels: {
-        latest: '0.1.4-rc.2',
-        next: '0.1.5-rc.1',
-        alpha: '0.1.6-alpha.1',
-      },
-      process: {
-        running: false,
-        pid: null,
-        url: '127.0.0.1:3080',
-      },
-    },
-    channels: {
-      latest: {
-        id: 'latest',
-        label: '稳定版',
-        description: '推荐日常使用，跟随 npm latest 标签。',
-      },
-      next: {
-        id: 'next',
-        label: '预览版',
-        description: '提前体验候选版本，可能包含兼容性变化。',
-      },
-      alpha: {
-        id: 'alpha',
-        label: '开发版',
-        description: '开发预览通道，适合主动测试和反馈问题。',
-      },
     },
     release: {
       htmlUrl: 'https://github.com/deepseek-ai/deepseek-harness/releases',
@@ -553,178 +863,6 @@ function createPreviewState() {
         message: 'DeepSeek Harness 已是最新版本。',
       },
     ],
-    history: [],
-    plugins: {
-      profile: 'web',
-      initialized: true,
-      plugins: [
-        {
-          name: '@deepseek-ai/dsh-web-profile',
-          version: '0.1.4-rc.2',
-          active: true,
-        },
-      ],
-    },
-    modelConfig: {
-      dshHome,
-      defaultModel: {
-        provider: 'DeepSeek',
-        model: 'deepseek-chat',
-        reasoningEffort: 'medium',
-      },
-      credentials: {
-        exists: true,
-        refs: ['DEEPSEEK_API_KEY'],
-        deepseekStored: true,
-        path: `${dshHome}\\.credentials.yaml`,
-      },
-      settings: {
-        exists: true,
-        path: `${dshHome}\\settings.yaml`,
-      },
-      profile: {
-        exists: true,
-        path: `${dshHome}\\profiles\\web`,
-      },
-    },
-    skills: {
-      skillsRoot: `${dshHome}\\skills`,
-      agentsRoot: 'C:\\Users\\小zp\\.agents\\skills',
-      bundledRoot: '',
-      roots: [
-        {
-          kind: 'dsh',
-          label: 'DSH 用户',
-          path: `${dshHome}\\skills`,
-          exists: true,
-        },
-        {
-          kind: 'agents',
-          label: 'Agent 共享',
-          path: 'C:\\Users\\小zp\\.agents\\skills',
-          exists: true,
-        },
-      ],
-      counts: {
-        total: 5,
-        dsh: 3,
-        agents: 2,
-        bundled: 0,
-        active: 4,
-        userInvocable: 4,
-        shadowed: 0,
-        managed: 1,
-        disabled: 1,
-      },
-      skills: [
-        {
-          id: 'dsh:ui-ux-pro-max',
-          name: 'ui-ux-pro-max',
-          folder: 'ui-ux-pro-max',
-          description: '面向 Web、移动端和桌面端的 UI/UX 设计与实现知识库。',
-          whenToUse: '需要设计、审查或修复界面时使用。',
-          author: 'ZP Workbench',
-          version: '1.2.0',
-          permissions: ['filesystem'],
-          dependencies: [],
-          active: true,
-          userInvocable: true,
-          kind: 'dsh',
-          sourceLabel: 'DSH 用户',
-          sourcePath: `${dshHome}\\skills`,
-          invocation: '$ui-ux-pro-max',
-          canManage: true,
-          managed: true,
-          directory: `${dshHome}\\skills\\ui-ux-pro-max`,
-          skillFile: `${dshHome}\\skills\\ui-ux-pro-max\\SKILL.md`,
-          updatedAt: new Date(now - 1000 * 60 * 60 * 36).toISOString(),
-        },
-        {
-          id: 'dsh:find-skill',
-          name: 'find-skill',
-          folder: 'find-skill',
-          description: '根据当前问题寻找合适的 Skill，并搜索 GitHub 上高星的相关项目。',
-          author: 'Community',
-          version: '1.0.0',
-          permissions: ['network'],
-          dependencies: [],
-          active: true,
-          userInvocable: true,
-          kind: 'dsh',
-          sourceLabel: 'DSH 用户',
-          sourcePath: `${dshHome}\\skills`,
-          invocation: '$find-skill',
-          canManage: true,
-          managed: false,
-          directory: `${dshHome}\\skills\\find-skill`,
-          skillFile: `${dshHome}\\skills\\find-skill\\SKILL.md`,
-          updatedAt: new Date(now - 1000 * 60 * 60 * 12).toISOString(),
-        },
-        {
-          id: 'dsh:grilling',
-          name: 'grilling',
-          folder: 'grilling.md',
-          description: '持续追问并检验方案、决策或设计，直到关键分支都被明确。',
-          author: 'Community',
-          version: '1.1.0',
-          permissions: [],
-          dependencies: [],
-          active: true,
-          userInvocable: true,
-          kind: 'dsh',
-          sourceLabel: 'DSH 用户',
-          sourcePath: `${dshHome}\\skills`,
-          invocation: '$grilling',
-          canManage: true,
-          managed: false,
-          directory: `${dshHome}\\skills`,
-          skillFile: `${dshHome}\\skills\\grilling.md`,
-          updatedAt: new Date(now - 1000 * 60 * 60 * 12).toISOString(),
-        },
-        {
-          id: 'agents:shared-research',
-          name: 'shared-research',
-          folder: 'shared-research',
-          description: '由多个本地 Agent 共享的资料检索与整理能力。',
-          author: 'Agent Team',
-          version: '0.9.0',
-          permissions: ['network', 'filesystem'],
-          dependencies: ['pdf-reader'],
-          active: true,
-          userInvocable: false,
-          kind: 'agents',
-          sourceLabel: 'Agent 共享',
-          sourcePath: 'C:\\Users\\小zp\\.agents\\skills',
-          invocation: '$shared-research',
-          canManage: false,
-          managed: false,
-          directory: 'C:\\Users\\小zp\\.agents\\skills\\shared-research',
-          skillFile: 'C:\\Users\\小zp\\.agents\\skills\\shared-research\\SKILL.md',
-          updatedAt: new Date(now - 1000 * 60 * 60 * 18).toISOString(),
-        },
-        {
-          id: 'agents:export-helper',
-          name: 'export-helper',
-          folder: 'export-helper',
-          description: '整理导出文件，但当前禁止模型自动调用。',
-          author: 'Agent Team',
-          version: '0.8.0',
-          permissions: ['filesystem'],
-          dependencies: [],
-          active: false,
-          userInvocable: true,
-          kind: 'agents',
-          sourceLabel: 'Agent 共享',
-          sourcePath: 'C:\\Users\\小zp\\.agents\\skills',
-          invocation: '$export-helper',
-          canManage: false,
-          managed: false,
-          directory: 'C:\\Users\\小zp\\.agents\\skills\\export-helper',
-          skillFile: 'C:\\Users\\小zp\\.agents\\skills\\export-helper\\SKILL.md',
-          updatedAt: new Date(now - 1000 * 60 * 60 * 30).toISOString(),
-        },
-      ],
-    },
     workspace: {
       version: 2,
       courses: [],
@@ -760,150 +898,6 @@ function createPreviewState() {
           status: 'done',
           notes: '三分钟展示，主题为本地 AI 工具的使用边界。',
           createdAt: new Date(now - 1000 * 60 * 60 * 80).toISOString(),
-          updatedAt: new Date(now - 1000 * 60 * 60 * 8).toISOString(),
-        },
-      ],
-      knowledge: [
-        {
-          id: 'preview-knowledge-1',
-          title: '快速排序的平均时间复杂度',
-          course: '算法设计与分析实验',
-          tags: ['排序', '复杂度', '分治'],
-          content:
-            '快速排序采用分治策略。平均情况下每次划分接近均衡，递归深度为 O(log n)，每层处理 O(n)，因此平均时间复杂度为 O(n log n)。',
-          type: 'formula',
-          source: {
-            experimentId: 'preview-experiment-1',
-            filePath:
-              'C:\\Users\\小zp\\ZP Workbench\\实验资料\\算法设计与分析实验\\算法设计与分析实验报告.pdf',
-            fileName: '算法设计与分析实验报告.pdf',
-            group: '算法设计与分析实验',
-            pageStart: 3,
-            pageEnd: 3,
-            excerpt: '平均情况下，每次划分将序列分成两个规模相近的子序列。',
-          },
-          mastery: 2,
-          reviewStage: 2,
-          dueAt: new Date(now - 1000 * 60 * 30).toISOString(),
-          createdAt: new Date(now - 1000 * 60 * 60 * 70).toISOString(),
-          updatedAt: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
-        },
-        {
-          id: 'preview-knowledge-2',
-          title: '归并排序需要额外空间',
-          course: '算法设计与分析实验',
-          tags: ['排序', '空间复杂度'],
-          content:
-            '归并排序合并两个有序数组时需要辅助数组，因此常见实现的空间复杂度为 O(n)，这是它相对原地排序的主要代价。',
-          type: 'pitfall',
-          source: {
-            experimentId: 'preview-experiment-1',
-            filePath:
-              'C:\\Users\\小zp\\ZP Workbench\\实验资料\\算法设计与分析实验\\算法设计与分析实验报告.pdf',
-            fileName: '算法设计与分析实验报告.pdf',
-            group: '算法设计与分析实验',
-            pageStart: 5,
-            pageEnd: 5,
-            excerpt: '合并阶段需要长度为 n 的临时数组保存合并结果。',
-          },
-          mastery: 1,
-          reviewStage: 1,
-          dueAt: new Date(now + 1000 * 60 * 60 * 24).toISOString(),
-          createdAt: new Date(now - 1000 * 60 * 60 * 44).toISOString(),
-          updatedAt: new Date(now - 1000 * 60 * 60 * 3).toISOString(),
-        },
-        {
-          id: 'preview-knowledge-3',
-          title: '运行时多态的三个必要条件',
-          course: '面向对象程序设计实验',
-          tags: ['多态', '继承', '重写'],
-          content:
-            '运行时多态通常需要继承关系、子类重写父类方法，以及父类引用指向子类对象。调用时根据对象的实际类型选择方法实现。',
-          type: 'definition',
-          source: {
-            experimentId: 'preview-experiment-2',
-            filePath:
-              'C:\\Users\\小zp\\ZP Workbench\\实验资料\\面向对象程序设计实验\\面向对象程序设计实验三.pdf',
-            fileName: '面向对象程序设计实验三.pdf',
-            group: '面向对象程序设计实验',
-            pageStart: 2,
-            pageEnd: 4,
-            excerpt: '父类引用可以接收子类对象，并在运行时调用被重写的方法。',
-          },
-          mastery: 3,
-          reviewStage: 4,
-          dueAt: new Date(now + 1000 * 60 * 60 * 24 * 10).toISOString(),
-          createdAt: new Date(now - 1000 * 60 * 60 * 30).toISOString(),
-          updatedAt: new Date(now - 1000 * 60 * 60 * 5).toISOString(),
-        },
-        {
-          id: 'preview-knowledge-4',
-          title: '虚方法表如何支持动态绑定',
-          course: '面向对象程序设计实验',
-          tags: ['多态', '虚方法表'],
-          content:
-            '对象头关联虚方法表，表中记录该对象实际类型可调用的方法入口。调用重写方法时通过虚方法表定位实现，从而实现动态绑定。',
-          type: 'method',
-          source: {
-            experimentId: 'preview-experiment-2',
-            filePath:
-              'C:\\Users\\小zp\\ZP Workbench\\实验资料\\面向对象程序设计实验\\面向对象程序设计实验三.pdf',
-            fileName: '面向对象程序设计实验三.pdf',
-            group: '面向对象程序设计实验',
-            pageStart: 6,
-            pageEnd: 6,
-            excerpt: '动态绑定通过运行时类型信息找到实际方法入口。',
-          },
-          mastery: 0,
-          reviewStage: 0,
-          dueAt: new Date(now).toISOString(),
-          createdAt: new Date(now - 1000 * 60 * 60 * 28).toISOString(),
-          updatedAt: new Date(now - 1000 * 60 * 60 * 6).toISOString(),
-        },
-        {
-          id: 'preview-knowledge-5',
-          title: '程序局部性对缓存命中率的影响',
-          course: '计算机系统基础',
-          tags: ['缓存', '局部性'],
-          content:
-            '时间局部性指刚访问的数据可能再次访问；空间局部性指相邻地址可能很快访问。循环访问连续数组通常具有较好的空间局部性。',
-          type: 'concept',
-          source: {
-            experimentId: 'preview-experiment-3',
-            filePath:
-              'C:\\Users\\小zp\\ZP Workbench\\实验资料\\计算机系统基础\\计算机系统基础实验一.pdf',
-            fileName: '计算机系统基础实验一.pdf',
-            group: '计算机系统基础',
-            pageStart: 8,
-            pageEnd: 9,
-            excerpt: '连续访问数组元素会充分利用缓存行。',
-          },
-          mastery: 1,
-          reviewStage: 1,
-          dueAt: new Date(now - 1000 * 60 * 60 * 4).toISOString(),
-          createdAt: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
-          updatedAt: new Date(now - 1000 * 60 * 60 * 7).toISOString(),
-        },
-        {
-          id: 'preview-knowledge-6',
-          title: '示波器读图步骤',
-          course: '大学物理',
-          tags: ['实验', '示波器'],
-          content: '先确认时基和电压档位，再读取峰峰值、周期和相位差；计算误差时保留有效数字。',
-          type: 'method',
-          source: {
-            experimentId: 'preview-experiment-5',
-            filePath: 'C:\\Users\\小zp\\ZP Workbench\\实验资料\\大学物理\\实验数据记录.xlsx',
-            fileName: '实验数据记录.xlsx',
-            group: '大学物理',
-            pageStart: 1,
-            pageEnd: 1,
-            excerpt: '读取峰峰值前先核对时基与电压档位。',
-          },
-          mastery: 2,
-          reviewStage: 2,
-          dueAt: new Date(now + 1000 * 60 * 60 * 24 * 3).toISOString(),
-          createdAt: new Date(now - 1000 * 60 * 60 * 18).toISOString(),
           updatedAt: new Date(now - 1000 * 60 * 60 * 8).toISOString(),
         },
       ],
@@ -1098,80 +1092,6 @@ function createPreviewState() {
 export function createPreviewLauncherApi() {
   const state = createPreviewState()
   linkPreviewCourses(state)
-  const previewTools = [
-    {
-      id: '0123456789abcdef0123',
-      displayName: 'MATLAB R2024b',
-      publisher: 'MathWorks',
-      version: '24.2',
-      executableName: 'matlab.exe',
-      sourceLabel: '开始菜单',
-      favorite: true,
-      lastLaunchedAt: '',
-      running: false,
-      sessionId: null,
-      adapter: 'generic',
-      adapterLabel: '通用控制',
-      adapterTier: 'generic',
-      category: 'engineering',
-      categoryLabel: '工程与开发',
-      categoryOrder: 0,
-    },
-    {
-      id: '0123456789abcdef0124',
-      displayName: 'Multisim',
-      publisher: 'NI',
-      version: '14.3',
-      executableName: 'Multisim.exe',
-      sourceLabel: '开始菜单',
-      favorite: false,
-      lastLaunchedAt: '',
-      running: false,
-      sessionId: null,
-      adapter: 'generic',
-      adapterLabel: '通用控制',
-      adapterTier: 'generic',
-      category: 'engineering',
-      categoryLabel: '工程与开发',
-      categoryOrder: 0,
-    },
-    {
-      id: '0123456789abcdef0125',
-      displayName: 'Visual Studio Code',
-      publisher: 'Microsoft',
-      version: '1.104',
-      executableName: 'Code.exe',
-      sourceLabel: '开始菜单',
-      favorite: false,
-      lastLaunchedAt: '',
-      running: false,
-      sessionId: null,
-      adapter: 'vscode',
-      adapterLabel: '深度适配',
-      adapterTier: 'deep',
-      category: 'engineering',
-      categoryLabel: '工程与开发',
-      categoryOrder: 0,
-    },
-    {
-      id: '0123456789abcdef0126',
-      displayName: 'Steam',
-      publisher: 'Valve',
-      version: '1.0',
-      executableName: 'steam.exe',
-      sourceLabel: '开始菜单',
-      favorite: true,
-      lastLaunchedAt: '',
-      running: false,
-      sessionId: null,
-      adapter: 'generic',
-      adapterLabel: '通用控制',
-      adapterTier: 'generic',
-      category: 'entertainment',
-      categoryLabel: '娱乐应用',
-      categoryOrder: 3,
-    },
-  ]
   const createId = () =>
     globalThis.crypto?.randomUUID?.() ||
     `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -1181,399 +1101,52 @@ export function createPreviewLauncherApi() {
     async bootstrap() {
       return clone(state)
     },
-    async getStatus() {
-      return clone(state.status)
+    async getAihotDaily() {
+      return clone(createPreviewAihotDaily())
+    },
+    async getAihotItems(options = {}) {
+      const all = createPreviewAihotItems().data
+      const windowMs = options.window === '24h' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000
+      const cutoff = Date.now() - windowMs
+      const query = String(options.q || '')
+        .trim()
+        .toLocaleLowerCase('zh-CN')
+      const filtered = all.filter((item) => {
+        if (options.category && item.category !== options.category) return false
+        if (Date.parse(item.publishedAt) < cutoff) return false
+        if (
+          query &&
+          !`${item.title}${item.summary}${item.reason}`.toLocaleLowerCase('zh-CN').includes(query)
+        ) {
+          return false
+        }
+        return true
+      })
+      const limit = Number(options.limit) || 20
+      const items = filtered.slice(0, limit)
+      return clone({
+        data: { items, hasMore: filtered.length > items.length, nextCursor: '' },
+        fetchedAt: Date.now(),
+        source: 'preview',
+        stale: false,
+      })
+    },
+    async getAihotHot() {
+      return clone(createPreviewAihotHot())
+    },
+    async getAihotStory(publicId) {
+      return clone(createPreviewAihotStory(publicId))
     },
     async getSettings() {
       return clone(state.settings)
     },
-    async listTools() {
-      return clone(previewTools)
-    },
-    async launchTool(id) {
-      const tool = previewTools.find((item) => item.id === id)
-      if (!tool) throw new Error('没有找到这个工具。')
-      tool.running = true
-      tool.sessionId = `tool-session-${Date.now()}-1`
-      tool.lastLaunchedAt = new Date().toISOString()
-      return {
-        session: {
-          id: tool.sessionId,
-          appId: tool.id,
-          displayName: tool.displayName,
-          pid: 1234,
-          executableName: tool.executableName,
-          startedAt: tool.lastLaunchedAt,
-          capture: null,
-        },
-        capture: null,
-      }
-    },
-    async stopTool(sessionId) {
-      const tool = previewTools.find((item) => item.sessionId === sessionId)
-      if (tool) {
-        tool.running = false
-        tool.sessionId = null
-      }
-      return { stopped: Boolean(tool) }
-    },
-    async prepareToolCapture() {
-      return null
-    },
-    async setToolFavorite(id, favorite) {
-      const tool = previewTools.find((item) => item.id === id)
-      if (!tool) throw new Error('没有找到这个工具。')
-      tool.favorite = Boolean(favorite)
-      return true
-    },
-    async removeTool(id) {
-      return { id, removed: true }
-    },
-    async getToolIcon() {
-      return null
-    },
-    async inspectToolSession(sessionId) {
-      return {
-        sessionId,
-        available: true,
-        nodes: [],
-        summary: {
-          total: 0,
-          buttons: 0,
-          edits: 0,
-          menus: 0,
-          lists: 0,
-          trees: 0,
-          documents: 0,
-          panes: 0,
-          windows: 0,
-        },
-      }
-    },
-    async executeToolAction(_sessionId, request) {
-      return {
-        ok: true,
-        action: request?.action || '',
-        effect: 'unverifiable',
-        confirmed: false,
-      }
-    },
-    async openToolPath(_sessionId, grantId) {
-      return { opened: true, path: grantId, kind: 'file' }
-    },
-    async listVSCodeCommands() {
-      return { commands: [] }
-    },
-    async runVSCodeCommand(_sessionId, query, options = {}) {
-      return {
-        command: query,
-        effect: 'unverifiable',
-        confirmed: false,
-        options,
-      }
-    },
-    async readVSCodeOutput() {
-      return { text: '', candidates: 0 }
-    },
-    async getToolActionLog() {
-      return []
-    },
-    async clearToolActionLog() {
-      return true
-    },
-    async chooseToolPath() {
-      return {
-        grantId: 'preview-tool-path-grant',
-        path: 'C:\\Preview\\project',
-      }
-    },
-    async addToolManually() {
-      return null
-    },
-    async setFullScreen() {
-      return false
-    },
     async patchSettings(patch) {
       state.settings = { ...state.settings, ...patch }
-      for (const key of [
-        'jevEnabled',
-        'jevAutoClassify',
-        'jevIncludeText',
-        'jevApiBaseUrl',
-        'jevModel',
-      ]) {
-        if (!Object.hasOwn(patch || {}, key)) continue
-        if (key === 'jevEnabled') state.jev.enabled = Boolean(patch[key])
-        else if (key === 'jevAutoClassify') state.jev.autoClassify = Boolean(patch[key])
-        else if (key === 'jevIncludeText') state.jev.includeText = Boolean(patch[key])
-        else state.jev[key === 'jevModel' ? 'model' : 'apiBaseUrl'] = patch[key]
-      }
       if (patch?.onboarding && Object.hasOwn(patch.onboarding, 'welcomeSeen')) {
         writePreviewWelcomeSeen(patch.onboarding.welcomeSeen)
       }
       emit('settings:changed', state.settings)
       return clone(state.settings)
-    },
-    async getJevStatus() {
-      return clone(state.jev)
-    },
-    async patchJevConfig(patch = {}) {
-      if (Object.hasOwn(patch, 'jevEnabled')) state.jev.enabled = Boolean(patch.jevEnabled)
-      if (Object.hasOwn(patch, 'jevAutoClassify')) {
-        state.jev.autoClassify = Boolean(patch.jevAutoClassify)
-      }
-      if (Object.hasOwn(patch, 'jevIncludeText')) {
-        state.jev.includeText = Boolean(patch.jevIncludeText)
-      }
-      if (Object.hasOwn(patch, 'jevApiBaseUrl')) state.jev.apiBaseUrl = patch.jevApiBaseUrl
-      return clone(state.jev)
-    },
-    async setJevApiKey() {
-      state.jev.hasApiKey = true
-      state.jev.lastError = ''
-      return clone(state.jev)
-    },
-    async clearJevApiKey() {
-      state.jev.hasApiKey = false
-      state.jev.lastModel = ''
-      state.jev.compatibilityPassed = false
-      state.jev.lastError = ''
-      return clone(state.jev)
-    },
-    async testJev() {
-      if (!state.jev.hasApiKey) throw new Error('请先保存 TypeSafe API Key。')
-      state.jev.checking = true
-      await new Promise((resolve) => setTimeout(resolve, 800))
-      state.jev = {
-        ...state.jev,
-        checking: false,
-        lastModel: 'jev-1.13.0',
-        lastAlias: 'jev-latest',
-        latestReleaseDate: '2026-09-01',
-        lastCheckedAt: new Date().toISOString(),
-        lastError: '',
-        compatibilityPassed: true,
-      }
-      return clone(state.jev)
-    },
-    async checkUpdate() {
-      state.status.updateState = 'current'
-      state.status.updateAvailable = false
-      state.status.selectedVersion = state.status.installedVersion
-      emit('update:state', {
-        installedVersion: state.status.installedVersion,
-        selectedVersion: state.status.selectedVersion,
-        state: state.status.updateState,
-        updateAvailable: false,
-        channel: state.status.channel,
-        channelLabel: state.status.channelLabel,
-      })
-      return clone(state.status)
-    },
-    async install() {
-      emit('task:update', {
-        taskId: 'preview-install',
-        state: 'running',
-        label: '安装 Harness',
-        detail: '浏览器预览模式',
-        progress: { indeterminate: true },
-      })
-      setTimeout(
-        () =>
-          emit('task:update', {
-            taskId: 'preview-install',
-            state: 'success',
-            label: '安装完成',
-            detail: '预览数据已更新',
-          }),
-        900,
-      )
-      return clone(state.status)
-    },
-    async launch() {
-      state.status.process = {
-        running: true,
-        pid: 24816,
-        url: `${state.settings.host}:${state.settings.port}`,
-      }
-      emit('process:state', state.status.process)
-      return clone(state.status.process)
-    },
-    async stop() {
-      state.status.process = {
-        running: false,
-        pid: null,
-        url: `${state.settings.host}:${state.settings.port}`,
-      }
-      emit('process:state', state.status.process)
-      return clone(state.status.process)
-    },
-    async listPlugins() {
-      return clone(state.plugins)
-    },
-    async pluginAction(_profile, action, spec) {
-      if (action === 'add' && spec) {
-        state.plugins.plugins.push({ name: spec, version: 'preview', active: false })
-      }
-      if (action === 'remove') {
-        state.plugins.plugins = state.plugins.plugins.filter((plugin) => plugin.name !== spec)
-      }
-      return clone(state.plugins)
-    },
-    async getModelConfig() {
-      return clone(state.modelConfig)
-    },
-    async getDshModelState({ autoStart = false } = {}) {
-      return {
-        available: Boolean(autoStart || state.status.process.running),
-        credential: {
-          configured: Boolean(state.modelConfig.credentials.deepseekStored),
-          writable: true,
-          source: state.modelConfig.credentials.deepseekStored ? 'file' : undefined,
-        },
-        defaultModel: clone(state.modelConfig.defaultModel),
-        writable: true,
-        error: null,
-      }
-    },
-    async setDeepseekApiKey(value) {
-      const key = String(value || '').trim()
-      if (key.length < 16 || !key.startsWith('sk-')) {
-        throw new Error('请输入以 sk- 开头的有效 DeepSeek API Key。')
-      }
-      state.status.process = {
-        running: true,
-        pid: 24816,
-        url: `${state.settings.host}:${state.settings.port}`,
-      }
-      state.modelConfig.credentials.exists = true
-      state.modelConfig.credentials.deepseekStored = true
-      state.modelConfig.credentials.refs = ['DEEPSEEK_API_KEY']
-      return this.getDshModelState({ autoStart: true })
-    },
-    async clearDeepseekApiKey() {
-      state.modelConfig.credentials.deepseekStored = false
-      state.modelConfig.credentials.refs = []
-      return this.getDshModelState({ autoStart: true })
-    },
-    async listSkills() {
-      return clone(state.skills)
-    },
-    async searchSkills(query) {
-      state.skillCatalog = {
-        query: String(query || ''),
-        total: 2,
-        items: [
-          {
-            id: 'preview-skill-1',
-            name: 'paper-reader',
-            owner: 'community-lab',
-            fullName: 'community-lab/paper-reader',
-            description: '读取论文、提取章节结构并生成可追溯摘录。',
-            url: 'https://github.com/community-lab/paper-reader',
-            stars: 2841,
-            updatedAt: new Date().toISOString(),
-            defaultBranch: 'main',
-            topics: ['pdf', 'research', 'agent-skills'],
-          },
-          {
-            id: 'preview-skill-2',
-            name: 'study-planner',
-            owner: 'campus-tools',
-            fullName: 'campus-tools/study-planner',
-            description: '根据课程、考试日期和薄弱知识点安排复习计划。',
-            url: 'https://github.com/campus-tools/study-planner',
-            stars: 1260,
-            updatedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-            defaultBranch: 'main',
-            topics: ['study', 'planning'],
-          },
-        ],
-      }
-      return clone(state.skillCatalog)
-    },
-    async installSkill(spec) {
-      const name = String(spec || 'preview-skill')
-        .split('/')
-        .filter(Boolean)
-        .at(-1)
-        .replace(/[^a-z0-9-]/gi, '-')
-        .toLocaleLowerCase('en-US')
-      const skill = {
-        id: `dsh:${name}`,
-        name,
-        folder: name,
-        description: '从 GitHub 安装的预览 Skill。',
-        whenToUse: '',
-        author: 'GitHub',
-        version: '1.0.0',
-        permissions: ['filesystem'],
-        dependencies: [],
-        active: true,
-        userInvocable: true,
-        kind: 'dsh',
-        sourceLabel: 'DSH 用户',
-        sourcePath: `${state.settings.dshHome}\\skills`,
-        invocation: `$${name}`,
-        canManage: true,
-        managed: true,
-        directory: `${state.settings.dshHome}\\skills\\${name}`,
-        skillFile: `${state.settings.dshHome}\\skills\\${name}\\SKILL.md`,
-        updatedAt: new Date().toISOString(),
-      }
-      state.skills.skills.push(skill)
-      state.skills.counts.total += 1
-      state.skills.counts.dsh += 1
-      state.skills.counts.active += 1
-      state.skills.counts.userInvocable += 1
-      state.skills.counts.managed += 1
-      return clone({ skill, data: state.skills, managed: { name } })
-    },
-    async setSkillEnabled(id, enabled) {
-      const skill = state.skills.skills.find((item) => item.id === id)
-      if (!skill) throw new Error('没有找到这个 Skill。')
-      skill.active = Boolean(enabled)
-      skill.userInvocable = Boolean(enabled)
-      state.skills.counts.active = state.skills.skills.filter((item) => item.active).length
-      state.skills.counts.userInvocable = state.skills.skills.filter(
-        (item) => item.userInvocable,
-      ).length
-      state.skills.counts.disabled = state.skills.skills.filter(
-        (item) => !item.active && !item.userInvocable,
-      ).length
-      return clone({ skill, data: state.skills })
-    },
-    async checkSkillUpdates() {
-      state.skillUpdates = state.skills.skills
-        .filter((skill) => skill.managed)
-        .map((skill) => ({
-          name: skill.name,
-          updateAvailable: true,
-          currentCommit: 'preview-one',
-          latestCommit: 'preview-two',
-          error: '',
-        }))
-      return clone(state.skillUpdates)
-    },
-    async updateSkill(id) {
-      const skill = state.skills.skills.find((item) => item.id === id)
-      if (!skill) throw new Error('没有找到这个 Skill。')
-      skill.version = '1.1.0'
-      skill.updatedAt = new Date().toISOString()
-      return clone({ skill, data: state.skills })
-    },
-    async uninstallSkill(id) {
-      state.skills.skills = state.skills.skills.filter((item) => item.id !== id)
-      state.skills.counts.total = state.skills.skills.length
-      state.skills.counts.dsh = state.skills.skills.filter((item) => item.kind === 'dsh').length
-      state.skills.counts.managed = state.skills.skills.filter((item) => item.managed).length
-      return clone(state.skills)
-    },
-    async openSkillDirectory() {
-      return true
-    },
-    async openSkillsRoot() {
-      return true
     },
     async getWorkspace() {
       return clone(state.workspace)
@@ -1667,7 +1240,6 @@ export function createPreviewLauncherApi() {
         createdAt: new Date().toISOString(),
         summary: {
           assignments: state.workspace.assignments.length,
-          knowledge: state.workspace.knowledge.length,
           experiments: state.workspace.experiments.length,
           courses: state.workspace.courses.length,
         },
@@ -1694,7 +1266,6 @@ export function createPreviewLauncherApi() {
         includeMaterials: Boolean(options.includeMaterials),
         summary: {
           assignments: state.workspace.assignments.length,
-          knowledge: state.workspace.knowledge.length,
           experiments: state.workspace.experiments.length,
           courses: state.workspace.courses.length,
         },
@@ -1762,7 +1333,7 @@ export function createPreviewLauncherApi() {
       emit('reminder:due', {
         key: 'test',
         title: 'ZP Workbench 提醒已开启',
-        body: '之后会在课前、作业截止前和复习到期时提醒你。',
+        body: '之后会在课前和作业截止前提醒你。',
         at: new Date().toISOString(),
       })
       return true
@@ -1806,132 +1377,6 @@ export function createPreviewLauncherApi() {
     },
     async deleteAssignment(id) {
       state.workspace.assignments = state.workspace.assignments.filter((item) => item.id !== id)
-      return clone(state.workspace)
-    },
-    async createKnowledge(input) {
-      const now = new Date().toISOString()
-      state.workspace.knowledge.unshift({
-        id: createId(),
-        title: input.title,
-        course: input.course || '',
-        tags: normalizeTags(input.tags),
-        content: input.content || '',
-        type: 'concept',
-        source: null,
-        mastery: 0,
-        reviewStage: 0,
-        dueAt: now,
-        lastReviewedAt: '',
-        generatedBy: 'manual',
-        createdAt: now,
-        updatedAt: now,
-      })
-      return clone(state.workspace)
-    },
-    async updateKnowledge(id, patch) {
-      state.workspace.knowledge = state.workspace.knowledge.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              ...patch,
-              tags: patch.tags === undefined ? item.tags : normalizeTags(patch.tags),
-              updatedAt: new Date().toISOString(),
-            }
-          : item,
-      )
-      return clone(state.workspace)
-    },
-    async deleteKnowledge(id) {
-      state.workspace.knowledge = state.workspace.knowledge.filter((item) => item.id !== id)
-      return clone(state.workspace)
-    },
-    async deleteKnowledgeMany(ids) {
-      const targets = new Set(Array.isArray(ids) ? ids : [])
-      state.workspace.knowledge = state.workspace.knowledge.filter((item) => !targets.has(item.id))
-      return clone(state.workspace)
-    },
-    async generateKnowledge(experimentId) {
-      const experiment = state.workspace.experiments.find((item) => item.id === experimentId)
-      if (!experiment) throw new Error('没有找到这份资料。')
-      await new Promise((resolve) => setTimeout(resolve, 900))
-      const now = new Date().toISOString()
-      const templates = [
-        {
-          title: `${experiment.title}的核心定义`,
-          type: 'definition',
-          content: '根据资料内容提炼概念边界、适用条件和关键术语，形成可以直接复习的定义。',
-          tags: ['定义', '核心概念'],
-        },
-        {
-          title: `${experiment.title}的执行方法`,
-          type: 'method',
-          content: '把资料中的处理步骤整理成有顺序的方法，标出每一步的输入、输出和检查条件。',
-          tags: ['方法', '步骤'],
-        },
-        {
-          title: `${experiment.title}的易错点`,
-          type: 'pitfall',
-          content: '归纳资料中最容易混淆或遗漏的条件，并在复习时优先检查这些位置。',
-          tags: ['易错点', '复习'],
-        },
-      ]
-      const generated = templates.map((template, index) => ({
-        id: createId(),
-        ...template,
-        course: experiment.group || '未分类',
-        source: {
-          experimentId: experiment.id,
-          filePath: experiment.filePath,
-          fileName: experiment.originalName,
-          group: experiment.group || '未分类',
-          pageStart: index + 1,
-          pageEnd: index + 1,
-          excerpt: '预览环境根据资料标题模拟生成，桌面版本会读取文件正文。',
-        },
-        mastery: 0,
-        reviewStage: 0,
-        dueAt: now,
-        generatedBy: 'dsh',
-        createdAt: now,
-        updatedAt: now,
-      }))
-      state.workspace.knowledge = [
-        ...generated,
-        ...state.workspace.knowledge.filter((item) => item.source?.experimentId !== experimentId),
-      ]
-      return {
-        workspace: clone(state.workspace),
-        generated: generated.length,
-        source: {
-          experimentId,
-          fileName: experiment.originalName,
-          group: experiment.group,
-        },
-        extraction: { pages: 3, truncated: false },
-      }
-    },
-    async reviewKnowledge(id, rating) {
-      const intervals = [0, 1, 3, 7, 14, 30]
-      state.workspace.knowledge = state.workspace.knowledge.map((item) => {
-        if (item.id !== id) return item
-        const currentStage = Number(item.reviewStage) || 0
-        const nextStage =
-          rating === 'forgot'
-            ? 1
-            : rating === 'known'
-              ? Math.min(5, currentStage + 2)
-              : Math.min(5, currentStage + 1)
-        const mastery =
-          rating === 'forgot' ? 0 : rating === 'known' ? 3 : Math.max(1, item.mastery || 0)
-        return {
-          ...item,
-          mastery,
-          reviewStage: nextStage,
-          dueAt: new Date(Date.now() + intervals[nextStage] * 86400000).toISOString(),
-          lastReviewedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
-      })
       return clone(state.workspace)
     },
     async importExperiments(entries) {
@@ -1990,30 +1435,21 @@ export function createPreviewLauncherApi() {
           return key && fileName.includes(key)
         })
         const localGroup = inferPreviewExperimentGroup(fileName)
-        const jevSuggestion = state.jev.hasApiKey && state.jev.enabled && state.jev.autoClassify
         return {
           ...entry,
           name: fileName,
           suggestion: {
             group: matched || localGroup,
             confidence: matched ? 0.86 : 0.38,
-            source: jevSuggestion && matched ? 'jev' : 'local',
+            source: 'local',
             reason: matched
-              ? jevSuggestion
-                ? `Jev 根据文件名和片段判断它更接近“${matched}”。`
-                : `匹配到了已有的“${matched}”文件夹。`
+              ? `匹配到了已有的“${matched}”文件夹。`
               : '没有匹配到已有文件夹，建议新建这个分类。',
-            model: jevSuggestion && matched ? 'jev-1.13.0' : '',
             lowConfidence: !matched,
           },
         }
       })
-      return {
-        suggestions,
-        usedJev: suggestions.some((item) => item.suggestion.source === 'jev'),
-        mode: suggestions.some((item) => item.suggestion.source === 'jev') ? 'jev' : 'local',
-        model: suggestions.some((item) => item.suggestion.source === 'jev') ? 'jev-1.13.0' : '',
-      }
+      return { suggestions, mode: 'local' }
     },
     async updateExperiment(id, patch) {
       state.workspace.experiments = state.workspace.experiments.map((item) =>
@@ -2059,9 +1495,6 @@ export function createPreviewLauncherApi() {
     async copyText(value) {
       await navigator.clipboard.writeText(String(value ?? ''))
       return true
-    },
-    async chooseDshHome() {
-      return `${state.settings.dshHome}-preview`
     },
     async chooseExperimentDir() {
       return `${state.settings.experimentDir}-preview`

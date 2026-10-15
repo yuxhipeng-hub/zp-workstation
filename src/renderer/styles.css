@@ -162,9 +162,7 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
-label:not(.field):not(.jev-mode-switch):not(.toggle-row):not(.model-key-field):has(
-    input:focus-visible
-  ) {
+label:not(.field):not(.toggle-row):not(.model-key-field):has(input:focus-visible) {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -4785,18 +4783,15 @@ input::placeholder {
   transform: translate3d(18px, 0, 0);
 }
 
-.toggle-row:active .toggle,
-.jev-mode-switch:active .toggle {
+.toggle-row:active .toggle {
   transform: scale(0.98);
 }
 
-.toggle-row:active input:not(:checked) + .toggle::after,
-.jev-mode-switch:active input:not(:checked) + .toggle::after {
+.toggle-row:active input:not(:checked) + .toggle::after {
   transform: translate3d(4px, 0, 0) scaleX(1.08);
 }
 
-.toggle-row:active input:checked + .toggle::after,
-.jev-mode-switch:active input:checked + .toggle::after {
+.toggle-row:active input:checked + .toggle::after {
   transform: translate3d(14px, 0, 0) scaleX(1.08);
 }
 
@@ -5446,8 +5441,7 @@ input::placeholder {
 
   .route-marker,
   .page-summary,
-  .local-time,
-  .topbar-actions .button span {
+  .local-time {
     display: none;
   }
 
@@ -5649,11 +5643,6 @@ input::placeholder {
     display: none;
   }
 
-  .topbar-actions [data-action='launch'] {
-    width: var(--control-height);
-    padding: 0;
-  }
-
   .status-band {
     padding: 22px 20px;
   }
@@ -5844,7 +5833,6 @@ input::placeholder {
 
 .today-timeline,
 .today-task-list,
-.today-review-list,
 .today-file-list {
   display: flex;
   flex-direction: column;
@@ -5893,8 +5881,7 @@ input::placeholder {
 
 .today-timeline-body,
 .today-task-copy,
-.today-file-copy,
-.today-review-copy {
+.today-file-copy {
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -5903,8 +5890,7 @@ input::placeholder {
 
 .today-timeline-body strong,
 .today-task-copy strong,
-.today-file-copy strong,
-.today-review-copy strong {
+.today-file-copy strong {
   overflow: hidden;
   font-size: 13px;
   font-weight: 600;
@@ -5914,8 +5900,7 @@ input::placeholder {
 
 .today-timeline-body small,
 .today-task-copy small,
-.today-file-copy small,
-.today-review-copy small {
+.today-file-copy small {
   overflow: hidden;
   color: var(--text-tertiary);
   font-size: 11px;
@@ -5936,25 +5921,6 @@ input::placeholder {
 
 .today-task-state.status-inbox {
   background: var(--warning);
-}
-
-.today-review-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-}
-
-.today-review-row:hover {
-  background: var(--panel-hover);
-}
-
-.today-review-actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 4px;
 }
 
 .today-file-list > button {

@@ -1,7 +1,11 @@
 # ZP Workbench
 
 ZP Workbench 是一个面向学生的本地学习工作站。它将课表、作业、资料库、知识点、
-DeepSeek Harness、Skills 和更新管理集中在同一个 Windows 桌面应用中。
+复习提醒和备份集中在同一个 Windows 桌面应用中。
+
+> 2026-10-14 起，ZP Workbench 转型为课程与学习数据工作台。DeepSeek Harness 官方
+> 桌面端负责安装、更新、模型和插件；工作台不再托管 DSH 运行时，也不做 Skills 和
+> 更新管理。
 
 当前版本：`0.4.0`
 
@@ -9,9 +13,8 @@ DeepSeek Harness、Skills 和更新管理集中在同一个 Windows 桌面应用
 
 - 导入 Excel、WPS、CSV、PDF、Word、PPT、ICS 等格式的课表。
 - 管理作业、课程、实验资料和知识点。
-- 安装、启动和更新 DeepSeek Harness。
-- 管理模型 API、Skills 和插件。
-- 检查工作台版本、切换下载线路并校验安装包。
+- 把作业和知识点整理成结构化提示词，复制给 DeepSeek Harness 使用。
+- 检查工作台自身版本、切换下载线路并校验安装包。
 - 在工作区和设置修改前自动备份，避免数据损坏。
 
 ## 本地开发
@@ -39,7 +42,7 @@ npm run dist:dir
 ## 目录结构
 
 ```text
-src/main/       Electron 主进程、本地数据、更新和 DSH 管理
+src/main/       Electron 主进程、本地数据、工作台自身更新和备份
 src/preload/    受限 IPC 接口
 src/renderer/   工作台界面
 tests/          Node.js 自动测试

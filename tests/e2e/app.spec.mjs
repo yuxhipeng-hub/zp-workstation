@@ -41,7 +41,7 @@ async function closeWorkstation(app, userDataDir) {
   fs.rmSync(userDataDir, { recursive: true, force: true })
 }
 
-test('launches the workstation on today and keeps runtime actions available', async () => {
+test('launches the workstation on today and keeps the topbar actions available', async () => {
   const userDataDir = createUserDataDir()
   const app = await launchWorkstation(userDataDir)
 
@@ -57,7 +57,8 @@ test('launches the workstation on today and keeps runtime actions available', as
 
     await expect(window.getByRole('button', { name: '总览', exact: true })).toHaveCount(0)
     await expect(window.getByRole('heading', { name: '今日' })).toBeVisible()
-    await expect(window.locator('#topLaunchButton')).toBeVisible()
+    await expect(window.locator('#topLaunchButton')).toHaveCount(0)
+    await expect(window.getByRole('heading', { name: 'AI 资讯', exact: true })).toBeVisible()
 
     const [brandBox, topbarBox] = await Promise.all([
       window.locator('.brand').boundingBox(),
@@ -83,10 +84,8 @@ test('launches the workstation on today and keeps runtime actions available', as
       )
     expect(scrollbarButtonDisplay).toBe('none')
 
-    await window.locator('#runtimeRibbon summary').click()
-    await expect(window.locator('#runtimeLaunchAction')).toBeVisible()
-    await expect(window.locator('#runtimeStopAction')).toBeVisible()
-    await expect(window.locator('#runtimeOpenDshHomeAction')).toBeVisible()
+    await expect(window.locator('#runtimeRibbon')).toHaveCount(0)
+    await expect(window.locator('#launcherUpdateBanner')).toBeAttached()
   } finally {
     await closeWorkstation(app, userDataDir)
   }
@@ -101,16 +100,11 @@ test('groups every non-today route inside one workbench canvas', async () => {
     await dismissWelcome(window)
 
     const pages = [
-      'tools',
       'schedule',
       'assignments',
       'experiments',
-      'knowledge',
+      'news',
       'guide',
-      'updates',
-      'plugins',
-      'skills',
-      'models',
       'logs',
       'settings',
       'backup',
@@ -142,286 +136,12 @@ test('groups every non-today route inside one workbench canvas', async () => {
         )
       expect(roundedPageModules, `${page} should use square page-module connections`).toEqual([])
       if (page === 'guide') {
-        await expect(window.locator('.ruka-guide-hero')).toHaveCSS('border-radius', '0px')
+        await expect(window.locator('.ai-concept-board')).toHaveCSS('border-radius', '0px')
       }
     }
 
     await window.locator('.nav-item[data-page="today"]').click()
     await expect(window.locator('#view > [data-route-canvas]')).toHaveCount(0)
-  } finally {
-    await closeWorkstation(app, userDataDir)
-  }
-})
-
-test('resizes the tool browser and preview with a draggable divider', async () => {
-  const userDataDir = createUserDataDir()
-  fs.writeFileSync(
-    path.join(userDataDir, 'settings.json'),
-    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
-    'utf8',
-  )
-  fs.writeFileSync(
-    path.join(userDataDir, 'app-host.json'),
-    JSON.stringify(
-      {
-        schemaVersion: 1,
-        catalog: {
-          scannedAt: new Date().toISOString(),
-          apps: [
-            {
-              id: '0123456789abcdef0123',
-              displayName: 'Notepad',
-              publisher: 'Microsoft',
-              version: '1.0',
-              executableName: 'notepad.exe',
-              executablePath: path.join(process.env.WINDIR, 'System32', 'notepad.exe'),
-              iconPath: path.join(process.env.WINDIR, 'System32', 'notepad.exe'),
-              workingDirectory: path.join(process.env.WINDIR, 'System32'),
-              source: 'test',
-              sourceLabel: '测试工具',
-            },
-          ],
-        },
-        preferences: {},
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  )
-  const app = await launchWorkstation(userDataDir)
-
-  try {
-    const window = await app.firstWindow()
-    await dismissWelcome(window)
-    await window.locator('.nav-item[data-page="tools"]').click()
-    await expect(window.locator('[data-tool-icon] img')).toBeVisible()
-    const divider = window.getByRole('separator', { name: '调整工具列表和实时画面宽度' })
-    await expect(divider).toBeVisible()
-    const browser = window.locator('.tool-browser')
-    const before = await browser.boundingBox()
-
-    const dragDivider = async (distance) => {
-      const box = await divider.boundingBox()
-      const x = box.x + box.width / 2
-      const y = box.y + box.height / 2
-      await window.mouse.move(x, y)
-      await window.mouse.down()
-      await window.mouse.move(x + distance, y)
-      await window.mouse.up()
-    }
-
-    const minWidth = Number(await divider.getAttribute('aria-valuemin'))
-    const shrinkDistance = Math.min(100, Math.max(40, before.width - minWidth - 20))
-    await dragDivider(-shrinkDistance)
-    const afterShrink = await browser.boundingBox()
-    expect(afterShrink.width).toBeLessThan(before.width - 20)
-
-    const maxWidth = Number(await divider.getAttribute('aria-valuemax'))
-    await dragDivider(Math.max(20, maxWidth - afterShrink.width))
-    const afterDrag = await browser.boundingBox()
-    expect(afterDrag.width).toBeGreaterThan(afterShrink.width + 10)
-
-    await divider.focus()
-    await divider.press('ArrowLeft')
-    const afterKeyboard = await browser.boundingBox()
-    expect(afterKeyboard.width).toBeLessThan(afterDrag.width)
-
-    await divider.dblclick()
-    const afterReset = await browser.boundingBox()
-    expect(Math.abs(afterReset.width - Math.min(380, maxWidth))).toBeLessThan(2)
-
-    await window.getByRole('button', { name: '全屏画面' }).click()
-    await expect(window.locator('.sidebar')).toBeHidden()
-    await expect(window.getByRole('button', { name: '退出全屏画面' })).toBeVisible()
-    await window.keyboard.press('Escape')
-    await expect(window.locator('.sidebar')).toBeVisible()
-  } finally {
-    await closeWorkstation(app, userDataDir)
-  }
-})
-
-test('shows engineering tools first and keeps entertainment in the last group', async () => {
-  const userDataDir = createUserDataDir()
-  fs.writeFileSync(
-    path.join(userDataDir, 'settings.json'),
-    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
-    'utf8',
-  )
-  fs.writeFileSync(
-    path.join(userDataDir, 'app-host.json'),
-    JSON.stringify(
-      {
-        schemaVersion: 1,
-        catalog: {
-          scannedAt: new Date().toISOString(),
-          apps: [
-            {
-              id: '11111111111111111111',
-              displayName: 'Steam',
-              executableName: 'steam.exe',
-              executablePath: 'C:\\Games\\Steam\\steam.exe',
-            },
-            {
-              id: '22222222222222222222',
-              displayName: 'MATLAB R2024b',
-              executableName: 'matlab.exe',
-              executablePath: 'C:\\MATLAB\\matlab.exe',
-            },
-            {
-              id: '33333333333333333333',
-              displayName: 'Microsoft Excel',
-              executableName: 'excel.exe',
-              executablePath: 'C:\\Office\\excel.exe',
-            },
-          ],
-        },
-        preferences: {
-          '11111111111111111111': { favorite: true, lastLaunchedAt: '' },
-        },
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  )
-  const app = await launchWorkstation(userDataDir)
-
-  try {
-    const window = await app.firstWindow()
-    await dismissWelcome(window)
-    await window.locator('.nav-item[data-page="tools"]').click()
-
-    const categories = window.locator('[data-tool-category]')
-    await expect(categories).toHaveCount(3)
-    await expect(categories.nth(0)).toHaveAttribute('data-tool-category', 'engineering')
-    await expect(categories.nth(1)).toHaveAttribute('data-tool-category', 'productivity')
-    await expect(categories.nth(2)).toHaveAttribute('data-tool-category', 'entertainment')
-    await expect(categories.nth(0)).toContainText('MATLAB R2024b')
-
-    const search = window.locator('#toolSearch')
-    await search.fill('娱乐')
-    await expect(window.locator('[data-tool-category="engineering"]')).toHaveClass(/hidden/)
-    await expect(window.locator('[data-tool-category="entertainment"]')).not.toHaveClass(/hidden/)
-    await expect(window.locator('#toolSearchCount')).toHaveText('1 个结果')
-  } finally {
-    await closeWorkstation(app, userDataDir)
-  }
-})
-
-test('keeps the knowledge search centered without a duplicate result count', async () => {
-  const userDataDir = createUserDataDir()
-  fs.writeFileSync(
-    path.join(userDataDir, 'settings.json'),
-    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
-    'utf8',
-  )
-  const app = await launchWorkstation(userDataDir)
-
-  try {
-    const window = await app.firstWindow()
-    await window.locator('.nav-item[data-page="knowledge"]').click()
-
-    const toolbar = window.locator('.knowledge-toolbar')
-    const search = toolbar.locator('.input-shell')
-    await expect(toolbar).toHaveCSS('display', 'grid')
-    await expect(toolbar.locator(':scope > span')).toHaveCount(0)
-    const [routeCanvasBox, toolbarBox, searchBox] = await Promise.all([
-      window.locator('.route-canvas').boundingBox(),
-      toolbar.boundingBox(),
-      search.boundingBox(),
-    ])
-    expect(toolbarBox.x - routeCanvasBox.x).toBeGreaterThanOrEqual(24)
-    expect(
-      routeCanvasBox.x + routeCanvasBox.width - (toolbarBox.x + toolbarBox.width),
-    ).toBeGreaterThanOrEqual(24)
-    expect(searchBox.width).toBeLessThanOrEqual(720)
-    const leftGap = searchBox.x - toolbarBox.x
-    const rightGap = toolbarBox.x + toolbarBox.width - searchBox.x - searchBox.width
-    expect(Math.abs(leftGap - rightGap)).toBeLessThan(1)
-  } finally {
-    await closeWorkstation(app, userDataDir)
-  }
-})
-
-test('selects and deletes multiple knowledge points', async () => {
-  const userDataDir = createUserDataDir()
-  fs.writeFileSync(
-    path.join(userDataDir, 'settings.json'),
-    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
-    'utf8',
-  )
-  fs.writeFileSync(
-    path.join(userDataDir, 'workspace.json'),
-    JSON.stringify(
-      {
-        version: 2,
-        courses: [],
-        assignments: [],
-        knowledge: [
-          {
-            id: 'knowledge-1',
-            title: '矩阵的秩',
-            course: '线性代数',
-            content: '按行阶梯形判断。',
-            tags: ['矩阵'],
-            mastery: 0,
-            updatedAt: '2026-09-23T08:00:00.000Z',
-          },
-          {
-            id: 'knowledge-2',
-            title: '特征值',
-            course: '线性代数',
-            content: '求解特征方程。',
-            tags: ['矩阵'],
-            mastery: 0,
-            updatedAt: '2026-09-23T07:00:00.000Z',
-          },
-          {
-            id: 'knowledge-3',
-            title: '极限定义',
-            course: '高等数学',
-            content: '理解数列极限。',
-            tags: ['极限'],
-            mastery: 0,
-            updatedAt: '2026-09-23T06:00:00.000Z',
-          },
-        ],
-        experiments: [],
-        schedule: null,
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  )
-  const app = await launchWorkstation(userDataDir)
-
-  try {
-    const window = await app.firstWindow()
-    await window.locator('.nav-item[data-page="knowledge"]').click()
-    const cards = window.locator('[data-knowledge-card]')
-    await expect(cards).toHaveCount(3)
-    await window.locator('.knowledge-group').evaluateAll((groups) => {
-      for (const group of groups) group.open = true
-    })
-
-    await window.getByRole('button', { name: '多选删除', exact: true }).click()
-    await expect(window.locator('[data-knowledge-card].is-selecting')).toHaveCount(3)
-    await cards.nth(0).locator('.knowledge-select-check').click()
-    await cards.nth(1).locator('.knowledge-select-check').click()
-    await expect(window.getByText('已选择 2 个知识点', { exact: true })).toBeVisible()
-
-    window.once('dialog', (dialog) => dialog.accept())
-    await window.getByRole('button', { name: '删除所选（2）', exact: true }).click()
-
-    await expect(cards).toHaveCount(1)
-    await expect(window.getByText('已选择 0 个知识点', { exact: true })).toBeVisible()
-    const workspace = JSON.parse(fs.readFileSync(path.join(userDataDir, 'workspace.json'), 'utf8'))
-    assert.deepEqual(
-      workspace.knowledge.map((item) => item.id),
-      ['knowledge-2'],
-    )
   } finally {
     await closeWorkstation(app, userDataDir)
   }
@@ -477,6 +197,43 @@ test('keeps one assignment entry on today and opens the composer', async () => {
   }
 })
 
+test('reads AI news inside the app instead of jumping to the website', async () => {
+  const userDataDir = createUserDataDir()
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await dismissWelcome(window)
+    await window.locator('.nav').getByRole('button', { name: 'AI 资讯', exact: true }).click()
+
+    await expect(window.locator('#view .page-intro h2')).toHaveText('AI 资讯')
+    await expect(window.locator('.news-feed')).toBeVisible()
+
+    const heads = window.locator('.news-item-head')
+    if (await heads.count()) {
+      await heads.first().click()
+      await expect(window.locator('.news-item.is-open .news-body')).toBeVisible()
+      await expect(window.getByRole('button', { name: '复制摘要' })).toBeVisible()
+      await expect(window.locator('.news-item.is-open')).toHaveCount(1)
+      if ((await heads.count()) > 1) {
+        await heads.nth(1).click()
+        await expect(window.locator('.news-item.is-open')).toHaveCount(1)
+        await expect(heads.nth(0)).toHaveAttribute('aria-expanded', 'false')
+        await expect(heads.nth(1)).toHaveAttribute('aria-expanded', 'true')
+      }
+    }
+
+    await window.locator('[data-news-tab="hot"]').click()
+    await expect(window.locator('[data-news-tab="hot"]')).toHaveClass(/active/)
+    await expect(window.locator('.news-feed')).toBeVisible()
+
+    await window.locator('[data-news-tab="daily"]').click()
+    await expect(window.locator('[data-news-tab="daily"]')).toHaveClass(/active/)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
 test('shows the guide with plain-language AI basics', async () => {
   const userDataDir = createUserDataDir()
   fs.writeFileSync(
@@ -493,110 +250,44 @@ test('shows the guide with plain-language AI basics', async () => {
     await expect(
       window.locator('#view').getByRole('heading', { name: '指南', exact: true }),
     ).toBeVisible()
+
+    const workbenchHeading = await window
+      .getByRole('heading', { name: '它能做什么', exact: true })
+      .boundingBox()
+    const aiBasicsHeading = await window
+      .getByRole('heading', { name: '先分清五个角色，再看懂一次请求是怎么完成的', exact: true })
+      .boundingBox()
+    expect(workbenchHeading.y).toBeLessThan(aiBasicsHeading.y)
+
     await expect(window.getByText('AI 基础概念', { exact: true })).toBeVisible()
     await expect(window.getByText('客户端', { exact: true })).toBeVisible()
     await expect(window.getByText('Agent 执行代理', { exact: true })).toBeVisible()
     await expect(window.getByText('API 连接层', { exact: true })).toBeVisible()
     await expect(window.getByText('身份与计费凭证', { exact: true })).toBeVisible()
-    await expect(window.getByRole('heading', { name: 'Codex 入门', exact: true })).toBeVisible()
+    await expect(
+      window.getByRole('heading', { name: '网络、代理与 Skills', exact: true }),
+    ).toBeVisible()
+
+    await expect(window.getByRole('heading', { name: 'Codex 入门', exact: true })).toHaveCount(0)
     await expect(
       window.getByRole('heading', { name: 'DeepSeek 接入 Codex', exact: true }),
-    ).toBeVisible()
-    expect(
-      await window
-        .locator('#rukaDeepseekDetails')
-        .evaluate((element) => Boolean(element.closest('.ruka-route-panel'))),
-    ).toBe(false)
-    await expect(window.locator('.ruka-route-panel')).toHaveCount(0)
-
-    await window.getByRole('button', { name: /Codex 桌面应用/ }).click()
-    await expect(window.locator('.ruka-route-panel[data-route="desktop"]')).toBeVisible()
-    await window.locator('#rukaDeepseekDetails > summary').click()
-    await expect(window.locator('#rukaDeepseekCodex')).toBeVisible()
-    await expect(window.locator('.ruka-route-panel[data-route="desktop"]')).toBeVisible()
+    ).toHaveCount(0)
   } finally {
     await closeWorkstation(app, userDataDir)
   }
 })
 
-test('configures the DSH model connection inside ZP Workbench', async () => {
-  const userDataDir = createUserDataDir()
-  fs.writeFileSync(
-    path.join(userDataDir, 'settings.json'),
-    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
-    'utf8',
-  )
-  const app = await launchWorkstation(userDataDir)
-
-  try {
-    const window = await app.firstWindow()
-    await window.locator('.nav').getByRole('button', { name: '模型连接', exact: true }).click()
-
-    await expect(
-      window.locator('#view').getByRole('heading', { name: '模型连接', exact: true }),
-    ).toBeVisible()
-    const keyInput = window.locator('#deepseekApiKey')
-    await expect(keyInput).toBeVisible()
-    await expect(keyInput).toHaveAttribute('type', 'text')
-    await expect(keyInput).toHaveAttribute('autocomplete', 'off')
-    await expect(keyInput).toHaveAttribute('readonly', '')
-    await expect(keyInput).toHaveValue('')
-    await keyInput.focus()
-    await expect(keyInput).not.toHaveAttribute('readonly', '')
-    await expect(window.locator('label.model-key-field')).toHaveCSS('outline-style', 'none')
-    await expect(window.locator('[data-action="save-deepseek-key"]')).toBeVisible()
-    await expect(window.getByRole('button', { name: '高级模型设置', exact: true })).toBeVisible()
-    await expect(window.getByText('高级与诊断', { exact: true })).toBeVisible()
-  } finally {
-    await closeWorkstation(app, userDataDir)
-  }
-})
-
-test('updates the Jev mode immediately and labels the current switch state', async () => {
+test('keeps the help section below the system group in the sidebar', async () => {
   const userDataDir = createUserDataDir()
   const app = await launchWorkstation(userDataDir)
 
   try {
     const window = await app.firstWindow()
     await dismissWelcome(window)
-    await window.locator('.nav').getByRole('button', { name: '设置', exact: true }).click()
 
-    const modeTitle = window.locator('.jev-current-mode-title strong')
-    const modeSwitch = window.locator('.jev-mode-switch')
-    const modeSwitchTitle = modeSwitch.locator('strong')
-
-    await expect(modeTitle).toHaveText('Jev 增强待配置')
-    await expect(modeSwitchTitle).toHaveText('Jev 已启用，待配置 Key')
-
-    await modeSwitch.click()
-    await expect(modeTitle).toHaveText('免费本地模式（不使用 Jev）')
-    await expect(modeSwitchTitle).toHaveText('启用 Jev 云端增强')
-    await expect(modeSwitch.locator('input')).not.toBeChecked()
-
-    await modeSwitch.click()
-    await expect(modeTitle).toHaveText('Jev 增强待配置')
-    await expect(modeSwitchTitle).toHaveText('Jev 已启用，待配置 Key')
-    await expect(modeSwitch.locator('input')).toBeChecked()
-
-    await window.locator('.view').evaluate((element) => {
-      element.scrollTop = element.scrollHeight
-    })
-    await modeSwitch.click()
-    await expect(modeTitle).toHaveText('免费本地模式（不使用 Jev）')
-    await window.locator('.view').evaluate((element) => {
-      element.scrollTop = element.scrollHeight
-    })
-    await modeSwitch.click()
-    await expect(modeTitle).toHaveText('Jev 增强待配置')
-    const pagePosition = await window.evaluate(() => ({
-      documentScroll: globalThis.document.scrollingElement.scrollTop,
-      bodyScroll: globalThis.document.body.scrollTop,
-      appTop: Math.round(globalThis.document.querySelector('#app').getBoundingClientRect().top),
-    }))
-    expect(pagePosition).toEqual({ documentScroll: 0, bodyScroll: 0, appTop: 0 })
-
-    await modeSwitch.locator('input').focus()
-    await expect(modeSwitch).toHaveCSS('outline-style', 'none')
+    const systemBox = await window.locator('.nav-section-system').boundingBox()
+    const helpBox = await window.locator('.nav-section-help').boundingBox()
+    expect(helpBox.y).toBeGreaterThan(systemBox.y)
   } finally {
     await closeWorkstation(app, userDataDir)
   }
@@ -618,21 +309,16 @@ test('auto-saves settings fields without a floating save bar', async () => {
     await dismissWelcome(window)
     await window.locator('.nav').getByRole('button', { name: '设置', exact: true }).click()
 
-    const autoCheckDsh = window.locator('input[data-setting="autoCheckDsh"]')
-    await expect(autoCheckDsh).toBeChecked()
-    await autoCheckDsh.focus()
-    await expect(autoCheckDsh.locator('xpath=..')).toHaveCSS('outline-style', 'none')
-    await autoCheckDsh.uncheck()
+    const minimizeToTray = window.locator('input[data-setting="minimizeToTray"]')
+    await expect(minimizeToTray).toBeChecked()
+    await minimizeToTray.focus()
+    await expect(minimizeToTray.locator('xpath=..')).toHaveCSS('outline-style', 'none')
+    await minimizeToTray.uncheck()
     await expect(window.locator('.settings-save')).toHaveCount(0)
-    await expect.poll(() => readSettings().autoCheckDsh).toBe(false)
-
-    const portInput = window.locator('input[data-setting="port"]')
-    await portInput.fill('3090')
-    await portInput.press('Tab')
-    await expect.poll(() => readSettings().port).toBe(3090)
+    await expect.poll(() => readSettings().minimizeToTray).toBe(false)
 
     await expect(window.locator('input[type="time"]')).toHaveCount(0)
-    const reminderTimeInput = window.locator('input[data-setting="reviewReminderTime"]')
+    const reminderTimeInput = window.locator('input[data-setting="dailyDigestTime"]')
     const reminderTimeControl = reminderTimeInput.locator('xpath=..')
     await reminderTimeControl.getByRole('button', { name: '选择时间' }).click()
     await expect(window.locator('#timePickerPopover')).toBeVisible()
@@ -642,7 +328,7 @@ test('auto-saves settings fields without a floating save bar', async () => {
       .click()
     await window.getByRole('button', { name: '完成', exact: true }).click()
     await expect(reminderTimeInput).toHaveValue('20:30')
-    await expect.poll(() => readSettings().reviewReminderTime).toBe('20:30')
+    await expect.poll(() => readSettings().dailyDigestTime).toBe('20:30')
 
     const toggleTransition = await window
       .locator('.toggle')
@@ -970,7 +656,7 @@ test('shows a classification confirmation before importing an unassigned file', 
   }
 })
 
-test('renders the Skills center and creates a complete workstation backup', async () => {
+test('creates a complete workstation backup', async () => {
   const userDataDir = createUserDataDir()
   const dshHome = path.join(userDataDir, '.dsh')
   const skillDirectory = path.join(dshHome, 'skills', 'academic-writer')
@@ -990,52 +676,6 @@ test('renders the Skills center and creates a complete workstation backup', asyn
 
   try {
     const window = await app.firstWindow()
-    await window.locator('.nav').getByRole('button', { name: 'Skills', exact: true }).click()
-    await expect(
-      window.locator('#view').getByRole('heading', { name: 'Skills 中心' }),
-    ).toBeVisible()
-    await expect(window.getByText('academic-writer', { exact: true }).first()).toBeVisible()
-    const [
-      routeCanvasBox,
-      workspaceMetricsBox,
-      skillTabsBox,
-      skillsToolbarBox,
-      skillGridBox,
-      firstSkillCardBox,
-      lastSkillCardBox,
-    ] = await Promise.all([
-      window.locator('.route-canvas').boundingBox(),
-      window.locator('.workspace-metrics').boundingBox(),
-      window.locator('.skill-mode-tabs').boundingBox(),
-      window.locator('.skills-toolbar').boundingBox(),
-      window.locator('.skill-grid').boundingBox(),
-      window.locator('.skill-card').first().boundingBox(),
-      window.locator('.skill-card').last().boundingBox(),
-    ])
-    for (const box of [workspaceMetricsBox, skillTabsBox, skillsToolbarBox]) {
-      expect(box.x - routeCanvasBox.x).toBeGreaterThanOrEqual(24)
-      expect(routeCanvasBox.x + routeCanvasBox.width - (box.x + box.width)).toBeGreaterThanOrEqual(
-        24,
-      )
-    }
-    const skillTabsStyle = await window.locator('.skill-mode-tabs').evaluate((element) => {
-      const style = globalThis.getComputedStyle(element)
-      return {
-        borderRadius: Number.parseFloat(style.borderTopLeftRadius) || 0,
-        columns: style.gridTemplateColumns.split(' ').length,
-      }
-    })
-    expect(skillTabsStyle.borderRadius).toBeGreaterThanOrEqual(10)
-    expect(skillTabsStyle.columns).toBe(2)
-    expect(skillsToolbarBox.y - (skillTabsBox.y + skillTabsBox.height)).toBeGreaterThanOrEqual(12)
-    expect(
-      firstSkillCardBox.y - (skillsToolbarBox.y + skillsToolbarBox.height),
-    ).toBeGreaterThanOrEqual(18)
-    expect(firstSkillCardBox.x - skillGridBox.x).toBeGreaterThanOrEqual(24)
-    expect(
-      skillGridBox.x + skillGridBox.width - (lastSkillCardBox.x + lastSkillCardBox.width),
-    ).toBeGreaterThanOrEqual(24)
-
     await window.locator('.nav').getByRole('button', { name: '备份与同步', exact: true }).click()
     await expect(
       window.locator('#view').getByRole('heading', { name: '备份与同步', exact: true }),

@@ -19,7 +19,6 @@ function createHarness() {
   const settings = new SettingsStore(userDataDir)
   settings.patch({ experimentDir, dshHome })
   const workspace = new WorkspaceStore(userDataDir)
-  const registryFile = path.join(userDataDir, 'skill-registry.json')
   const safeStorage = {
     isEncryptionAvailable: () => true,
     encryptString: (value) => Buffer.from(`safe:${value}`, 'utf8'),
@@ -31,7 +30,6 @@ function createHarness() {
     settings,
     workspace,
     dshHomeProvider: () => dshHome,
-    skillRegistryFile: registryFile,
     safeStorage,
   })
   return {
@@ -41,7 +39,6 @@ function createHarness() {
     experimentDir,
     settings,
     workspace,
-    registryFile,
     backups,
     safeStorage,
   }
@@ -70,10 +67,6 @@ test('creates encrypted archives, includes materials, and restores workspace dat
     path.join(harness.dshHome, 'skills', 'writer', 'SKILL.md'),
     '---\nname: writer\ndescription: Write.\n---\n',
   )
-  fs.writeFileSync(
-    harness.registryFile,
-    JSON.stringify({ version: 1, skills: { writer: { name: 'writer' } } }),
-  )
 
   const archive = await harness.backups.createArchive({
     label: 'manual',
@@ -93,6 +86,10 @@ test('creates encrypted archives, includes materials, and restores workspace dat
   assert.equal(restored.workspace.assignments.length, 1)
   assert.equal(restored.workspace.assignments[0].title, '备份前作业')
   assert.equal(restored.workspace.experiments[0].filePath, material)
+  assert.equal(
+    fs.readFileSync(path.join(harness.dshHome, 'skills', 'writer', 'SKILL.md'), 'utf8'),
+    '---\nname: writer\ndescription: Write.\n---\n',
+  )
 })
 
 test('uploads to and downloads from a local sync folder with encrypted sync archives', async (t) => {
@@ -150,7 +147,6 @@ test('restores an encrypted sync archive on a second machine with the same sync 
     settings: secondSettings,
     workspace: secondWorkspace,
     dshHomeProvider: () => secondDshHome,
-    skillRegistryFile: path.join(secondUserData, 'skill-registry.json'),
     safeStorage: harness.safeStorage,
   })
   secondBackups.setSecret('syncPassword', 'cross-device-password')

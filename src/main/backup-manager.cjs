@@ -34,13 +34,6 @@ const MACHINE_SETTING_KEYS = new Set([
   'syncWebdavUsername',
   'syncAutoUpload',
   'syncLastAt',
-  'jevApiBaseUrl',
-  'jevLastModel',
-  'jevLastAlias',
-  'jevLatestReleaseDate',
-  'jevLastCheckedAt',
-  'jevLastError',
-  'jevCompatibilityPassed',
 ])
 
 function cleanText(value, maxLength = 500) {
@@ -175,7 +168,6 @@ function archiveHeaderMetadata(filePath) {
 function workspaceSummary(workspace) {
   return {
     assignments: Array.isArray(workspace?.assignments) ? workspace.assignments.length : 0,
-    knowledge: Array.isArray(workspace?.knowledge) ? workspace.knowledge.length : 0,
     experiments: Array.isArray(workspace?.experiments) ? workspace.experiments.length : 0,
     courses: Array.isArray(workspace?.courses) ? workspace.courses.length : 0,
   }
@@ -190,7 +182,6 @@ class BackupManager {
     safeStorage = null,
     logger = null,
     dshHomeProvider = () => settings.get().dshHome,
-    skillRegistryFile = '',
     fetchImpl = fetch,
   }) {
     this.userDataDir = path.resolve(userDataDir)
@@ -200,9 +191,6 @@ class BackupManager {
     this.safeStorage = safeStorage
     this.logger = logger
     this.dshHomeProvider = dshHomeProvider
-    this.skillRegistryFile = skillRegistryFile
-      ? path.resolve(skillRegistryFile)
-      : path.join(this.userDataDir, 'skill-registry.json')
     this.fetchImpl = fetchImpl
     this.backupRoot = path.join(this.userDataDir, 'backups')
     this.secretFile = path.join(this.userDataDir, 'sync-secrets.bin')
@@ -360,22 +348,8 @@ class BackupManager {
     zip.file('manifest.json', `${JSON.stringify(manifest, null, 2)}\n`)
     zip.file('workspace.json', `${JSON.stringify(workspaceForArchive, null, 2)}\n`)
     zip.file('settings.json', `${JSON.stringify(settings, null, 2)}\n`)
-    if (this.skillRegistryFile && (await pathExists(this.skillRegistryFile))) {
-      zip.file('skill-registry.json', await fsp.readFile(this.skillRegistryFile))
-    }
-
     const dshHome = this.dshHomeProvider()
-    const registry = (() => {
-      try {
-        return JSON.parse(fs.readFileSync(this.skillRegistryFile, 'utf8'))
-      } catch {
-        return { skills: {} }
-      }
-    })()
-    for (const entry of Object.values(registry.skills || {})) {
-      const directory = path.join(dshHome, 'skills', entry.name)
-      await addDirectoryToZip(zip, directory, `skills/${entry.name}`, { files: 0, bytes: 0 })
-    }
+    await addDirectoryToZip(zip, path.join(dshHome, 'skills'), 'skills', { files: 0, bytes: 0 })
     if (includeMaterials) {
       const counters = { files: 0, bytes: 0 }
       await addDirectoryToZip(zip, experimentDir, 'materials', counters)
@@ -480,12 +454,6 @@ class BackupManager {
 
     await this.createArchive({ label: 'before-restore', includeMaterials: false })
     if (restoredSettings) this.settings.patch(restoredSettings)
-
-    const registryFile = zip.file('skill-registry.json')
-    if (registryFile) {
-      await fsp.mkdir(path.dirname(this.skillRegistryFile), { recursive: true })
-      await fsp.writeFile(this.skillRegistryFile, await registryFile.async('nodebuffer'))
-    }
 
     const dshHome = this.dshHomeProvider()
     for (const entryName of skillEntries) {

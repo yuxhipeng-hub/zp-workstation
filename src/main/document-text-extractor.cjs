@@ -252,9 +252,7 @@ async function extractDocumentText(filePath, { maxChars = MAX_EXTRACTED_CHARS } 
     .map((page) => (page.page ? `[PAGE ${page.page}]\n${page.text}` : page.text))
     .join('\n\n')
   if (text.replace(/\[PAGE \d+\]/g, '').trim().length < 20) {
-    throw new Error(
-      '没有提取到足够的文字。扫描版文件需要先做 OCR，图片型资料暂不能直接生成知识点。',
-    )
+    throw new Error('没有提取到足够的文字。扫描版文件需要先做 OCR，图片型文件暂不能直接读取内容。')
   }
   return {
     filePath: resolved,

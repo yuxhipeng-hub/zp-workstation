@@ -48,9 +48,8 @@ gh run watch
 GitHub 仓库需要在 `Settings → Actions → General → Workflow permissions`
 中允许 `Read and write permissions`。工作流文件本身已声明 `contents: write`。
 
-`bundledRuntime` 固定内置 Node.js 和 npm 版本。`npm run dist` 会先运行
-`scripts/prepare-vendor.ps1`，确保安装包始终包含用户首次安装 DSH 所需的运行时，
-即使 `vendor/` 没有提交到 Git 也不会生成缺少运行时的安装包。
+工作站不再内置 Node.js、npm 和 pnpm —— 官方 DeepSeek Harness 桌面端自己负责运行时，
+所以 `npm run dist` 只做图标生成、渲染层构建和 electron-builder 打包。
 
 也可以在 GitHub Actions 页面手动运行 `Release ZP Workbench`，填写版本号和更新说明。
 

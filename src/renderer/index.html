@@ -23,19 +23,6 @@
         </div>
 
         <nav class="nav" aria-label="主导航">
-          <div class="nav-section nav-section-work">
-            <p class="nav-label">工作</p>
-            <button
-              class="nav-item"
-              type="button"
-              data-page="tools"
-              aria-label="工具台"
-              title="工具台"
-            >
-              <i data-lucide="panels-top-left"></i><span>工具台</span>
-            </button>
-          </div>
-
           <div class="nav-section nav-section-learning">
             <p class="nav-label">学习</p>
             <button
@@ -75,62 +62,18 @@
             >
               <i data-lucide="folder-open"></i><span>资料库</span>
             </button>
-            <button
-              class="nav-item"
-              type="button"
-              data-page="knowledge"
-              aria-label="知识点"
-              title="知识点"
-            >
-              <i data-lucide="brain-circuit"></i><span>知识点</span>
-            </button>
           </div>
 
-          <div class="nav-section nav-section-runtime">
-            <p class="nav-label">运行时</p>
+          <div class="nav-section nav-section-news">
+            <p class="nav-label">资讯</p>
             <button
               class="nav-item"
               type="button"
-              data-page="updates"
-              aria-label="版本与更新"
-              title="版本与更新"
+              data-page="news"
+              aria-label="AI 资讯"
+              title="AI 资讯"
             >
-              <i data-lucide="refresh-cw"></i><span>版本与更新</span>
-              <span class="nav-dot hidden" id="updateDot"></span>
-            </button>
-            <button
-              class="nav-item"
-              type="button"
-              data-page="plugins"
-              aria-label="插件"
-              title="插件"
-            >
-              <i data-lucide="plug"></i><span>插件</span>
-            </button>
-            <button
-              class="nav-item"
-              type="button"
-              data-page="skills"
-              aria-label="Skills"
-              title="Skills"
-            >
-              <i data-lucide="wand-sparkles"></i><span>Skills</span>
-            </button>
-            <button
-              class="nav-item"
-              type="button"
-              data-page="models"
-              aria-label="模型连接"
-              title="模型连接"
-            >
-              <i data-lucide="key-round"></i><span>模型连接</span>
-            </button>
-          </div>
-
-          <div class="nav-section nav-section-help">
-            <p class="nav-label">帮助</p>
-            <button class="nav-item" type="button" data-page="guide" aria-label="指南" title="指南">
-              <i data-lucide="compass"></i><span>指南</span>
+              <i data-lucide="newspaper"></i><span>AI 资讯</span>
             </button>
           </div>
 
@@ -161,18 +104,16 @@
               <i data-lucide="info"></i><span>关于</span>
             </button>
           </div>
+
+          <div class="nav-section nav-section-help">
+            <p class="nav-label">帮助</p>
+            <button class="nav-item" type="button" data-page="guide" aria-label="指南" title="指南">
+              <i data-lucide="compass"></i><span>指南</span>
+            </button>
+          </div>
         </nav>
 
         <div class="sidebar-foot">
-          <div class="mini-status">
-            <span class="status-beacon">
-              <span class="status-dot" id="sideStatusDot"></span>
-            </span>
-            <div>
-              <strong id="sideStatusText">正在读取状态</strong>
-              <span id="sideVersionText">--</span>
-            </div>
-          </div>
           <p class="rail-footnote">LOCAL ONLY · WINDOWS X64</p>
         </div>
       </aside>
@@ -184,13 +125,12 @@
             <div>
               <p class="eyebrow" id="pageEyebrow">今天</p>
               <h1 id="pageTitle">今日</h1>
-              <p class="page-summary" id="pageSummary">
-                把今天要上的课、要交的作业和要复习的知识点集中在一页。
-              </p>
+              <p class="page-summary" id="pageSummary">把今天要上的课和要交的作业集中在一页。</p>
             </div>
           </div>
           <div class="topbar-actions">
             <span class="local-time" id="localTime">--:--</span>
+            <span class="preview-badge hidden" id="previewBadge">预览数据</span>
             <button
               class="icon-button"
               type="button"
@@ -199,67 +139,6 @@
               aria-label="切换主题"
             >
               <i data-lucide="sun-moon"></i>
-            </button>
-            <details class="topbar-status-menu" id="runtimeRibbon">
-              <summary class="runtime-ribbon">
-                <span class="runtime-ribbon-dot" id="topStatusDot" aria-hidden="true"></span>
-                <span class="runtime-ribbon-copy">
-                  <strong id="topStatusText">读取中</strong>
-                  <span id="topVersionText">DSH --</span>
-                </span>
-                <i class="runtime-ribbon-chevron" data-lucide="chevron-down"></i>
-              </summary>
-              <div class="topbar-status-panel">
-                <button
-                  class="status-action"
-                  id="runtimeLaunchAction"
-                  type="button"
-                  data-action="launch"
-                >
-                  <span class="status-action-icon"><i data-lucide="play"></i></span>
-                  <span
-                    ><strong id="runtimeLaunchLabel">启动工作台</strong
-                    ><small id="runtimeLaunchDetail">启动本地 DeepSeek Harness</small></span
-                  >
-                  <i data-lucide="chevron-right"></i>
-                </button>
-                <button
-                  class="status-action"
-                  id="runtimeStopAction"
-                  type="button"
-                  data-action="stop"
-                  disabled
-                >
-                  <span class="status-action-icon"><i data-lucide="square"></i></span>
-                  <span><strong>停止工作台</strong><small>结束当前 DSH 进程</small></span>
-                  <i data-lucide="chevron-right"></i>
-                </button>
-                <button
-                  class="status-action"
-                  id="runtimeOpenDshHomeAction"
-                  type="button"
-                  data-action="open-dsh-home"
-                >
-                  <span class="status-action-icon"><i data-lucide="folder-open"></i></span>
-                  <span
-                    ><strong>打开 DSH 数据目录</strong><small>查看会话、配置和本地数据</small></span
-                  >
-                  <i data-lucide="chevron-right"></i>
-                </button>
-                <button class="status-action" type="button" data-action="check-update">
-                  <span class="status-action-icon"><i data-lucide="refresh-cw"></i></span>
-                  <span><strong>检查 DSH 更新</strong><small>同步当前版本通道</small></span>
-                  <i data-lucide="chevron-right"></i>
-                </button>
-                <button class="status-action" type="button" data-page-jump="updates">
-                  <span class="status-action-icon"><i data-lucide="settings-2"></i></span>
-                  <span><strong>版本与更新</strong><small>管理安装和更新来源</small></span>
-                  <i data-lucide="chevron-right"></i>
-                </button>
-              </div>
-            </details>
-            <button class="button primary" id="topLaunchButton" type="button" data-action="launch">
-              <i data-lucide="play"></i><span id="topLaunchLabel">启动工作台</span>
             </button>
           </div>
         </header>
