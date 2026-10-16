@@ -155,10 +155,9 @@ async function uniqueDestination(directory, originalName) {
 }
 
 class ExperimentLibrary {
-  constructor({ settings, workspace, jevManager = null }) {
+  constructor({ settings, workspace }) {
     this.settings = settings
     this.workspace = workspace
-    this.jevManager = jevManager
   }
 
   getRoot() {
@@ -186,12 +185,6 @@ class ExperimentLibrary {
       if (entry.isDirectory()) existingGroups.add(entry.name)
     }
 
-    if (this.jevManager) {
-      return this.jevManager.suggestEntries(entries, {
-        existingGroups: [...existingGroups],
-      })
-    }
-
     const suggestions = []
     for (const entry of entries || []) {
       const fileName = String(entry?.name || path.basename(entry?.path || '')).trim()
@@ -210,12 +203,11 @@ class ExperimentLibrary {
             : matchedGroup
               ? '匹配到了已有的课程文件夹。'
               : '根据文件名生成新的课程分类。',
-          model: '',
           lowConfidence: !requestedGroup && !matchedGroup,
         },
       })
     }
-    return { suggestions, usedJev: false, mode: 'local', model: '' }
+    return { suggestions, mode: 'local' }
   }
 
   async importEntries(entries) {

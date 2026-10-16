@@ -64,18 +64,13 @@ jobs:
           New-Item -ItemType Directory -Path release -Force | Out-Null
           Set-Content -LiteralPath release/release-notes.txt -Value $notes -Encoding utf8
 
-          $package = Get-Content -LiteralPath package.json -Raw -Encoding UTF8 | ConvertFrom-Json
-          $runtime = $package.bundledRuntime
-          "runtime_key=node-$($runtime.node)-npm-$($runtime.npm)" >> $env:GITHUB_OUTPUT
-
-      - name: Cache release runtime
+      - name: Cache electron toolchain
         uses: actions/cache@v4
         with:
           path: |
-            vendor
             ~/AppData/Local/electron/Cache
             ~/AppData/Local/electron-builder/Cache
-          key: ${{ runner.os }}-release-runtime-${{ steps.release.outputs.runtime_key }}-${{ hashFiles('scripts/prepare-vendor.ps1') }}
+          key: ${{ runner.os }}-release-tools-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
         run: npm ci
@@ -92,32 +87,21 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist
 
-      - name: Verify bundled runtime and installer
+      - name: Verify installer
         shell: pwsh
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          $nodePath = "release/win-unpacked/resources/vendor/node/node.exe"
           $installerPath = "release/ZP-Workbench-Setup-$env:VERSION-x64.exe"
-          $package = Get-Content -LiteralPath package.json -Raw -Encoding UTF8 | ConvertFrom-Json
-          $expectedNode = "v$($package.bundledRuntime.node)"
 
-          if (-not (Test-Path -LiteralPath $nodePath)) {
-            throw "Bundled Node.js is missing: $nodePath"
-          }
-          $nodeVersion = (& $nodePath --version).Trim()
-          if ($nodeVersion -ne $expectedNode) {
-            throw "Unexpected bundled Node.js version: $nodeVersion (expected $expectedNode)"
-          }
           if (-not (Test-Path -LiteralPath $installerPath)) {
             throw "Installer is missing: $installerPath"
           }
 
           $installerSize = (Get-Item -LiteralPath $installerPath).Length
-          if ($installerSize -lt 150MB) {
+          if ($installerSize -lt 90MB) {
             throw "Installer is unexpectedly small: $installerSize bytes"
           }
-          Write-Host "Bundled Node.js: $nodeVersion"
           Write-Host "Installer size: $installerSize bytes"
 
       - name: Generate update manifest

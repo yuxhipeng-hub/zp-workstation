@@ -13,7 +13,7 @@ function createStore() {
   }
 }
 
-test('persists assignments and knowledge points as separate local data', (t) => {
+test('persists assignments as local data', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
 
@@ -24,95 +24,38 @@ test('persists assignments and knowledge points as separate local data', (t) => 
     priority: 'high',
     status: 'inbox',
   })
-  store.createKnowledge({
-    title: '矩阵秩的判定',
-    course: '线性代数',
-    tags: ['矩阵', '期末复习'],
-    content: '行阶梯形矩阵中非零行的数量就是矩阵的秩。',
-  })
 
   const reloaded = new WorkspaceStore(directory).get()
   assert.equal(reloaded.assignments.length, 1)
   assert.equal(reloaded.assignments[0].title, '线性代数第 3 章作业')
-  assert.equal(reloaded.knowledge.length, 1)
-  assert.deepEqual(reloaded.knowledge[0].tags, ['矩阵', '期末复习'])
-  assert.equal(reloaded.knowledge[0].type, 'concept')
-  assert.equal(reloaded.knowledge[0].mastery, 0)
 })
 
-test('deletes selected knowledge points in one persisted update', (t) => {
-  const { directory, store } = createStore()
+test('keeps legacy knowledge data when loading an older workspace file', (t) => {
+  const { directory } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
 
-  const first = store.createKnowledge({ title: '矩阵的秩', course: '线性代数' }).knowledge[0]
-  const second = store.createKnowledge({ title: '特征值', course: '线性代数' }).knowledge[0]
-  store.createKnowledge({ title: '极限定义', course: '高等数学' })
-
-  const workspace = store.deleteKnowledgeMany([first.id, second.id, 'missing-id'])
-
-  assert.deepEqual(
-    workspace.knowledge.map((item) => item.title),
-    ['极限定义'],
-  )
-  assert.deepEqual(
-    new WorkspaceStore(directory).get().knowledge.map((item) => item.title),
-    ['极限定义'],
-  )
-})
-
-test('replaces generated knowledge by source and records review results', (t) => {
-  const { directory, store } = createStore()
-  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
-
-  const workspace = store.replaceSourceKnowledge('experiment-1', [
-    {
-      title: '矩阵秩的判定',
-      content: '化为行阶梯形后，非零行的数量就是秩。',
-      type: 'definition',
-      course: '线性代数',
-      tags: ['矩阵', '秩'],
-      source: {
-        experimentId: 'experiment-1',
-        filePath: 'D:\\资料\\线性代数.pdf',
-        fileName: '线性代数.pdf',
-        group: '线性代数',
-        pageStart: 7,
-        pageEnd: 8,
+  fs.writeFileSync(
+    path.join(directory, 'workspace.json'),
+    JSON.stringify(
+      {
+        version: 2,
+        courses: [],
+        assignments: [],
+        knowledge: [{ id: 'legacy-1', title: '矩阵的秩', course: '线性代数', tags: ['矩阵'] }],
+        experiments: [],
+        schedule: null,
       },
-    },
-    {
-      title: '初等行变换不改变秩',
-      content: '初等行变换可以用于化简矩阵，但不会改变矩阵的秩。',
-      type: 'fact',
-      course: '线性代数',
-      source: {
-        experimentId: 'experiment-1',
-        fileName: '线性代数.pdf',
-        group: '线性代数',
-        pageStart: 8,
-      },
-    },
-  ])
-  assert.equal(workspace.knowledge.length, 2)
-  assert.equal(workspace.knowledge[0].source.fileName, '线性代数.pdf')
-  assert.equal(workspace.knowledge[0].source.pageEnd, 8)
+      null,
+      2,
+    ),
+    'utf8',
+  )
 
-  const reviewed = store.reviewKnowledge(workspace.knowledge[0].id, 'known')
-  assert.equal(reviewed.knowledge[0].mastery, 2)
-  assert.equal(reviewed.knowledge[0].reviewStage, 2)
-  assert.ok(reviewed.knowledge[0].dueAt)
-
-  const replaced = store.replaceSourceKnowledge('experiment-1', [
-    {
-      title: '矩阵秩的判定',
-      content: '更新后的解释。',
-      course: '线性代数',
-      source: { experimentId: 'experiment-1', fileName: '线性代数.pdf' },
-    },
-  ])
-  assert.equal(replaced.knowledge.length, 1)
-  assert.equal(replaced.knowledge[0].content, '更新后的解释。')
-  assert.equal(replaced.knowledge[0].mastery, 2)
+  const store = new WorkspaceStore(directory)
+  const ids = (workspace) => workspace.knowledge.map((item) => item.id)
+  assert.deepEqual(ids(store.get()), ['legacy-1'])
+  const persisted = JSON.parse(fs.readFileSync(path.join(directory, 'workspace.json'), 'utf8'))
+  assert.deepEqual(ids(persisted), ['legacy-1'])
 })
 
 test('normalizes invalid assignment fields and supports updates', (t) => {
@@ -133,12 +76,11 @@ test('normalizes invalid assignment fields and supports updates', (t) => {
   assert.throws(() => store.createAssignment({ title: '   ' }), /标题不能为空/)
 })
 
-test('links assignments, knowledge, experiments, and schedule entries to one course entity', (t) => {
+test('links assignments, experiments, and schedule entries to one course entity', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
 
   store.createAssignment({ title: '第 3 章作业', course: '线性代数' })
-  store.createKnowledge({ title: '矩阵的秩', course: '线性代数', content: '按行阶梯形判断。' })
   store.addExperiments([
     {
       title: '线性代数实验',
@@ -165,12 +107,10 @@ test('links assignments, knowledge, experiments, and schedule entries to one cou
   const course = workspace.courses.find((item) => item.name === '线性代数')
   assert.ok(course, 'expected a course entity to be created')
   assert.equal(workspace.assignments[0].courseId, course.id)
-  assert.equal(workspace.knowledge[0].courseId, course.id)
   assert.equal(workspace.schedule.courses[0].courseId, course.id)
 
   const counts = store.listCourses().find((item) => item.id === course.id).counts
   assert.equal(counts.assignments, 1)
-  assert.equal(counts.knowledge, 1)
   assert.equal(counts.schedule, 1)
 })
 

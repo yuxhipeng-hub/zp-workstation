@@ -2,9 +2,8 @@ const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = require('electron')
-const { CHANNELS, DOCS_URL, RELEASE_URL, THEME_VALUES } = require('./constants.cjs')
+const { DOCS_URL, RELEASE_URL, THEME_VALUES } = require('./constants.cjs')
 const { resolveDropReferences } = require('./drop-reference.cjs')
-const { ToolPathGrantStore } = require('./tool-path-grants.cjs')
 
 function isSafeExternalUrl(value) {
   try {
@@ -29,15 +28,11 @@ function registerIpc({
   settings,
   workspace,
   experimentLibrary,
-  jevManager,
   scheduleManager,
   logger,
-  dshManager,
+  aihotClient,
   launcherUpdater,
-  skillsManager,
   backupManager,
-  appHostManager,
-  knowledgeManager,
   reminderManager,
   getMainWindow,
 }) {
@@ -46,18 +41,11 @@ function registerIpc({
       if (!window.isDestroyed()) window.webContents.send(channel, payload)
     }
   }
-  const toolPathGrants = new ToolPathGrantStore()
-
   logger.on('entry', (entry) => send('log:entry', entry))
   launcherUpdater.on('state', (state) => send('launcher:update-state', state))
   launcherUpdater.on('download-progress', (progress) =>
     send('launcher:download-progress', progress),
   )
-  dshManager.on('task-state', (state) => send('task:update', state))
-  dshManager.on('update-state', (state) => send('update:state', state))
-  dshManager.on('process-state', (state) => send('process:state', state))
-  dshManager.on('process-log', (payload) => send('process:log', payload))
-  jevManager.on('state', (state) => send('jev:state', state))
   if (reminderManager) {
     const forwardReminder = reminderManager.onReminder
     reminderManager.onReminder = (reminder) => {
@@ -66,154 +54,38 @@ function registerIpc({
     }
   }
 
-  ipcMain.handle('app:bootstrap', async () => {
-    const status = await dshManager.getStatus({ quick: true })
-    return {
-      settings: settings.get(),
-      status,
-      channels: CHANNELS,
-      release: {
-        htmlUrl: RELEASE_URL,
-        docsUrl: DOCS_URL,
-      },
-      launcherUpdate: launcherUpdater.getState(),
-      logs: logger.list(160),
-      history: dshManager.history(),
-      modelConfig: dshManager.getModelConfig(),
-      jev: jevManager.status(),
-      workspace: workspace.get(),
-    }
+  ipcMain.handle('app:bootstrap', async () => ({
+    settings: settings.get(),
+    status: {
+      logsDir: logger.logDir,
+      launcherVersion: app.getVersion(),
+    },
+    release: {
+      htmlUrl: RELEASE_URL,
+      docsUrl: DOCS_URL,
+    },
+    launcherUpdate: launcherUpdater.getState(),
+    logs: logger.list(160),
+    workspace: workspace.get(),
+  }))
+
+  ipcMain.handle('aihot:daily', (_event, options = {}) => {
+    if (options && typeof options !== 'object') throw new Error('参数无效。')
+    return aihotClient.getLatestDaily({ force: options.force === true })
+  })
+  ipcMain.handle('aihot:items', (_event, options = {}) => {
+    if (options && typeof options !== 'object') throw new Error('参数无效。')
+    return aihotClient.getItems(options)
+  })
+  ipcMain.handle('aihot:hot', (_event, options = {}) => {
+    if (options && typeof options !== 'object') throw new Error('参数无效。')
+    return aihotClient.getHotTopics({ force: options.force === true })
+  })
+  ipcMain.handle('aihot:story', (_event, publicId, options = {}) => {
+    if (options && typeof options !== 'object') throw new Error('参数无效。')
+    return aihotClient.getStory(publicId, { force: options.force === true })
   })
 
-  ipcMain.handle('dsh:status', () => dshManager.getStatus())
-  ipcMain.handle('dsh:check-update', (_event, options = {}) => dshManager.checkForUpdate(options))
-  ipcMain.handle('dsh:install', (_event, target, options) => dshManager.install(target, options))
-  ipcMain.handle('dsh:launch', () => dshManager.startWeb())
-  ipcMain.handle('dsh:stop', () => dshManager.stopWeb())
-  ipcMain.handle('dsh:plugins', (_event, profile) => dshManager.listPlugins(profile))
-  ipcMain.handle('dsh:plugin-action', (_event, profile, action, spec) =>
-    dshManager.managePlugin(profile, action, spec),
-  )
-  ipcMain.handle('dsh:model-config', () => dshManager.getModelConfig())
-  ipcMain.handle('dsh:model-state', (_event, options = {}) => dshManager.getDshModelState(options))
-  ipcMain.handle('dsh:set-deepseek-key', (_event, value) => dshManager.setDeepseekApiKey(value))
-  ipcMain.handle('dsh:clear-deepseek-key', () => dshManager.clearDeepseekApiKey())
-  ipcMain.handle('apphost:list', (_event, options = {}) => {
-    if (!options || typeof options !== 'object') throw new Error('工具台参数无效。')
-    return appHostManager.list({ refresh: Boolean(options.refresh) })
-  })
-  ipcMain.handle('apphost:launch', async (event, id) => {
-    const appId = String(id || '')
-    if (!/^[a-f0-9]{20}$/.test(appId)) throw new Error('工具标识无效。')
-    const result = await appHostManager.launch(appId)
-    if (result.capture) {
-      await appHostManager.prepareCapture(result.session.id, event.sender.id)
-    }
-    return result
-  })
-  ipcMain.handle('apphost:stop', (_event, sessionId) => {
-    const value = String(sessionId || '')
-    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
-    return appHostManager.stop(value)
-  })
-  ipcMain.handle('apphost:prepare-capture', (event, sessionId) => {
-    const value = String(sessionId || '')
-    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
-    return appHostManager.prepareCapture(value, event.sender.id)
-  })
-  ipcMain.handle('apphost:favorite', (_event, id, favorite) => {
-    const appId = String(id || '')
-    if (!/^[a-f0-9]{20}$/.test(appId)) throw new Error('工具标识无效。')
-    return appHostManager.setFavorite(appId, Boolean(favorite))
-  })
-  ipcMain.handle('apphost:remove', (_event, id) => {
-    const appId = String(id || '')
-    if (!/^[a-f0-9]{20}$/.test(appId)) throw new Error('工具标识无效。')
-    return appHostManager.removeApp(appId)
-  })
-  ipcMain.handle('apphost:icon', (_event, id) => {
-    const appId = String(id || '')
-    if (!/^[a-f0-9]{20}$/.test(appId)) throw new Error('工具标识无效。')
-    return appHostManager.getIcon(appId)
-  })
-  ipcMain.handle('apphost:inspect', (_event, sessionId) => {
-    const value = String(sessionId || '')
-    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
-    return appHostManager.inspectSession(value)
-  })
-  ipcMain.handle('apphost:action', (_event, sessionId, request = {}) => {
-    const value = String(sessionId || '')
-    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
-    if (!request || typeof request !== 'object') throw new Error('界面动作参数无效。')
-    return appHostManager.executeSessionAction(value, request)
-  })
-  ipcMain.handle('apphost:open-path', (event, sessionId, grantId, line) => {
-    const value = String(sessionId || '')
-    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
-    return appHostManager.openSessionPath(
-      value,
-      toolPathGrants.consume(grantId, event.sender.id),
-      line,
-    )
-  })
-  ipcMain.handle('apphost:vscode-commands', (_event, sessionId, query) => {
-    const value = String(sessionId || '')
-    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
-    return appHostManager.listVSCodeCommands(value, String(query || '').slice(0, 240))
-  })
-  ipcMain.handle('apphost:vscode-run', (_event, sessionId, query, options = {}) => {
-    const value = String(sessionId || '')
-    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
-    const command = String(query || '').trim()
-    if (!command) throw new Error('请输入要执行的 VS Code 命令。')
-    return appHostManager.runVSCodeCommand(value, command.slice(0, 240), {
-      confirmed: Boolean(options?.confirmed),
-    })
-  })
-  ipcMain.handle('apphost:vscode-output', (_event, sessionId) => {
-    const value = String(sessionId || '')
-    if (!/^tool-session-\d+-\d+$/.test(value)) throw new Error('工具会话标识无效。')
-    return appHostManager.readVSCodeOutput(value)
-  })
-  ipcMain.handle('apphost:action-log', (_event, options = {}) => {
-    const sessionId = String(options?.sessionId || '')
-    if (sessionId && !/^tool-session-\d+-\d+$/.test(sessionId)) {
-      throw new Error('工具会话标识无效。')
-    }
-    return appHostManager.listActionLog({
-      sessionId,
-      limit: Number(options?.limit) || 100,
-    })
-  })
-  ipcMain.handle('apphost:action-log-clear', () => appHostManager.clearActionLog())
-  ipcMain.handle('window:set-fullscreen', (event, fullscreen) => {
-    const window = BrowserWindow.fromWebContents(event.sender)
-    if (!window || window.isDestroyed()) return false
-    window.setFullScreen(Boolean(fullscreen))
-    return window.isFullScreen()
-  })
-  ipcMain.handle('skills:list', (_event, options = {}) => skillsManager.list(options))
-  ipcMain.handle('skills:search', (_event, query) => skillsManager.searchGithub(query))
-  ipcMain.handle('skills:install', (_event, spec) => skillsManager.installFromGithub(spec))
-  ipcMain.handle('skills:set-enabled', (_event, id, enabled) =>
-    skillsManager.setEnabled(id, enabled),
-  )
-  ipcMain.handle('skills:check-updates', () => skillsManager.checkUpdates())
-  ipcMain.handle('skills:update', (_event, id) => skillsManager.updateFromGithub(id))
-  ipcMain.handle('skills:uninstall', (_event, id) => skillsManager.uninstall(id))
-  ipcMain.handle('skills:open-directory', async (_event, id) => {
-    const directory = await skillsManager.getDirectory(id)
-    const error = await shell.openPath(directory)
-    if (error) throw new Error(error)
-    return true
-  })
-  ipcMain.handle('skills:open-root', async () => {
-    const data = await skillsManager.list()
-    await fsp.mkdir(data.skillsRoot, { recursive: true })
-    const error = await shell.openPath(data.skillsRoot)
-    if (error) throw new Error(error)
-    return true
-  })
   ipcMain.handle('workspace:get', () => workspace.get())
   ipcMain.handle('workspace:courses', () => workspace.listCourses())
   ipcMain.handle('workspace:course-create', (_event, input) => workspace.createCourse(input))
@@ -279,20 +151,6 @@ function registerIpc({
     workspace.updateAssignment(id, patch),
   )
   ipcMain.handle('workspace:assignment-delete', (_event, id) => workspace.deleteAssignment(id))
-  ipcMain.handle('workspace:knowledge-create', (_event, input) => workspace.createKnowledge(input))
-  ipcMain.handle('workspace:knowledge-update', (_event, id, patch) =>
-    workspace.updateKnowledge(id, patch),
-  )
-  ipcMain.handle('workspace:knowledge-delete', (_event, id) => workspace.deleteKnowledge(id))
-  ipcMain.handle('workspace:knowledge-delete-many', (_event, ids) =>
-    workspace.deleteKnowledgeMany(ids),
-  )
-  ipcMain.handle('workspace:knowledge-generate', (_event, experimentId) =>
-    knowledgeManager.generateFromExperiment(experimentId),
-  )
-  ipcMain.handle('workspace:knowledge-review', (_event, id, rating) =>
-    knowledgeManager.reviewKnowledge(id, rating),
-  )
   ipcMain.handle('workspace:experiments-suggest', (_event, entries) =>
     experimentLibrary.suggestEntries(entries),
   )
@@ -342,35 +200,11 @@ function registerIpc({
   ipcMain.handle('file:resolve-drop-references', (_event, values) => resolveDropReferences(values))
 
   ipcMain.handle('settings:get', () => settings.get())
-  ipcMain.handle('jev:status', () => jevManager.status())
-  ipcMain.handle('jev:config', (_event, patch = {}) => {
-    const status = jevManager.patchConfig(patch)
-    send('settings:changed', settings.get())
-    return status
-  })
-  ipcMain.handle('jev:set-key', (_event, value) => jevManager.setApiKey(value))
-  ipcMain.handle('jev:clear-key', () => jevManager.clearApiKey())
-  ipcMain.handle('jev:test', () => jevManager.testConnection())
   ipcMain.handle('settings:patch', (_event, patch) => {
-    const jevPatch = {}
-    for (const key of [
-      'jevEnabled',
-      'jevAutoClassify',
-      'jevIncludeText',
-      'jevApiBaseUrl',
-      'jevModel',
-    ]) {
-      if (Object.hasOwn(patch || {}, key)) jevPatch[key] = patch[key]
-    }
     const allowed = {}
     const keys = [
-      'channel',
       'dshHome',
       'experimentDir',
-      'host',
-      'port',
-      'openMode',
-      'autoCheckDsh',
       'autoCheckLauncher',
       'minimizeToTray',
       'launchAtLogin',
@@ -379,15 +213,12 @@ function registerIpc({
       'notificationsEnabled',
       'classReminderMinutes',
       'assignmentReminderDays',
-      'reviewReminderEnabled',
       'dailyDigestTime',
-      'reviewReminderTime',
       'onboarding',
     ]
     for (const key of keys) {
       if (Object.hasOwn(patch || {}, key)) allowed[key] = patch[key]
     }
-    if (allowed.channel && !CHANNELS[allowed.channel]) throw new Error('未知版本通道。')
     if (allowed.theme && !THEME_VALUES.has(allowed.theme)) throw new Error('未知主题设置。')
     if (allowed.termStartDate !== undefined) {
       allowed.termStartDate = String(allowed.termStartDate || '').trim()
@@ -415,10 +246,9 @@ function registerIpc({
         throw new Error('作业提前提醒需要在 0 到 14 天之间。')
       }
     }
-    for (const key of ['dailyDigestTime', 'reviewReminderTime']) {
-      if (allowed[key] === undefined) continue
-      allowed[key] = String(allowed[key] || '').trim()
-      if (allowed[key] && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(allowed[key])) {
+    if (allowed.dailyDigestTime !== undefined) {
+      allowed.dailyDigestTime = String(allowed.dailyDigestTime || '').trim()
+      if (allowed.dailyDigestTime && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(allowed.dailyDigestTime)) {
         throw new Error('提醒时间需要形如 08:00。')
       }
     }
@@ -449,47 +279,11 @@ function registerIpc({
       allowed.dshHome = String(allowed.dshHome || '').trim()
       if (!allowed.dshHome) throw new Error('DSH 数据目录不能为空。')
     }
-    if (allowed.port) {
-      allowed.port = Number(allowed.port)
-      if (!Number.isInteger(allowed.port) || allowed.port < 1024 || allowed.port > 65535) {
-        throw new Error('端口必须在 1024 到 65535 之间。')
-      }
-    }
-    const updated = settings.patch(allowed)
-    if (Object.keys(jevPatch).length) jevManager.patchConfig(jevPatch)
+    settings.patch(allowed)
     const current = settings.get()
-    if (allowed.dshHome !== undefined) skillsManager.setDshHome(updated.dshHome)
     if (allowed.theme) nativeTheme.themeSource = allowed.theme
     send('settings:changed', current)
     return current
-  })
-
-  ipcMain.handle('dialog:choose-dsh-home', async () => {
-    const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: '选择 DeepSeek Harness 数据目录',
-      properties: ['openDirectory', 'createDirectory'],
-      defaultPath: settings.get().dshHome,
-    })
-    if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
-  })
-  ipcMain.handle('dialog:choose-tool-path', async (event) => {
-    const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: '打开文件或文件夹',
-      properties: ['openFile', 'openDirectory'],
-    })
-    const selectedPath = result.canceled ? null : result.filePaths[0] || null
-    if (!selectedPath) return null
-    return toolPathGrants.issue(selectedPath, event.sender.id)
-  })
-  ipcMain.handle('dialog:add-tool-manually', async () => {
-    const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: '选择要添加到工具台的应用程序',
-      properties: ['openFile'],
-      filters: [{ name: 'Windows 应用程序', extensions: ['exe'] }],
-    })
-    if (result.canceled || !result.filePaths[0]) return null
-    return appHostManager.addManualApp(result.filePaths[0])
   })
 
   ipcMain.handle('dialog:choose-experiment-dir', async () => {
@@ -628,9 +422,7 @@ function registerIpc({
 
   ipcMain.handle('path:open', async (_event, target) => {
     const allowed = {
-      dshHome: dshManager.getDshHome(),
-      runtime: dshManager.paths().runtimeDir,
-      logs: dshManager.paths().logsDir,
+      logs: logger.logDir,
       experiments: settings.get().experimentDir,
       userData: app.getPath('userData'),
       backups: backupManager.backupRoot,

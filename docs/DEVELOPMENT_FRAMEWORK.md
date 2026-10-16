@@ -137,7 +137,7 @@ src/renderer/
 - `workspace.json`
 - 工作区备份
 - 启动器日志
-- DSH 运行时和用户配置
+- DeepSeek Harness 用户数据（备份时可选包含，工作台不修改）
 
 数据写入必须满足：
 
@@ -247,7 +247,7 @@ src/renderer/
 - 更新清单和 SHA-256 验证
 - Release 文件数量与名称检查
 
-当前已有 52 项自动测试，并已具备静态检查、类型检查、Electron E2E、生产构建和
+当前已有 74 项自动测试，并已具备静态检查、类型检查、Electron E2E、生产构建和
 运行时依赖审计门禁。代码签名、数据迁移测试和更新清单签名仍属于后续发布阶段。
 
 ## 8. 安全与隐私
@@ -404,3 +404,41 @@ src/renderer/
 下一步是在 GitHub 上创建 `main` 分支、开启保护规则并提交首个 PR。验收结果应为：
 创建 PR 后，GitHub 自动执行安装、静态检查、测试和构建；任何一步失败都不能合并。
 完成远端保护配置后，再开始新的功能开发或界面重构。
+
+## 14. 文档与知识库
+
+仓库文档是唯一真实来源。Obsidian 里的知识库是从仓库重新生成的视图，两边不并列维护，
+也不要在知识库里直接改内容。
+
+```powershell
+npm run sync:vault          # 写入
+npm run sync:vault:check    # 只读检查，verify 的最后一步
+```
+
+- vault 路径的解析顺序：`--vault` 参数 → `ZP_WORKBENCH_VAULT` 环境变量 → 系统「文档」目录
+  （能处理 Windows 的重定向）→ `~/Documents/Obsidian Vault`。加 `--dry-run` 只列出将要写入的文件。
+- `--check` 逐份比对 vault 与仓库，报「内容过期／笔记缺失／多余笔记」，对不上退 1；
+  vault 目录不存在时跳过并通过，所以 CI 和没装 Obsidian 的机器不受影响。
+- 生成物落在 vault 的 `ZP Workbench/` 目录：仓库文档逐份镜像成笔记；`变更时间线` 与
+  `待办与已知问题` 从 `docs/HANDOFF.md` 的两段抽出来；另有 `00 索引/全部文档.base`
+  汇总视图和 `00 索引/资料关系.canvas` 画布。
+- 手写笔记的正文放在 `docs/vault/`，同步时一起搬进去并补 frontmatter。新增手写笔记要在
+  `scripts/sync-obsidian-vault.mjs` 的 `LOCAL_NOTES` 里登记来源和目标路径。
+- 生成的笔记都带 `generated: true` 属性：同步会覆盖它们，来源在仓库里删掉后也会连带清理。
+  脚本只清理 vault 项目文件夹内带这个属性的文件，用户在 vault 里另建的笔记不受影响。
+- 改了被镜像的仓库文档必须同步一次（`npm run verify` 会检查）。`tests/vault-sync.test.cjs`
+  会检查每个来源文件是否存在，文档改名后测试会立刻失败。
+
+Obsidian 开着时可以用它自带的 CLI 复核生成结果（`obsidian` 指向 `Obsidian.com`，
+新开终端已在 PATH 里）：
+
+```powershell
+obsidian vault="Obsidian Vault" unresolved
+obsidian vault="Obsidian Vault" base:query "path=ZP Workbench/00 索引/全部文档.base"
+obsidian vault="Obsidian Vault" open "path=ZP Workbench/00 索引/全部文档.base" silent
+obsidian vault="Obsidian Vault" base:views
+```
+
+- `unresolved` 里除了仓库自带的 `欢迎.md` 不应该有别的东西，出现别的说明 wikilink 写错了。
+- `base:query` 要能返回带 `description`、`source` 和 `距原文更新` 的行。
+- `base:views` 只看当前活动文件，所以要先 `open` 那个 base；`dev:errors` 里不应有报错。

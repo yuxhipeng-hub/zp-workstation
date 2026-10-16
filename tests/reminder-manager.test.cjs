@@ -8,8 +8,6 @@ function createManager({ settings = {}, workspace = {} } = {}) {
     classReminderMinutes: 15,
     assignmentReminderDays: 1,
     dailyDigestTime: '08:00',
-    reviewReminderTime: '19:00',
-    reviewReminderEnabled: true,
     reminderLog: {},
     termStartDate: '2026-09-01',
     ...settings,
@@ -113,7 +111,7 @@ test('uses editable period times when a course does not override them', () => {
   assert.equal(courses[0].endTime, '10:50')
 })
 
-test('fires class, assignment, and review reminders once per period', () => {
+test('fires class and assignment reminders once per period', () => {
   const manager = createManager({
     workspace: {
       schedule: {
@@ -139,7 +137,6 @@ test('fires class, assignment, and review reminders once per period', () => {
           status: 'inbox',
         },
       ],
-      knowledge: [{ id: 'card-1', title: '矩阵的秩', dueAt: '2026-09-20T10:00:00.000Z' }],
     },
   })
   const beforeClass = new Date(2026, 8, 21, 7, 50, 0)
@@ -148,8 +145,6 @@ test('fires class, assignment, and review reminders once per period', () => {
     classFired.some((key) => key.startsWith('class:')),
     true,
   )
-  assert.equal(classFired.includes('review:2026-09-21'), false)
-
   const morning = new Date(2026, 8, 21, 8, 5, 0)
   const assignmentFired = manager.tick(morning)
   assert.equal(
@@ -162,8 +157,7 @@ test('fires class, assignment, and review reminders once per period', () => {
   )
 
   const evening = new Date(2026, 8, 21, 19, 30, 0)
-  const eveningFired = manager.tick(evening)
-  assert.ok(eveningFired.includes('review:2026-09-21'))
+  assert.deepEqual(manager.tick(evening), [])
 
   const repeated = manager.tick(new Date(2026, 8, 21, 19, 45, 0))
   assert.deepEqual(repeated, [])

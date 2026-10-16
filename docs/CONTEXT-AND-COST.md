@@ -44,10 +44,30 @@ model_auto_compact_token_limit = 800000
 
 - 一个任务一条线程。功能、bug、UI 截图调整分开开线程，做完写 `docs/HANDOFF.md`。
 - 不要在线程中途改 `AGENTS.md`、Codex 配置、MCP 服务器列表；要改先开新线程。
+- 改过被镜像的仓库文档（`AGENTS.md`、`README.md`、`RELEASE.md`、`DESIGN.md`、`docs/` 下的
+  文档、`docs/vault/` 下的手写笔记）就**必须**在收尾前跑 `npm run sync:vault`，见下节。
 - 用 `rg` 定位 + 行区间读取，不整文件输出；长日志先落盘再截取。
 - 检索和比对交给子代理，主线程只收结论。
 - DeepSeek 高峰时段是北京时间 09:00-12:00 与 14:00-18:00（周一至周五，价格翻倍），
   大改动放在晚间或周末更省。
+
+## 文档同步规则（每次都要做）
+
+仓库文档是唯一真实来源，Obsidian vault 是生成视图。vault 不会自己更新，漏跑一次就开始漂移，
+下一条线程读到的就是过期状态。
+
+1. 只要这一次任务动过被镜像的仓库文档，收尾前跑 `npm run sync:vault`。
+2. 排错或想确认状态时跑 `npm run sync:vault:check`：它只读不写，逐份比对 vault 和仓库，
+   列出"内容过期／笔记缺失／多余笔记"，对不上就退出码 1。`npm run verify` 最后一步就是它，
+   所以漏同步会在门禁里直接报出来。vault 目录不存在时这一步会打印"跳过同步检查"并通过，
+   这样 CI 和没装 Obsidian 的机器不受影响。
+3. 路径解析顺序：`--vault <路径>` → 环境变量 `ZP_WORKBENCH_VAULT` → Windows 注册表里的
+   "文档"目录（能正确处理重定向，本机解析到 `D:\Users\小zp\Documents\Obsidian Vault`）→
+   `~/Documents`。要临时指到别处才需要手动指定。
+4. 手写笔记的正文放在仓库 `docs/vault/` 下，同样靠这条命令搬进 vault；直接进 vault 改生成笔记
+   会被下一次同步覆盖。
+5. 判据不是"跑过了"，而是 `npm run sync:vault:check` 通过，或 vault 里对应笔记的修改时间是最新的
+   且搜得到这次改动的关键词。
 
 ## 参考
 

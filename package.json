@@ -1,6 +1,6 @@
 {
   "name": "zp-workstation",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "ZP Workbench：面向本地学习与知识整理的 DeepSeek Harness 工作站。",
   "main": "src/main/index.cjs",
   "author": "zp",
@@ -24,14 +24,14 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
-    "verify": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run test:e2e",
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run test:e2e && npm run sync:vault:check",
     "manifest": "node scripts/generate-update-manifest.mjs",
-    "vendor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-vendor.ps1",
-    "dist": "npm run vendor && npm run icons && npm run build && electron-builder --win nsis --x64 --publish never",
-    "dist:dir": "npm run vendor && npm run icons && npm run build && electron-builder --win --x64 --dir --publish never"
+    "sync:vault": "node scripts/sync-obsidian-vault.mjs",
+    "sync:vault:check": "node scripts/sync-obsidian-vault.mjs --check",
+    "dist": "npm run icons && npm run build && electron-builder --win nsis --x64 --publish never",
+    "dist:dir": "npm run icons && npm run build && electron-builder --win --x64 --dir --publish never"
   },
   "dependencies": {
-    "@pnpm/exe.win32-x64": "12.4.2",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.3",
     "pdfjs-dist": "^5.4.296",
@@ -122,11 +122,6 @@
       }
     ]
   },
-  "bundledRuntime": {
-    "node": "24.18.0",
-    "npm": "12.0.2",
-    "nodeMirror": "https://npmmirror.com/mirrors/node"
-  },
   "build": {
     "appId": "com.zp.workbench",
     "productName": "ZP Workbench",
@@ -144,7 +139,6 @@
       "src/main/**/*",
       "src/preload/**/*",
       "package.json",
-      "node_modules/@pnpm/exe.win32-x64/**/*",
       "node_modules/jszip/**/*",
       "node_modules/mammoth/**/*",
       "node_modules/pdfjs-dist/**/*",
@@ -152,9 +146,6 @@
       "node_modules/xlsx/**/*"
     ],
     "asar": true,
-    "asarUnpack": [
-      "node_modules/@pnpm/exe.win32-x64/**/*"
-    ],
     "publish": null,
     "extraResources": [
       {
@@ -164,13 +155,6 @@
       {
         "from": "build/icon.png",
         "to": "build/icon.png"
-      },
-      {
-        "from": "vendor",
-        "to": "vendor",
-        "filter": [
-          "**/*"
-        ]
       }
     ],
     "electronDownload": {

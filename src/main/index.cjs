@@ -2,31 +2,21 @@ const path = require('node:path')
 const {
   app,
   BrowserWindow,
-  desktopCapturer,
   Menu,
   Tray,
   nativeImage,
   nativeTheme,
   safeStorage,
-  shell,
 } = require('electron')
 const { APP_ID, APP_NAME } = require('./constants.cjs')
 const { SettingsStore } = require('./settings-store.cjs')
 const { WorkspaceStore } = require('./workspace-store.cjs')
-const {
-  ExperimentLibrary,
-  inferExperimentGroup,
-  resolveExperimentGroup,
-} = require('./experiment-library.cjs')
-const { JevManager } = require('./jev-manager.cjs')
+const { ExperimentLibrary } = require('./experiment-library.cjs')
 const { ScheduleManager } = require('./schedule-manager.cjs')
 const { Logger } = require('./logger.cjs')
-const { DshManager } = require('./dsh-manager.cjs')
+const { AihotClient } = require('./aihot-client.cjs')
 const { LauncherUpdater } = require('./launcher-updater.cjs')
-const { SkillsManager } = require('./skills-manager.cjs')
 const { BackupManager } = require('./backup-manager.cjs')
-const { AppHostManager } = require('./app-host-manager.cjs')
-const { KnowledgeManager } = require('./knowledge-manager.cjs')
 const { ReminderManager } = require('./reminder-manager.cjs')
 const { registerIpc } = require('./ipc.cjs')
 
@@ -51,21 +41,16 @@ if (process.env.DSH_LAUNCHER_REMOTE_DEBUG) {
 }
 
 let mainWindow = null
-let workbenchWindow = null
 let tray = null
 let quitting = false
 let settings
 let workspace
 let experimentLibrary
-let jevManager
 let scheduleManager
 let logger
-let dshManager
+let aihotClient
 let launcherUpdater
-let skillsManager
 let backupManager
-let appHostManager
-let knowledgeManager
 let reminderManager
 
 function iconPath() {
@@ -141,31 +126,6 @@ function createMainWindow() {
   })
   applyWindowIdentity(mainWindow)
   mainWindow.setMenuBarVisibility(false)
-  mainWindow.webContents.session.setDisplayMediaRequestHandler(async (_request, callback) => {
-    try {
-      const sourceId = appHostManager?.getPendingCaptureSource(mainWindow.webContents.id)
-      if (!sourceId) {
-        callback({})
-        return
-      }
-      const sources = await desktopCapturer.getSources({
-        types: ['window'],
-        thumbnailSize: { width: 1, height: 1 },
-      })
-      const source = sources.find((item) => item.id === sourceId)
-      callback(source ? { video: { id: source.id, name: source.name } } : {})
-    } catch (error) {
-      logger?.warn?.('app-capture', error.message)
-      callback({})
-    }
-  })
-  const syncFullScreenState = () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('window:fullscreen-changed', mainWindow.isFullScreen())
-    }
-  }
-  mainWindow.on('enter-full-screen', syncFullScreenState)
-  mainWindow.on('leave-full-screen', syncFullScreenState)
   mainWindow.webContents.on('page-favicon-updated', () => {
     applyWindowIdentity(mainWindow)
   })
@@ -196,48 +156,6 @@ function createMainWindow() {
   return mainWindow
 }
 
-function openWorkbench(url) {
-  if (workbenchWindow && !workbenchWindow.isDestroyed()) {
-    workbenchWindow.loadURL(url)
-    workbenchWindow.show()
-    workbenchWindow.focus()
-    return
-  }
-  workbenchWindow = new BrowserWindow({
-    width: 1440,
-    height: 920,
-    minWidth: 900,
-    minHeight: 640,
-    autoHideMenuBar: true,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#ffffff',
-    icon: appIcon(),
-    title: `${APP_NAME} - DeepSeek Harness`,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  })
-  applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`)
-  workbenchWindow.setMenuBarVisibility(false)
-  workbenchWindow.webContents.on('page-favicon-updated', () => {
-    applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`)
-  })
-  workbenchWindow.webContents.on('did-finish-load', () => {
-    applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`)
-  })
-  workbenchWindow.loadURL(url)
-  workbenchWindow.on('show', () =>
-    applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`),
-  )
-  workbenchWindow.on('focus', () =>
-    applyWindowIdentity(workbenchWindow, `${APP_NAME} - DeepSeek Harness`),
-  )
-  workbenchWindow.on('closed', () => {
-    workbenchWindow = null
-  })
-}
-
 function createTray() {
   const image = (appIcon() || nativeImage.createEmpty()).resize({ width: 20, height: 20 })
   tray = new Tray(image)
@@ -245,26 +163,6 @@ function createTray() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '打开启动器', click: () => createMainWindow() },
-      {
-        label: '启动 DeepSeek Harness',
-        click: async () => {
-          try {
-            const processState = await dshManager.startWeb()
-            if (processState.url && settings.get().openMode === 'embedded')
-              openWorkbench(processState.url)
-            if (processState.url && settings.get().openMode === 'browser')
-              shell.openExternal(processState.url)
-          } catch (error) {
-            logger.error('launch', error.message)
-            createMainWindow()
-          }
-        },
-      },
-      {
-        label: '停止 DeepSeek Harness',
-        click: () => dshManager.stopWeb().catch((error) => logger.error('stop', error.message)),
-      },
-      { type: 'separator' },
       {
         label: '退出',
         click: () => {
@@ -282,30 +180,10 @@ async function bootstrap() {
   settings = new SettingsStore(userData)
   workspace = new WorkspaceStore(userData)
   logger = new Logger(userData)
-  jevManager = new JevManager({
-    userDataDir: userData,
-    settings,
-    safeStorage,
-    logger,
-    fallbackClassifier: ({ fileName, existingGroups }) => {
-      const matchedGroup = resolveExperimentGroup(fileName, existingGroups)
-      return {
-        group: matchedGroup || inferExperimentGroup(fileName),
-        confidence: matchedGroup ? 0.7 : 0.35,
-        reason: matchedGroup ? '匹配到了已有的课程文件夹。' : '根据文件名生成新的课程分类。',
-      }
-    },
-  })
-  experimentLibrary = new ExperimentLibrary({ settings, workspace, jevManager })
+  experimentLibrary = new ExperimentLibrary({ settings, workspace })
   scheduleManager = new ScheduleManager({ workspace })
   nativeTheme.themeSource = settings.get().theme || 'system'
-  dshManager = new DshManager({ app, settings, logger })
-  const skillRegistryFile = path.join(userData, 'skill-registry.json')
-  skillsManager = new SkillsManager({
-    dshHome: settings.get().dshHome,
-    registryFile: skillRegistryFile,
-    backupRoot: path.join(userData, 'skill-backups'),
-  })
+  aihotClient = new AihotClient({ userDataDir: userData, logger })
   backupManager = new BackupManager({
     userDataDir: userData,
     appVersion: app.getVersion(),
@@ -313,10 +191,7 @@ async function bootstrap() {
     workspace,
     safeStorage,
     logger,
-    skillRegistryFile,
   })
-  appHostManager = new AppHostManager({ app, logger, desktopCapturer })
-  knowledgeManager = new KnowledgeManager({ app, workspace, dshManager, logger })
   reminderManager = new ReminderManager({
     settings,
     workspace,
@@ -333,31 +208,22 @@ async function bootstrap() {
     currentVersion: app.getVersion(),
   })
 
-  dshManager.on('web-ready', ({ url }) => {
-    if (settings.get().openMode === 'embedded') openWorkbench(url)
-    if (settings.get().openMode === 'browser') shell.openExternal(url)
-  })
   registerIpc({
     app,
     settings,
     workspace,
     experimentLibrary,
-    jevManager,
     scheduleManager,
     logger,
-    dshManager,
+    aihotClient,
     launcherUpdater,
-    skillsManager,
     backupManager,
-    appHostManager,
-    knowledgeManager,
     reminderManager,
     getMainWindow: () => mainWindow,
   })
   createMainWindow()
   createTray()
   reminderManager.start()
-  jevManager.start()
   backupManager.startAuto()
 
   mainWindow.webContents.once('did-finish-load', () => {
@@ -366,14 +232,6 @@ async function bootstrap() {
       launcherUpdater.check().catch((error) => logger.warn('launcher-update', error.message))
     }, 1000)
   })
-
-  if (settings.get().autoCheckDsh) {
-    setTimeout(() => {
-      dshManager
-        .checkForUpdate({ silent: true })
-        .catch((error) => logger.warn('update', error.message))
-    }, 1200)
-  }
 }
 
 app.whenReady().then(bootstrap)
@@ -391,17 +249,7 @@ app.on('window-all-closed', () => {
   if (!settings?.get().minimizeToTray) app.quit()
 })
 
-app.on('before-quit', async (event) => {
+app.on('before-quit', () => {
   quitting = true
-  await appHostManager?.shutdown()
   backupManager?.stopAuto()
-  jevManager?.stop()
-  if (dshManager) {
-    event.preventDefault()
-    try {
-      await dshManager.shutdown()
-    } finally {
-      app.exit(0)
-    }
-  }
 })

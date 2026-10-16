@@ -153,18 +153,11 @@ class ReminderManager {
       .sort((left, right) => left.due.getTime() - right.due.getTime())
   }
 
-  collectKnowledge(now = new Date()) {
-    return (this.workspace.get().knowledge || [])
-      .filter((item) => item.dueAt && new Date(item.dueAt).getTime() <= now.getTime())
-      .sort((left, right) => String(left.dueAt).localeCompare(String(right.dueAt)))
-  }
-
   summary(now = new Date()) {
     return {
       at: now.toISOString(),
       courses: this.todaysCourses(now),
       assignments: this.collectAssignments(now),
-      knowledge: this.collectKnowledge(now),
     }
   }
 
@@ -263,27 +256,6 @@ class ReminderManager {
       }
     }
 
-    const reviewMinutes = minutesOfDay(settings.reviewReminderTime) ?? 19 * 60
-    if (settings.reviewReminderEnabled !== false && nowMinutes >= reviewMinutes) {
-      const due = this.collectKnowledge(now)
-      if (due.length) {
-        const key = `review:${dateKey}`
-        const preview = due
-          .slice(0, 3)
-          .map((item) => item.title)
-          .join('、')
-        if (
-          this.notifyOnce(
-            key,
-            `${due.length} 个知识点待复习`,
-            due.length > 3 ? `${preview} 等` : preview,
-          )
-        ) {
-          fired.push(key)
-        }
-      }
-    }
-
     return fired
   }
 
@@ -291,7 +263,7 @@ class ReminderManager {
     this.publish({
       key: `test:${Date.now()}`,
       title: 'ZP Workbench 提醒已开启',
-      body: '之后会在课前、作业截止前和复习到期时提醒你。',
+      body: '之后会在课前和作业截止前提醒你。',
       at: new Date().toISOString(),
     })
     return true
