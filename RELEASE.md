@@ -53,6 +53,17 @@ GitHub 仓库需要在 `Settings → Actions → General → Workflow permission
 
 也可以在 GitHub Actions 页面手动运行 `Release ZP Workbench`，填写版本号和更新说明。
 
+## 本机发布网络
+
+推送和触发流水线都要访问 `github.com:443`。本机 git 已配置代理
+`http://127.0.0.1:7897`（Clash Verge 的混合端口），但这个端口不一定开着：直连
+`github.com:443` 会间歇性超时或连接重置，同时 `api.github.com` 往往仍然可用，
+所以 `gh` 命令能正常工作时 git 反而可能推不上去。
+
+遇到 `push` / `ls-remote` 报 `Failed to connect`、`Recv failure: Connection was reset`
+时，先请用户打开 Clash Verge 的代理再重试同一命令；不要为此改动仓库或全局 git 配置，
+也不要用 GitHub API 手工造提交来绕过推送。
+
 ## 发布文件
 
 每次 Release 必须包含：
