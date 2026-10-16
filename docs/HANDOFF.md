@@ -5,7 +5,8 @@
 
 ## 当前状态
 
-- 版本：`0.5.0`，转型改动已在 `main`，由 `Release ZP Workbench` 流水线出包并发布。
+- 版本：`0.5.0`，`main` 已发布并同步，GitHub Release `v0.5.0` 已设为 Latest（安装包、blockmap、
+  SHA-256 与 `latest.json` 均由 `Release ZP Workbench` 流水线产出）。
 - 结构：Electron 桌面应用，主进程 `src/main/`、渲染层 `src/renderer/`（原生 JS + CSS）。
 - 用户数据：`%APPDATA%\deepseek-harness-launcher\workspace.json`，由 `WorkspaceStore` 维护，
   自动备份在 `backups/` 目录。
