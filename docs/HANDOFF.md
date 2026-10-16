@@ -5,7 +5,7 @@
 
 ## 当前状态
 
-- 版本：`0.4.5`，`main` 已发布并同步，GitHub Release `v0.4.5` 已设为 Latest。
+- 版本：`0.5.0`，转型改动已在 `main`，由 `Release ZP Workbench` 流水线出包并发布。
 - 结构：Electron 桌面应用，主进程 `src/main/`、渲染层 `src/renderer/`（原生 JS + CSS）。
 - 用户数据：`%APPDATA%\deepseek-harness-launcher\workspace.json`，由 `WorkspaceStore` 维护，
   自动备份在 `backups/` 目录。
@@ -15,8 +15,8 @@
 - 收尾（2026-10-15）：Jev 分类后端与 DshManager 已整体删除，复习板块确定不做，AI 资讯
   确定不写入资料库，资料库正文也确定不抽成提示词。工作台与 DSH 之间现在只靠"复制提示词"
   这一条人工通道，且只有作业收件箱在产出提示词。
-- 转型分支：`codex/remove-toolbench` 工作区里同时包含 2026-10-06 的工具台清理与
-  2026-10-14 的运行时分组移除，尚未提交、尚未合并回 `main`。
+- 转型收尾（2026-10-16）：`codex/remove-toolbench` 上的工具台清理（2026-10-06）与运行时
+  分组移除（2026-10-14）已提交、合并回 `main`，版本推进到 `0.5.0`。
 - 发布：优先走 GitHub Actions `Release ZP Workbench` 手动触发，缓存运行时与构建工具；
   本地不再作为安装包上传节点。
 
@@ -24,6 +24,7 @@
 
 | 日期       | 内容                                                                                                                                                                                                                                                                               | 涉及文件                                                                                                                                                  |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-16 | 收尾转型并发布 `0.5.0`：把 `codex/remove-toolbench` 上的工具台清理、运行时分组移除、Jev/DshManager 删除与文档同步改动合并回 `main`，版本从 `0.4.5` 推进到 `0.5.0`，安装包由 `Release ZP Workbench` 流水线构建                                                                      | `package.json`、`package-lock.json`、`README.md`、`docs/HANDOFF.md`                                                                                       |
 | 2026-10-15 | 清理残留 CSS：按「类名还有没有引用」删掉 481 条死规则、约 63 KB（styles.css 142.7 → 95 KB），涵盖工具台、运行时分组、知识点页面和 Codex 教程块留下的样式；删除失去调用方的 `process-runner.cjs` 及其测试；README 按当前定位重写                                                    | `src/renderer/styles.css`、`src/renderer/ui-refresh.css`、`src/renderer/design-system.css`、`src/main/process-runner.cjs`、`README.md`、`docs/HANDOFF.md` |
 | 2026-10-15 | 文档同步变成门禁：脚本新增 `--check`（只读比对 vault 与仓库，列出过期/缺失/多余笔记，对不上退 1；vault 不存在时跳过）、`npm run sync:vault:check`，并接到 `npm run verify` 最后一步；路径解析改成问系统要"文档"目录，中文用户名不再被代码页弄坏；补 3 条测试                       | `scripts/sync-obsidian-vault.mjs`、`tests/vault-sync.test.cjs`、`package.json`、`docs/CONTEXT-AND-COST.md`                                                |
 | 2026-10-15 | 删除 Jev 后端与 DshManager：`jev:*` IPC/preload、`jev*` 设置键、导入对话框 Jev 文案、`dialog:choose-dsh-home`、顶栏状态里的 DSH 路径、`.jev-*` 样式全部清掉；复习板块确定不做，`reviewReminder*` 设置键、`到期复习` 文案与 `.today-review-*` 样式一并删除；AI 资讯确定不写入资料库 | `src/main/jev-manager.cjs`、`src/main/dsh-manager.cjs`、`src/main/index.cjs`、`src/main/ipc.cjs`、`src/renderer/main.js`、`src/preload/index.cjs` 等      |
