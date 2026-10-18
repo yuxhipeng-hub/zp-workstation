@@ -7,6 +7,9 @@
 
 - 版本：`0.5.0`，`main` 已发布并同步，GitHub Release `v0.5.0` 已设为 Latest（安装包、blockmap、
   SHA-256 与 `latest.json` 均由 `Release ZP Workbench` 流水线产出）。
+- 发布准备（2026-10-18）：版本推进到 `0.5.1`，待通过完整门禁、合并 `main` 并触发
+  `Release ZP Workbench`。本版包含课表课程颜色、资料库管理、资料库与日志目录迁移、
+  资料库滚动位置修复、指南简化以及工作台 UI 统一。
 - 结构：Electron 桌面应用，主进程 `src/main/`、渲染层 `src/renderer/`（原生 JS + CSS）。
 - 用户数据：`%APPDATA%\deepseek-harness-launcher\workspace.json`，由 `WorkspaceStore` 维护，
   自动备份在 `backups/` 目录。
