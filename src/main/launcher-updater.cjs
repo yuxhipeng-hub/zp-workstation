@@ -94,8 +94,8 @@ class LauncherUpdater extends EventEmitter {
       downloading: false,
       downloaded: false,
       message: this.isConfigured()
-        ? '尚未检查启动器更新。'
-        : '尚未配置启动器发布仓库，当前只能通过安装包手动升级。',
+        ? '尚未检查工作台更新。'
+        : '尚未配置工作台发布仓库，当前只能通过安装包手动升级。',
       notes: '',
       publishedAt: null,
       htmlUrl: null,
@@ -552,7 +552,7 @@ class LauncherUpdater extends EventEmitter {
         reportBytes('starting')
         this.logger.info(
           'launcher-update',
-          `尝试通过 ${source.label} 下载启动器安装包 ${source.url}`,
+          `尝试通过 ${source.label} 下载工作台安装包 ${source.url}`,
         )
         const response = await this.fetchWithTimeout(
           source.url,

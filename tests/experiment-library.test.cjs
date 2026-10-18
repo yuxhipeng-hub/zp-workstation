@@ -17,13 +17,19 @@ function createLibrary() {
   const libraryDirectory = path.join(directory, 'library')
   fs.mkdirSync(sourceDirectory, { recursive: true })
   const workspace = new WorkspaceStore(path.join(directory, 'data'))
+  let settingsData = { experimentDir: libraryDirectory }
   const settings = {
-    get: () => ({ experimentDir: libraryDirectory }),
+    get: () => ({ ...settingsData }),
+    patch: (patch) => {
+      settingsData = { ...settingsData, ...patch }
+      return { ...settingsData }
+    },
   }
   return {
     directory,
     sourceDirectory,
     libraryDirectory,
+    settings,
     workspace,
     library: new ExperimentLibrary({ settings, workspace }),
   }
@@ -172,4 +178,54 @@ test('renames a course folder and moves every tracked PDF into it', async (t) =>
   )
   assert.equal(fs.existsSync(path.join(libraryDirectory, '数据结构')), false)
   assert.equal(fs.existsSync(path.join(libraryDirectory, '数据结构课程')), true)
+})
+
+test('migrates the complete library root and updates tracked file paths', async (t) => {
+  const { directory, sourceDirectory, libraryDirectory, settings, workspace, library } =
+    createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const source = path.join(sourceDirectory, '数据结构实验报告.pdf')
+  fs.writeFileSync(source, '%PDF data structures', 'utf8')
+  await library.importEntries([source])
+  const untracked = path.join(libraryDirectory, '课堂笔记', '手写笔记.md')
+  fs.mkdirSync(path.dirname(untracked), { recursive: true })
+  fs.writeFileSync(untracked, '课堂笔记', 'utf8')
+  const nextRoot = path.join(directory, 'moved-library')
+
+  const result = await library.changeRoot(nextRoot)
+  const experiment = workspace.get().experiments[0]
+
+  assert.equal(result.copiedFiles, 2)
+  assert.equal(result.trackedFiles, 1)
+  assert.equal(fs.existsSync(libraryDirectory), false)
+  assert.equal(fs.existsSync(path.join(nextRoot, '数据结构', path.basename(source))), true)
+  assert.equal(fs.existsSync(path.join(nextRoot, '课堂笔记', '手写笔记.md')), true)
+  assert.equal(experiment.filePath.startsWith(nextRoot), true)
+  assert.equal(settings.get().experimentDir, nextRoot)
+})
+
+test('creates, renames, and removes an empty custom library', async (t) => {
+  const { directory, libraryDirectory, workspace, library } = createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const created = await library.createGroup('课程资料')
+  assert.equal(created.group, '课程资料')
+  assert.equal(fs.existsSync(path.join(libraryDirectory, '课程资料')), true)
+  assert.equal(workspace.get().experimentGroups[0].name, '课程资料')
+  const persisted = JSON.parse(
+    fs.readFileSync(path.join(directory, 'data', 'workspace.json'), 'utf8'),
+  )
+  assert.equal(persisted.experimentGroups[0].name, '课程资料')
+
+  const renamed = await library.renameGroup('课程资料', '学期资料')
+  assert.equal(renamed.group, '学期资料')
+  assert.equal(fs.existsSync(path.join(libraryDirectory, '课程资料')), false)
+  assert.equal(fs.existsSync(path.join(libraryDirectory, '学期资料')), true)
+  assert.equal(workspace.get().experimentGroups[0].name, '学期资料')
+
+  const removed = await library.removeGroup('学期资料')
+  assert.equal(removed.group, '学期资料')
+  assert.equal(workspace.get().experimentGroups.length, 0)
+  assert.equal(fs.existsSync(path.join(libraryDirectory, '学期资料')), false)
 })

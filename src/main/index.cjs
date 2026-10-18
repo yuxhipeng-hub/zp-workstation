@@ -162,7 +162,7 @@ function createTray() {
   tray.setToolTip(APP_NAME)
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '打开启动器', click: () => createMainWindow() },
+      { label: '打开工作台', click: () => createMainWindow() },
       {
         label: '退出',
         click: () => {
@@ -179,7 +179,7 @@ async function bootstrap() {
   const userData = app.getPath('userData')
   settings = new SettingsStore(userData)
   workspace = new WorkspaceStore(userData)
-  logger = new Logger(userData)
+  logger = new Logger(userData, settings.get().logDir)
   experimentLibrary = new ExperimentLibrary({ settings, workspace })
   scheduleManager = new ScheduleManager({ workspace })
   nativeTheme.themeSource = settings.get().theme || 'system'

@@ -154,6 +154,45 @@ async function uniqueDestination(directory, originalName) {
   }
 }
 
+function samePath(left, right) {
+  return (
+    path.resolve(left).toLocaleLowerCase('zh-CN') === path.resolve(right).toLocaleLowerCase('zh-CN')
+  )
+}
+
+async function copyDirectoryTree(sourceRoot, targetRoot) {
+  const copied = []
+  const skipped = []
+
+  async function walk(sourceDirectory, relativeDirectory = '') {
+    const entries = await fsp.readdir(sourceDirectory, { withFileTypes: true })
+    for (const entry of entries) {
+      const source = path.join(sourceDirectory, entry.name)
+      const relative = path.join(relativeDirectory, entry.name)
+      if (entry.isDirectory()) {
+        await walk(source, relative)
+        continue
+      }
+      if (!entry.isFile()) {
+        skipped.push({ path: source, reason: '不支持迁移符号链接或其他特殊文件。' })
+        continue
+      }
+      const targetDirectory = path.join(targetRoot, relativeDirectory)
+      await fsp.mkdir(targetDirectory, { recursive: true })
+      const destination = await uniqueDestination(targetDirectory, entry.name)
+      await fsp.copyFile(source, destination)
+      copied.push({
+        source: path.resolve(source),
+        destination: path.resolve(destination),
+        renamed: path.basename(destination) !== path.basename(source),
+      })
+    }
+  }
+
+  if (fs.existsSync(sourceRoot)) await walk(sourceRoot)
+  return { copied, skipped }
+}
+
 class ExperimentLibrary {
   constructor({ settings, workspace }) {
     this.settings = settings
@@ -175,8 +214,11 @@ class ExperimentLibrary {
 
   async suggestEntries(entries = []) {
     const existingGroups = new Set(
-      (this.workspace.get().experiments || [])
-        .map((item) => String(item.group || '').trim())
+      [
+        ...(this.workspace.get().experimentGroups || []).map((group) => group.name),
+        ...(this.workspace.get().experiments || []).map((item) => item.group),
+      ]
+        .map((group) => String(group || '').trim())
         .filter(Boolean),
     )
     const root = this.getRoot()
@@ -222,8 +264,11 @@ class ExperimentLibrary {
         .map((item) => path.resolve(item.filePath).toLocaleLowerCase('zh-CN')),
     )
     const existingGroups = new Set(
-      (this.workspace.get().experiments || [])
-        .map((item) => String(item.group || '').trim())
+      [
+        ...(this.workspace.get().experimentGroups || []).map((group) => group.name),
+        ...(this.workspace.get().experiments || []).map((item) => item.group),
+      ]
+        .map((group) => String(group || '').trim())
         .filter(Boolean),
     )
     const directoryEntries = await fsp.readdir(root, { withFileTypes: true }).catch(() => [])
@@ -332,6 +377,39 @@ class ExperimentLibrary {
     return this.workspace.deleteExperiment(id)
   }
 
+  async createGroup(name) {
+    const result = this.workspace.createExperimentGroup(name)
+    const group = result.group.name
+    try {
+      await fsp.mkdir(this.groupDirectory(group), { recursive: true })
+      return { ...result, group }
+    } catch (error) {
+      try {
+        this.workspace.removeExperimentGroup(group)
+      } catch {
+        // Preserve the original directory error.
+      }
+      throw error
+    }
+  }
+
+  async removeGroup(name) {
+    const group = sanitizePathSegment(name)
+    const directory = this.groupDirectory(group)
+    let entries = []
+    try {
+      entries = await fsp.readdir(directory)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+    if (entries.length) throw new Error('资料库文件夹里还有文件，请先清空后再删除。')
+    const workspace = this.workspace.removeExperimentGroup(group)
+    await fsp.rmdir(directory).catch((error) => {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTEMPTY') throw error
+    })
+    return { workspace, group }
+  }
+
   async renameGroup(currentGroup, nextGroup) {
     const current = sanitizePathSegment(currentGroup)
     const next = sanitizePathSegment(nextGroup)
@@ -393,6 +471,76 @@ class ExperimentLibrary {
 
     const workspace = this.workspace.updateExperimentGroup(current, next, nextPaths)
     return { workspace, renamed: items.length, group: next }
+  }
+
+  async changeRoot(nextRoot) {
+    const targetRoot = path.resolve(String(nextRoot || '').trim())
+    const sourceRoot = this.getRoot()
+    if (!path.isAbsolute(String(nextRoot || '').trim())) {
+      throw new Error('资料库根目录必须是绝对路径。')
+    }
+    if (samePath(sourceRoot, targetRoot)) {
+      return {
+        workspace: this.workspace.get(),
+        oldRoot: sourceRoot,
+        newRoot: targetRoot,
+        copiedFiles: 0,
+        trackedFiles: 0,
+        renamedConflicts: 0,
+        skipped: [],
+      }
+    }
+    if (isPathInside(sourceRoot, targetRoot) || isPathInside(targetRoot, sourceRoot)) {
+      throw new Error('新资料库目录不能与当前目录互相包含，请选择另一个位置。')
+    }
+
+    await fsp.mkdir(targetRoot, { recursive: true })
+    const { copied, skipped } = await copyDirectoryTree(sourceRoot, targetRoot)
+    const copiedBySource = new Map(copied.map((entry) => [entry.source, entry.destination]))
+    const pathMap = {}
+    for (const item of this.workspace.get().experiments || []) {
+      const source = path.resolve(item.filePath)
+      const destination = copiedBySource.get(source)
+      if (destination) pathMap[item.filePath] = destination
+    }
+
+    try {
+      const migration = this.workspace.migrateExperimentPaths(pathMap)
+      this.settings.patch({ experimentDir: targetRoot })
+      let cleanupError = ''
+      if (skipped.length) {
+        cleanupError = '旧目录包含未迁移的特殊文件，已保留原目录'
+      } else {
+        try {
+          await fsp.rm(sourceRoot, { recursive: true, force: true })
+        } catch (error) {
+          cleanupError = error.message
+        }
+      }
+      return {
+        workspace: migration.workspace,
+        oldRoot: sourceRoot,
+        newRoot: targetRoot,
+        copiedFiles: copied.length,
+        trackedFiles: migration.migrated,
+        renamedConflicts: copied.filter((entry) => entry.renamed).length,
+        skipped,
+        cleanupError,
+      }
+    } catch (error) {
+      const reverseMap = Object.fromEntries(
+        Object.entries(pathMap).map(([source, destination]) => [destination, source]),
+      )
+      try {
+        this.workspace.migrateExperimentPaths(reverseMap)
+      } catch {
+        // Keep the original migration error.
+      }
+      for (const entry of copied) {
+        await fsp.unlink(entry.destination).catch(() => {})
+      }
+      throw error
+    }
   }
 
   getExperiment(id) {

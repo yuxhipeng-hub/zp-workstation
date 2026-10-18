@@ -379,6 +379,7 @@ test('creates, updates, and deletes manually maintained schedule courses', (t) =
     startTime: '08:00',
     endTime: '09:40',
     weekText: '1-16周',
+    color: '#4f7cd9',
   })
   assert.equal(created.workspace.schedule.source.name, '手动维护')
   assert.equal(created.workspace.schedule.courses.length, 1)
@@ -388,6 +389,7 @@ test('creates, updates, and deletes manually maintained schedule courses', (t) =
   )
   assert.equal(created.workspace.schedule.periodTimes[0].startTime, '08:00')
   assert.equal(created.workspace.schedule.periodTimes[1].endTime, '09:40')
+  assert.equal(created.workspace.schedule.courses[0].color, '#4F7CD9')
 
   const id = created.course.id
   const updated = manager.updateCourse(id, {
@@ -412,4 +414,33 @@ test('creates, updates, and deletes manually maintained schedule courses', (t) =
 
   const deleted = manager.deleteCourse(id)
   assert.equal(deleted.schedule, null)
+})
+
+test('shares an edited course color across repeated weekly sessions', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-schedule-color-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const store = new WorkspaceStore(directory)
+  const manager = new ScheduleManager({ workspace: store })
+
+  const first = manager.createCourse({
+    name: '线性代数',
+    weekday: 2,
+    startPeriod: 1,
+    endPeriod: 2,
+    color: '#4f7cd9',
+  })
+  manager.createCourse({
+    name: '线性代数',
+    weekday: 4,
+    startPeriod: 3,
+    endPeriod: 4,
+    color: '#4f7cd9',
+  })
+  const updated = manager.updateCourse(first.course.id, { color: '#c95478' })
+
+  assert.equal(updated.workspace.schedule.courses.length, 2)
+  assert.equal(
+    updated.workspace.schedule.courses.every((course) => course.color === '#C95478'),
+    true,
+  )
 })

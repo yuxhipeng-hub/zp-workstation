@@ -49,7 +49,10 @@ contextBridge.exposeInMainWorld('launcher', {
   updateExperiment: (id, patch) => ipcRenderer.invoke('workspace:experiment-update', id, patch),
   renameExperimentGroup: (currentGroup, nextGroup) =>
     ipcRenderer.invoke('workspace:experiment-rename-group', currentGroup, nextGroup),
+  createExperimentGroup: (name) => ipcRenderer.invoke('workspace:experiment-group-create', name),
+  removeExperimentGroup: (name) => ipcRenderer.invoke('workspace:experiment-group-remove', name),
   deleteExperiment: (id) => ipcRenderer.invoke('workspace:experiment-delete', id),
+  changeExperimentRoot: (path) => ipcRenderer.invoke('experiments:change-root', path),
   importSchedule: (filePath) => ipcRenderer.invoke('schedule:import', filePath),
   createScheduleCourse: (input) => ipcRenderer.invoke('schedule:course-create', input),
   updateScheduleCourse: (id, patch) => ipcRenderer.invoke('schedule:course-update', id, patch),
@@ -61,6 +64,7 @@ contextBridge.exposeInMainWorld('launcher', {
   stageDroppedFile: (payload) => ipcRenderer.invoke('file:stage-drop', payload),
   resolveDropReferences: (values) => ipcRenderer.invoke('file:resolve-drop-references', values),
   chooseExperimentDir: () => ipcRenderer.invoke('dialog:choose-experiment-dir'),
+  chooseLogDir: () => ipcRenderer.invoke('dialog:choose-log-dir'),
   chooseSyncDir: () => ipcRenderer.invoke('dialog:choose-sync-dir'),
   chooseExperimentFiles: () => ipcRenderer.invoke('dialog:choose-experiment-files'),
   chooseExperimentPdfs: () => ipcRenderer.invoke('dialog:choose-experiment-pdfs'),
@@ -73,6 +77,7 @@ contextBridge.exposeInMainWorld('launcher', {
   openPath: (target) => ipcRenderer.invoke('path:open', target),
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   clearLogs: () => ipcRenderer.invoke('logs:clear'),
+  changeLogDirectory: (path) => ipcRenderer.invoke('logs:change-directory', path),
   checkLauncherUpdate: () => ipcRenderer.invoke('launcher:check-update'),
   downloadLauncherUpdate: (asset) => ipcRenderer.invoke('launcher:download-update', asset),
   on: (channel, callback) => {

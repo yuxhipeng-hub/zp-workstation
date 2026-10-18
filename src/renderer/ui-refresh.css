@@ -774,7 +774,7 @@ label.input-shell:not(.field):not(.toggle-row):has(input:focus-visible),
   background: transparent;
 }
 
-.route-canvas > .page-intro {
+#view > .route-canvas > .page-intro {
   padding: 28px 30px;
 }
 
@@ -1944,49 +1944,188 @@ label.input-shell:not(.field):not(.toggle-row):has(input:focus-visible),
 }
 
 .schedule-course {
+  --course-color: #6f89a8;
   gap: 5px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  box-shadow: none;
+  padding: 9px 10px 8px 13px;
+  border: 0;
+  border-radius: 9px 7px 7px 9px;
+  background: color-mix(
+    in srgb,
+    var(--course-color) 5%,
+    color-mix(in srgb, var(--panel-raised) 84%, transparent)
+  );
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--text) 4%, transparent),
+    0 4px 14px color-mix(in srgb, var(--bg) 34%, transparent);
+  backdrop-filter: blur(14px) saturate(1.05);
+  transition:
+    transform 180ms var(--ease-out),
+    background-color 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
 }
 
-.schedule-course.tone-0 {
-  border-color: var(--schedule-tone-blue-border);
-  background: var(--schedule-tone-blue-bg);
+.schedule-course::before {
+  position: absolute;
+  inset: 9px auto 9px 5px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--course-color);
+  content: '';
+  opacity: 0.92;
 }
 
-.schedule-course.tone-1 {
-  border-color: var(--schedule-tone-green-border);
-  background: var(--schedule-tone-green-bg);
+.schedule-course:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--course-color) 8%,
+    color-mix(in srgb, var(--panel-raised) 88%, transparent)
+  );
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--text) 5%, transparent),
+    0 8px 20px color-mix(in srgb, var(--bg) 44%, transparent);
+  transform: translateY(-1px);
 }
 
-.schedule-course.tone-2 {
-  border-color: var(--schedule-tone-orange-border);
-  background: var(--schedule-tone-orange-bg);
-}
-
-.schedule-course.tone-3 {
-  border-color: var(--schedule-tone-indigo-border);
-  background: var(--schedule-tone-indigo-bg);
+.schedule-course.is-highlighted {
+  outline: 1px solid color-mix(in srgb, var(--course-color) 58%, transparent);
+  outline-offset: 2px;
 }
 
 .schedule-course-period {
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
   font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 550;
+  font-size: 10.5px;
+  font-weight: 560;
+}
+
+.schedule-course-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--course-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--course-color) 12%, transparent);
+}
+
+.schedule-course-period time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
 .schedule-course strong {
-  font-size: 12px;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 13px;
   font-weight: 620;
+  line-height: 1.32;
 }
 
-.schedule-course span {
-  font-size: 11px;
+.schedule-course-place {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: color-mix(in srgb, var(--text-secondary) 86%, transparent);
+  font-size: 10.5px;
+}
+
+.schedule-course-place svg,
+.schedule-course small svg {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  color: var(--text-tertiary);
 }
 
 .schedule-course small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--text-tertiary) 88%, transparent);
+  font-size: 9.5px;
+}
+
+.schedule-color-field {
+  grid-column: 1 / -1;
+}
+
+.course-color-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--material-subtle);
+}
+
+#scheduleCourseColor {
+  width: 34px;
+  height: 30px;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+#scheduleCourseColor::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+#scheduleCourseColor::-webkit-color-swatch {
+  border: 0;
+  border-radius: 4px;
+}
+
+.course-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.course-color-swatch {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--swatch-color);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
+  cursor: pointer;
+}
+
+.course-color-swatch svg {
+  width: 12px;
+  height: 12px;
+  color: #fff;
+  opacity: 0;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 40%));
+}
+
+.course-color-swatch.selected {
+  border-color: var(--text);
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 3px var(--line-strong);
+}
+
+.course-color-swatch.selected svg {
+  opacity: 1;
+}
+
+.course-color-value {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Settings: one consistent card language and clearer control sizing. */
@@ -2476,3 +2615,389 @@ label.input-shell:not(.field):not(.toggle-row):has(input:focus-visible),
     animation: none !important;
   }
 }
+
+/* Apple workbench polish: start */
+
+:root {
+  --apple-action: #0a84ff;
+  --apple-action-strong: #3395ff;
+  --apple-action-soft: #102c47;
+  --apple-action-text: #3395ff;
+  --apple-action-contrast: #ffffff;
+  --apple-control-height: 40px;
+  --apple-control-compact: 30px;
+  --apple-secondary-surface: color-mix(in srgb, var(--apple-action) 10%, var(--panel));
+  --apple-secondary-surface-hover: color-mix(in srgb, var(--apple-action) 16%, var(--panel));
+  --apple-danger-surface: color-mix(in srgb, var(--danger) 10%, var(--panel));
+  --apple-danger-surface-hover: color-mix(in srgb, var(--danger) 16%, var(--panel));
+}
+
+body[data-theme='light'] {
+  --apple-action: #0071e3;
+  --apple-action-strong: #0066cc;
+  --apple-action-soft: #e8f2ff;
+  --apple-action-text: #0066cc;
+  --apple-secondary-surface: #eef5ff;
+  --apple-secondary-surface-hover: #e2eeff;
+  --apple-danger-surface: #fff1f0;
+  --apple-danger-surface-hover: #ffe5e3;
+}
+
+button,
+input,
+select,
+textarea {
+  letter-spacing: 0;
+}
+
+.view > .route-canvas > .page-intro {
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 26px;
+}
+
+#view > .route-canvas > .page-intro > div:first-child {
+  display: block;
+  min-width: 0;
+  max-width: min(760px, 70%);
+}
+
+#view > .route-canvas > .page-intro h2 {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+#view > .route-canvas > .page-intro p {
+  display: -webkit-box;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+#view > .route-canvas > .page-intro .button-row {
+  flex: none;
+  gap: 8px;
+}
+
+.topbar-actions {
+  height: var(--apple-control-height);
+  padding: 3px;
+  border-color: var(--line);
+  border-radius: 12px;
+}
+
+.topbar-actions > .icon-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+}
+
+.button {
+  gap: 7px;
+  border-color: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.button.secondary {
+  border-color: transparent;
+  background: var(--apple-secondary-surface);
+  color: var(--apple-action-text);
+}
+
+.button.secondary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--apple-secondary-surface-hover);
+  color: var(--apple-action-text);
+}
+
+.button.danger-outline {
+  border-color: transparent;
+  background: var(--apple-danger-surface);
+  color: var(--danger);
+}
+
+.button.danger-outline:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--apple-danger-surface-hover);
+  color: var(--danger);
+}
+
+.icon-button:hover:not(:disabled) {
+  color: var(--apple-action-text);
+}
+
+.text-button,
+.today-panel-foot {
+  color: var(--text);
+}
+
+.text-button:hover,
+.text-button:focus-visible,
+.today-panel-foot:hover,
+.today-panel-foot:focus-visible {
+  background: transparent;
+  color: var(--apple-action-text);
+}
+
+.path-list button,
+.link-list button {
+  color: var(--text);
+}
+
+.path-list button:hover > svg:first-child,
+.link-list button:hover > svg:first-child {
+  color: var(--apple-action-text);
+}
+
+.guide-step-actions .button,
+.guide-step-actions .text-button {
+  height: auto;
+  min-height: 34px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 10px;
+}
+
+#view .guide-step-actions .button:hover,
+#view .guide-step-actions .button:focus-visible,
+#view .guide-step-actions .text-button:hover,
+#view .guide-step-actions .text-button:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  color: var(--apple-action-text);
+}
+
+.segmented {
+  gap: 2px;
+  padding: 3px;
+  border-color: color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.segmented button {
+  min-height: 31px;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 560;
+}
+
+.segmented.small,
+.segmented.small.compact-segmented {
+  width: auto;
+  max-width: 100%;
+}
+
+.segmented.small button,
+.segmented.theme button {
+  flex-direction: row;
+  justify-content: center;
+  gap: 0;
+  min-height: 31px;
+  padding: 6px 14px;
+  text-align: center;
+}
+
+.segmented.theme {
+  width: 100%;
+}
+
+.segmented button.active,
+.segmented button[aria-pressed='true'],
+.segmented.theme button.active,
+.news-tabs button.active,
+.news-chip.active {
+  border-color: transparent;
+  background: var(--apple-action);
+  color: var(--apple-action-contrast);
+  box-shadow: none;
+}
+
+.toggle {
+  width: 40px;
+  height: 24px;
+}
+
+.toggle::after {
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+}
+
+.toggle-row input:checked + .toggle {
+  border-color: var(--apple-action);
+  background: var(--apple-action);
+}
+
+.toggle-row input:checked + .toggle::after {
+  background: var(--apple-action-contrast);
+  transform: translate3d(16px, 0, 0);
+}
+
+.toggle-row:active input:checked + .toggle::after {
+  transform: translate3d(13px, 0, 0);
+}
+
+:is(
+  .settings-group,
+  .experiment-dropzone,
+  .experiment-explorer,
+  .log-console-shell,
+  .schedule-source-bar,
+  .schedule-board,
+  .guide-hero,
+  .guide-section,
+  .about-hero,
+  .status-band,
+  .section
+) {
+  border-color: var(--line);
+}
+
+:is(
+  .guide-feature,
+  .ai-system-step,
+  .ruka-route-shared,
+  .backup-archive-row,
+  .backup-security-row,
+  .setting-block,
+  .health-report,
+  .credential-refs,
+  .backup-row
+) {
+  border-color: var(--line);
+  background: var(--panel-raised);
+}
+
+:is(
+  .guide-feature,
+  .ai-system-step,
+  .ruka-route-shared,
+  .backup-archive-row,
+  .backup-security-row
+):hover {
+  border-color: var(--line);
+  background: var(--panel-raised);
+  box-shadow: none;
+  transform: none;
+}
+
+.path-list button,
+.link-list button {
+  border-color: transparent;
+  background: var(--panel-raised);
+  box-shadow: none;
+}
+
+.path-list button:hover,
+.link-list button:hover {
+  border-color: transparent;
+  background: var(--panel-raised);
+}
+
+:is(
+  .today-task-list > button,
+  .today-timeline-row,
+  .today-file-list > button,
+  .news-item-head,
+  .news-related-row
+):hover {
+  border-color: var(--line);
+  background: transparent;
+  transform: none;
+}
+
+#view .assignment-card:hover,
+#view .experiment-group:not(.selected):not(.is-drop-target):hover {
+  border-color: var(--line);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+#view .experiment-file:hover {
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: none;
+  transform: none;
+}
+
+:is(
+    .today-task-list > button,
+    .today-timeline-row,
+    .today-file-list > button,
+    .news-item-head,
+    .news-related-row,
+    .assignment-card,
+    .experiment-file,
+    .experiment-group,
+    .guide-feature,
+    .ai-system-step,
+    .ruka-route-shared,
+    .backup-archive-row,
+    .backup-security-row,
+    .path-list button,
+    .link-list button
+  ):hover
+  :is(
+    .today-task-copy strong,
+    .today-timeline-body strong,
+    .today-file-copy strong,
+    .news-item-title,
+    .news-related-row span:first-child,
+    .assignment-main h3,
+    .experiment-file-copy strong,
+    .experiment-group-copy strong,
+    .guide-feature strong,
+    .ai-system-step strong,
+    .ruka-route-shared summary,
+    .backup-archive-copy strong,
+    .backup-security-row strong,
+    .path-list strong,
+    .link-list strong
+  ) {
+  color: var(--apple-action-text);
+}
+
+.loading-panel,
+.fatal-panel,
+.empty-state,
+.today-empty {
+  min-height: 104px;
+  padding: 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-raised) 72%, transparent);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.task-strip {
+  width: min(420px, calc(100vw - 48px));
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline-color: var(--apple-action);
+}
+
+/* Apple workbench polish: end */

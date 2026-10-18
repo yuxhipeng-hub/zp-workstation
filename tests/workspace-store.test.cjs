@@ -141,6 +141,31 @@ test('renames a course everywhere and reports experiment folders to move', (t) =
   assert.equal(reloaded.courses.filter((item) => item.name === '算法分析').length, 1)
 })
 
+test('persists course colors and custom experiment libraries', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  store.createExperimentGroup('课程资料')
+  store.replaceSchedule({
+    courses: [
+      {
+        id: 'course-color-1',
+        name: '线性代数',
+        weekday: 3,
+        startPeriod: 7,
+        endPeriod: 8,
+        weeks: [1, 2, 3],
+        color: '#4f7cd9',
+      },
+    ],
+  })
+
+  const reloaded = new WorkspaceStore(directory).get()
+  assert.equal(reloaded.experimentGroups[0].name, '课程资料')
+  assert.equal(reloaded.schedule.courses[0].color, '#4F7CD9')
+  assert.equal(reloaded.courses.find((item) => item.name === '线性代数').color, '#4F7CD9')
+})
+
 test('creates, lists, restores backups and reports missing files', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
