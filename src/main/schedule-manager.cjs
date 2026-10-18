@@ -126,9 +126,22 @@ class ScheduleManager {
     const existing = current?.courses.find((course) => course.id === id)
     if (!existing) throw new Error('没有找到这门课程。')
     const course = normalizeCourse(patch, existing)
+    const normalizedName = cleanText(course.name, 100)
+      .toLocaleLowerCase('zh-CN')
+      .replace(/\s+/g, '')
+    const sameCourse = (item) =>
+      item.id === id ||
+      (existing.courseId && item.courseId === existing.courseId) ||
+      cleanText(item.name, 100).toLocaleLowerCase('zh-CN').replace(/\s+/g, '') === normalizedName
     const schedule = {
       ...structuredClone(current),
-      courses: current.courses.map((item) => (item.id === id ? course : item)),
+      courses: current.courses.map((item) => {
+        if (item.id === id) return course
+        if (Object.hasOwn(patch || {}, 'color') && sameCourse(item)) {
+          return { ...item, color: course.color }
+        }
+        return item
+      }),
     }
     syncCourseTime(schedule, course)
     const workspace = this.workspace.replaceSchedule(schedule)

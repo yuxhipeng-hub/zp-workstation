@@ -1,7 +1,7 @@
 {
   "name": "zp-workstation",
   "version": "0.5.0",
-  "description": "ZP Workbench：面向本地学习与知识整理的 DeepSeek Harness 工作站。",
+  "description": "ZP Workbench：面向本地学习与知识整理的数据工作台。",
   "main": "src/main/index.cjs",
   "author": "zp",
   "license": "MIT",

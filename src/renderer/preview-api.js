@@ -163,6 +163,9 @@ function normalizePreviewCourse(input = {}, existing = {}) {
     weekText: String(merged.weekText || previewWeekText(normalizedWeeks))
       .trim()
       .slice(0, 80),
+    color: /^#[0-9a-f]{6}$/i.test(String(merged.color || ''))
+      ? String(merged.color).toUpperCase()
+      : '',
     raw: String(merged.raw || '').slice(0, 1000),
   }
 }
@@ -730,6 +733,7 @@ function createPreviewState() {
     settings: {
       dshHome,
       experimentDir: 'C:\\Users\\小zp\\ZP Workbench\\实验资料',
+      logDir: 'C:\\Users\\小zp\\AppData\\Roaming\\deepseek-harness-launcher\\logs',
       autoCheckLauncher: true,
       minimizeToTray: true,
       launchAtLogin: false,
@@ -804,10 +808,6 @@ function createPreviewState() {
     status: {
       launcherVersion: '0.5.0',
       logsDir: 'C:\\Users\\小zp\\AppData\\Roaming\\deepseek-harness-launcher\\logs',
-    },
-    release: {
-      htmlUrl: 'https://github.com/deepseek-ai/deepseek-harness/releases',
-      docsUrl: 'https://deepseek-harness.github.io/deepseek-harness/',
     },
     launcherUpdate: {
       supported: true,
@@ -955,6 +955,12 @@ function createPreviewState() {
           modifiedAt: new Date(now - 1000 * 60 * 60 * 5).toISOString(),
           importedAt: new Date(now - 1000 * 60 * 60 * 4).toISOString(),
         },
+      ],
+      experimentGroups: [
+        { id: 'preview-library-1', name: '算法设计与分析实验' },
+        { id: 'preview-library-2', name: '计算机系统基础' },
+        { id: 'preview-library-3', name: '大学物理' },
+        { id: 'preview-library-4', name: '课程资料' },
       ],
       schedule: {
         source: {
@@ -1413,6 +1419,12 @@ export function createPreviewLauncherApi() {
         })
       }
       state.workspace.experiments.unshift(...imported)
+      state.workspace.experimentGroups ||= []
+      for (const group of createdGroups) {
+        if (!state.workspace.experimentGroups.some((item) => item.name === group)) {
+          state.workspace.experimentGroups.push({ id: createId(), name: group })
+        }
+      }
       return {
         workspace: clone(state.workspace),
         imported: imported.length,
@@ -1482,10 +1494,53 @@ export function createPreviewLauncherApi() {
           updatedAt: new Date().toISOString(),
         }
       })
+      state.workspace.experimentGroups = (state.workspace.experimentGroups || []).map((group) =>
+        group.name === currentGroup ? { ...group, name: next } : group,
+      )
       return {
         workspace: clone(state.workspace),
         renamed,
         group: next,
+      }
+    },
+    async createExperimentGroup(name) {
+      const cleaned = String(name || '')
+        .trim()
+        .slice(0, 64)
+      if (!cleaned) throw new Error('资料库名称不能为空。')
+      if ((state.workspace.experimentGroups || []).some((group) => group.name === cleaned)) {
+        throw new Error('已存在同名资料库。')
+      }
+      const group = { id: createId(), name: cleaned }
+      state.workspace.experimentGroups ||= []
+      state.workspace.experimentGroups.push(group)
+      return { workspace: clone(state.workspace), group: cleaned }
+    },
+    async removeExperimentGroup(name) {
+      if (state.workspace.experiments.some((item) => item.group === name)) {
+        throw new Error('资料库中还有文件记录，请先移动或移除这些资料。')
+      }
+      state.workspace.experimentGroups = (state.workspace.experimentGroups || []).filter(
+        (group) => group.name !== name,
+      )
+      return { workspace: clone(state.workspace), group: name }
+    },
+    async changeExperimentRoot(nextRoot) {
+      const oldRoot = state.settings.experimentDir
+      state.settings.experimentDir = nextRoot
+      state.workspace.experiments = state.workspace.experiments.map((item) => ({
+        ...item,
+        filePath: item.filePath.replace(oldRoot, nextRoot),
+      }))
+      emit('settings:changed', state.settings)
+      return {
+        workspace: clone(state.workspace),
+        oldRoot,
+        newRoot: nextRoot,
+        copiedFiles: state.workspace.experiments.length,
+        trackedFiles: state.workspace.experiments.length,
+        renamedConflicts: 0,
+        skipped: [],
       }
     },
     async deleteExperiment(id) {
@@ -1498,6 +1553,9 @@ export function createPreviewLauncherApi() {
     },
     async chooseExperimentDir() {
       return `${state.settings.experimentDir}-preview`
+    },
+    async chooseLogDir() {
+      return `${state.settings.logDir}-preview`
     },
     async chooseSyncDir() {
       return 'C:\\Users\\小zp\\OneDrive\\ZP Workbench'
@@ -1668,6 +1726,13 @@ export function createPreviewLauncherApi() {
     async clearLogs() {
       state.logs = []
       return true
+    },
+    async changeLogDirectory(nextDir) {
+      const oldDir = state.settings.logDir
+      state.settings.logDir = nextDir
+      state.status.logsDir = nextDir
+      emit('settings:changed', state.settings)
+      return { oldDir, newDir: nextDir, movedFiles: 1, settings: clone(state.settings) }
     },
     async checkLauncherUpdate() {
       return clone(state.launcherUpdate)

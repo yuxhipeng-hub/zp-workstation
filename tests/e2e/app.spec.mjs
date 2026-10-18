@@ -250,6 +250,9 @@ test('shows the guide with plain-language AI basics', async () => {
     await expect(
       window.locator('#view').getByRole('heading', { name: '指南', exact: true }),
     ).toBeVisible()
+    await expect(window.getByText('装好官方 DeepSeek Harness', { exact: true })).toHaveCount(0)
+    await expect(window.locator('.guide-step')).toHaveCount(4)
+    await expect(window.getByText('复制给常用的 AI 工具拆解步骤。')).toBeVisible()
 
     const workbenchHeading = await window
       .getByRole('heading', { name: '它能做什么', exact: true })
@@ -412,6 +415,84 @@ test('renames an experiment group from the workspace dialog', async () => {
     await expect(window.getByText('prompt() is not supported.')).toHaveCount(0)
     assert.equal(fs.existsSync(originalFile), false)
     assert.equal(fs.existsSync(renamedFile), true)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('keeps experiment group list scroll position when selecting another library', async () => {
+  const userDataDir = createUserDataDir()
+  const experimentDir = path.join(userDataDir, '实验资料')
+  const groupNames = Array.from({ length: 12 }, (_, index) => `课程资料 ${index + 1}`)
+  const experiments = groupNames.map((group, index) => {
+    const fileName = `资料 ${index + 1}.txt`
+    const filePath = path.join(experimentDir, group, fileName)
+    fs.mkdirSync(path.dirname(filePath), { recursive: true })
+    fs.writeFileSync(filePath, `资料 ${index + 1}`, 'utf8')
+    return {
+      id: `scroll-experiment-${index + 1}`,
+      title: `资料 ${index + 1}`,
+      originalName: fileName,
+      filePath,
+      group,
+      size: Buffer.byteLength(`资料 ${index + 1}`),
+      importedAt: new Date().toISOString(),
+    }
+  })
+
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ experimentDir, onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(userDataDir, 'workspace.json'),
+    JSON.stringify(
+      {
+        version: 2,
+        courses: [],
+        assignments: [],
+        knowledge: [],
+        experiments,
+        schedule: null,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await app.evaluate(({ BrowserWindow }) => {
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      mainWindow.setMinimumSize(1000, 700)
+      mainWindow.setSize(1200, 760)
+    })
+    await window.locator('.nav').getByRole('button', { name: '资料库', exact: true }).click()
+
+    const groupList = window.locator('.experiment-group-list')
+    await expect(groupList).toBeVisible()
+    const view = window.locator('#view')
+    await view.evaluate((element) => {
+      element.scrollTop = Math.min(220, element.scrollHeight - element.clientHeight)
+    })
+    await groupList.evaluate((element) => {
+      element.scrollTop = Math.min(260, element.scrollHeight - element.clientHeight)
+    })
+    const before = await groupList.evaluate((element) => element.scrollTop)
+    const viewBefore = await view.evaluate((element) => element.scrollTop)
+    expect(before).toBeGreaterThan(0)
+
+    const target = groupNames[8]
+    await window
+      .locator(`.experiment-group[data-experiment-group="${target}"] .experiment-group-select`)
+      .evaluate((element) => element.click())
+    await expect(window.locator('.experiment-explorer-head h3')).toHaveText(target)
+    await expect.poll(() => groupList.evaluate((element) => element.scrollTop)).toBe(before)
+    await expect.poll(() => view.evaluate((element) => element.scrollTop)).toBe(viewBefore)
   } finally {
     await closeWorkstation(app, userDataDir)
   }
@@ -783,6 +864,154 @@ test('imports a schedule from a WPS-style URI-list drop without DataTransfer.fil
     await periodDialog.getByLabel('第 7 节开始时间').fill('09:10')
     await periodDialog.getByRole('button', { name: '保存', exact: true }).click()
     await expect(window.locator('.schedule-time-cell').nth(6)).toContainText('09:10')
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('lets a course use a custom translucent color', async () => {
+  const userDataDir = createUserDataDir()
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav').getByRole('button', { name: '课表', exact: true }).click()
+    await window.locator('[data-action="open-schedule-composer"]').first().click()
+    const dialog = window.getByRole('dialog', { name: '添加课程' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel('课程名称').fill('数据结构')
+    await dialog.locator('[data-action="choose-schedule-color"][data-color="#826F9A"]').click()
+    await dialog.getByRole('button', { name: '添加课程', exact: true }).click()
+
+    const course = window.locator('.schedule-course', { hasText: '数据结构' })
+    await expect(course).toHaveAttribute('data-schedule-course-color', '#826F9A')
+    const background = await course.evaluate((element) => {
+      const style = globalThis.getComputedStyle(element)
+      return [style.backgroundColor, style.borderColor]
+    })
+    expect(background[0]).not.toBe('rgba(0, 0, 0, 0)')
+    await expect
+      .poll(() => {
+        const workspace = JSON.parse(
+          fs.readFileSync(path.join(userDataDir, 'workspace.json'), 'utf8'),
+        )
+        return workspace.schedule?.courses?.[0]?.color
+      })
+      .toBe('#826F9A')
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('creates a custom library and accepts files dropped onto it', async () => {
+  const userDataDir = createUserDataDir()
+  const experimentDir = path.join(userDataDir, '实验资料')
+  const droppedSource = path.join(userDataDir, '我的学习资料.txt')
+  fs.writeFileSync(droppedSource, '学习资料', 'utf8')
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ experimentDir, onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav').getByRole('button', { name: '资料库', exact: true }).click()
+    await window.getByRole('button', { name: '新建资料库', exact: true }).click()
+    const dialog = window.getByRole('dialog', { name: '新建资料库' })
+    await dialog.getByLabel('资料库名称').fill('我的资料')
+    await dialog.getByRole('button', { name: '创建资料库' }).click()
+
+    const group = window.locator('.experiment-group', { hasText: '我的资料' }).first()
+    await expect(group).toBeVisible()
+    assert.equal(fs.existsSync(path.join(experimentDir, '我的资料')), true)
+
+    await group.evaluate((target, url) => {
+      const dataTransfer = new globalThis.DataTransfer()
+      dataTransfer.setData('text/uri-list', url)
+      target.dispatchEvent(
+        new globalThis.DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+        }),
+      )
+    }, pathToFileURL(droppedSource).href)
+
+    const imported = path.join(experimentDir, '我的资料', path.basename(droppedSource))
+    await expect.poll(() => fs.existsSync(imported), { timeout: 8_000 }).toBe(true)
+    assert.equal(fs.existsSync(droppedSource), true)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('migrates the library root and log directory through the desktop bridge', async () => {
+  const userDataDir = createUserDataDir()
+  const oldLibrary = path.join(userDataDir, '资料库-old')
+  const nextLibrary = path.join(userDataDir, '资料库-new')
+  const nextLogs = path.join(userDataDir, '日志-new')
+  const trackedFile = path.join(oldLibrary, '课程资料', '课程笔记.txt')
+  fs.mkdirSync(path.dirname(trackedFile), { recursive: true })
+  fs.writeFileSync(trackedFile, '课程笔记', 'utf8')
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ experimentDir: oldLibrary, onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(userDataDir, 'workspace.json'),
+    JSON.stringify(
+      {
+        version: 2,
+        courses: [],
+        assignments: [],
+        knowledge: [],
+        experiments: [
+          {
+            id: 'migration-file',
+            title: '课程笔记',
+            originalName: '课程笔记.txt',
+            filePath: trackedFile,
+            group: '课程资料',
+            size: Buffer.byteLength('课程笔记'),
+            importedAt: new Date().toISOString(),
+          },
+        ],
+        schedule: null,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    const libraryResult = await window.evaluate(
+      (target) => window.launcher.changeExperimentRoot(target),
+      nextLibrary,
+    )
+    assert.equal(libraryResult.copiedFiles, 1)
+    assert.equal(fs.existsSync(oldLibrary), false)
+    assert.equal(fs.existsSync(path.join(nextLibrary, '课程资料', '课程笔记.txt')), true)
+
+    const logResult = await window.evaluate(
+      (target) => window.launcher.changeLogDirectory(target),
+      nextLogs,
+    )
+    assert.equal(logResult.newDir, nextLogs)
+    assert.equal(fs.existsSync(path.join(nextLogs, 'workbench.log')), true)
+    const settings = JSON.parse(fs.readFileSync(path.join(userDataDir, 'settings.json'), 'utf8'))
+    assert.equal(settings.experimentDir, nextLibrary)
+    assert.equal(settings.logDir, nextLogs)
   } finally {
     await closeWorkstation(app, userDataDir)
   }

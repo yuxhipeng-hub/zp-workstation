@@ -2,7 +2,7 @@ const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = require('electron')
-const { DOCS_URL, RELEASE_URL, THEME_VALUES } = require('./constants.cjs')
+const { THEME_VALUES } = require('./constants.cjs')
 const { resolveDropReferences } = require('./drop-reference.cjs')
 
 function isSafeExternalUrl(value) {
@@ -59,10 +59,6 @@ function registerIpc({
     status: {
       logsDir: logger.logDir,
       launcherVersion: app.getVersion(),
-    },
-    release: {
-      htmlUrl: RELEASE_URL,
-      docsUrl: DOCS_URL,
     },
     launcherUpdate: launcherUpdater.getState(),
     logs: logger.list(160),
@@ -163,9 +159,24 @@ function registerIpc({
   ipcMain.handle('workspace:experiment-rename-group', (_event, currentGroup, nextGroup) =>
     experimentLibrary.renameGroup(currentGroup, nextGroup),
   )
+  ipcMain.handle('workspace:experiment-group-create', (_event, name) =>
+    experimentLibrary.createGroup(name),
+  )
+  ipcMain.handle('workspace:experiment-group-remove', (_event, name) =>
+    experimentLibrary.removeGroup(name),
+  )
   ipcMain.handle('workspace:experiment-delete', (_event, id) =>
     experimentLibrary.removeExperiment(id),
   )
+  ipcMain.handle('experiments:change-root', async (_event, nextRoot) => {
+    const result = await experimentLibrary.changeRoot(nextRoot)
+    send('settings:changed', settings.get())
+    logger.info(
+      'experiments',
+      `资料库根目录已迁移：${result.oldRoot} -> ${result.newRoot}，文件 ${result.copiedFiles} 个。`,
+    )
+    return result
+  })
   ipcMain.handle('schedule:import', (_event, filePath) => scheduleManager.importFile(filePath))
   ipcMain.handle('schedule:course-create', (_event, input) => scheduleManager.createCourse(input))
   ipcMain.handle('schedule:course-update', (_event, id, patch) =>
@@ -204,7 +215,6 @@ function registerIpc({
     const allowed = {}
     const keys = [
       'dshHome',
-      'experimentDir',
       'autoCheckLauncher',
       'minimizeToTray',
       'launchAtLogin',
@@ -271,10 +281,6 @@ function registerIpc({
         completedAt: source.completedAt ? String(source.completedAt).slice(0, 40) : null,
       }
     }
-    if (allowed.experimentDir !== undefined) {
-      allowed.experimentDir = String(allowed.experimentDir || '').trim()
-      if (!allowed.experimentDir) throw new Error('实验资料目录不能为空。')
-    }
     if (allowed.dshHome !== undefined) {
       allowed.dshHome = String(allowed.dshHome || '').trim()
       if (!allowed.dshHome) throw new Error('DSH 数据目录不能为空。')
@@ -288,9 +294,19 @@ function registerIpc({
 
   ipcMain.handle('dialog:choose-experiment-dir', async () => {
     const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: '选择实验资料存储目录',
+      title: '选择资料库迁移目标',
       properties: ['openDirectory', 'createDirectory'],
       defaultPath: settings.get().experimentDir,
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('dialog:choose-log-dir', async () => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      title: '选择日志迁移目标',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: logger.logDir,
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
@@ -445,6 +461,21 @@ function registerIpc({
     logger.clear()
     send('logs:cleared')
     return true
+  })
+
+  ipcMain.handle('logs:change-directory', async (_event, nextDir) => {
+    const requested = String(nextDir || '').trim()
+    if (!requested) throw new Error('日志目录不能为空。')
+    const result = await logger.changeDirectory(requested)
+    try {
+      settings.patch({ logDir: result.newDir })
+    } catch (error) {
+      await logger.changeDirectory(result.oldDir).catch(() => {})
+      throw error
+    }
+    send('settings:changed', settings.get())
+    logger.info('logs', `日志目录已迁移：${result.oldDir} -> ${result.newDir}。`)
+    return { ...result, settings: settings.get() }
   })
 
   ipcMain.handle('launcher:check-update', () => launcherUpdater.check())

@@ -10,6 +10,7 @@ const DEFAULT_WORKSPACE = {
   assignments: [],
   knowledge: [],
   experiments: [],
+  experimentGroups: [],
   schedule: null,
 }
 
@@ -28,12 +29,26 @@ function cleanDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ''
 }
 
+function cleanColor(value) {
+  const match = cleanString(value, 24).match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!match) return ''
+  const hex = match[1].length === 3 ? [...match[1]].map((part) => part + part).join('') : match[1]
+  return `#${hex.toUpperCase()}`
+}
+
 function courseKey(value) {
   return String(value ?? '')
     .normalize('NFKC')
     .toLocaleLowerCase('zh-CN')
     .replace(/[\s_\-—–.·、,，]+/g, '')
     .replace(/(实验|实训|实践|课程|课)+$/g, '')
+}
+
+function groupKey(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .toLocaleLowerCase('zh-CN')
+    .replace(/[\s_\-—–.·、,，]+/g, '')
 }
 
 function isUnclassifiedCourse(value) {
@@ -52,7 +67,7 @@ function cleanCourse(input = {}, existing = {}) {
     id: existing.id || cleanString(input.id, 80) || randomUUID(),
     name,
     aliases: [...new Set(aliases)].slice(0, 12),
-    color: cleanString(input.color || existing.color, 24),
+    color: cleanColor(input.color || existing.color),
     createdAt: existing.createdAt || cleanString(input.createdAt, 40) || now,
     updatedAt: now,
   }
@@ -105,6 +120,18 @@ function cleanExperiment(input, existing = {}) {
   }
 }
 
+function cleanExperimentGroup(input = {}, existing = {}) {
+  const name = cleanString(typeof input === 'string' ? input : input.name || existing.name, 64)
+  if (!name) return null
+  const now = new Date().toISOString()
+  return {
+    id: existing.id || cleanString(input.id, 80) || randomUUID(),
+    name,
+    createdAt: existing.createdAt || cleanString(input.createdAt, 40) || now,
+    updatedAt: now,
+  }
+}
+
 function cleanScheduleCourse(input = {}) {
   const name = cleanString(input.name, 100)
   const weekday = Number(input.weekday)
@@ -141,6 +168,7 @@ function cleanScheduleCourse(input = {}) {
     endTime: cleanString(input.endTime, 8),
     weeks,
     weekText: cleanString(input.weekText, 80),
+    color: cleanColor(input.color),
     raw: cleanString(input.raw, 1000),
   }
 }
@@ -218,6 +246,11 @@ class WorkspaceStore {
   }
 
   normalizeData(stored = {}) {
+    const experiments = Array.isArray(stored.experiments) ? stored.experiments : []
+    const experimentGroups = (Array.isArray(stored.experimentGroups) ? stored.experimentGroups : [])
+      .map((group) => cleanExperimentGroup(group))
+      .filter(Boolean)
+      .slice(0, 300)
     return {
       version: 2,
       courses: (Array.isArray(stored.courses) ? stored.courses : [])
@@ -226,7 +259,8 @@ class WorkspaceStore {
         .slice(0, 300),
       assignments: Array.isArray(stored.assignments) ? stored.assignments : [],
       knowledge: Array.isArray(stored.knowledge) ? stored.knowledge : [],
-      experiments: Array.isArray(stored.experiments) ? stored.experiments : [],
+      experiments,
+      experimentGroups,
       schedule: cleanSchedule(stored.schedule),
     }
   }
@@ -316,9 +350,28 @@ class WorkspaceStore {
       const linked = courses.find((course) => course.id === item.courseId)
       item.courseId = resolve(item.group)?.id || linked?.id || ensure(item.group)?.id || ''
     }
+    const knownGroups = new Set(
+      (this.data.experimentGroups || []).map((group) => String(group.name || '').trim()),
+    )
+    for (const item of this.data.experiments) {
+      const name = cleanString(item.group, 64)
+      if (!name || knownGroups.has(name)) continue
+      const group = cleanExperimentGroup({ name })
+      if (group) {
+        this.data.experimentGroups.push(group)
+        knownGroups.add(name)
+      }
+    }
+    this.data.experimentGroups = (this.data.experimentGroups || []).slice(0, 300)
     if (this.data.schedule) {
       for (const course of this.data.schedule.courses) {
-        course.courseId = ensure(course.name)?.id || ''
+        const entity = ensure(course.name)
+        course.courseId = entity?.id || ''
+        if (entity?.color && !course.color) course.color = entity.color
+        if (course.color && entity) {
+          entity.color = course.color
+          entity.updatedAt = new Date().toISOString()
+        }
       }
     }
     this.data.courses = courses.slice(0, 300)
@@ -364,6 +417,35 @@ class WorkspaceStore {
     return this.get()
   }
 
+  createExperimentGroup(name) {
+    const cleaned = cleanString(name, 64)
+    if (!cleaned) throw new Error('资料库名称不能为空。')
+    const key = groupKey(cleaned)
+    if (
+      (this.data.experimentGroups || []).some((group) => groupKey(group.name) === key) ||
+      this.data.experiments.some((item) => groupKey(item.group) === key)
+    ) {
+      throw new Error('已存在同名资料库。')
+    }
+    const group = cleanExperimentGroup({ name: cleaned })
+    this.data.experimentGroups.push(group)
+    this.save()
+    return { workspace: this.get(), group }
+  }
+
+  removeExperimentGroup(name) {
+    const cleaned = cleanString(name, 64)
+    if (!cleaned) throw new Error('资料库名称不能为空。')
+    if (this.data.experiments.some((item) => String(item.group || '').trim() === cleaned)) {
+      throw new Error('资料库中还有文件记录，请先移动或移除这些资料。')
+    }
+    this.data.experimentGroups = (this.data.experimentGroups || []).filter(
+      (group) => String(group.name || '').trim() !== cleaned,
+    )
+    this.save()
+    return this.get()
+  }
+
   updateExperiment(id, patch) {
     const index = this.data.experiments.findIndex((item) => item.id === id)
     if (index === -1) throw new Error('没有找到这个实验文件。')
@@ -389,8 +471,37 @@ class WorkspaceStore {
         { ...item, updatedAt: now },
       )
     })
+    let groups = this.data.experimentGroups || []
+    const existing = groups.find((group) => String(group.name || '').trim() === currentGroup)
+    if (existing) {
+      const nextExisting = groups.find(
+        (group) => group !== existing && String(group.name || '').trim() === nextGroup,
+      )
+      if (nextExisting) {
+        groups = groups.filter((group) => group !== existing)
+      } else {
+        existing.name = nextGroup
+        existing.updatedAt = now
+      }
+    } else if (!groups.some((group) => String(group.name || '').trim() === nextGroup)) {
+      const group = cleanExperimentGroup({ name: nextGroup })
+      if (group) groups.push(group)
+    }
+    this.data.experimentGroups = groups
     this.save()
     return this.get()
+  }
+
+  migrateExperimentPaths(pathMap = {}) {
+    let migrated = 0
+    this.data.experiments = this.data.experiments.map((item) => {
+      const nextPath = pathMap[item.filePath]
+      if (!nextPath || nextPath === item.filePath) return item
+      migrated += 1
+      return cleanExperiment({ ...item, filePath: nextPath }, item)
+    })
+    if (migrated) this.save()
+    return { workspace: this.get(), migrated }
   }
 
   deleteExperiment(id) {

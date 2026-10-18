@@ -18,7 +18,6 @@ const state = {
   page: 'today',
   settings: null,
   status: null,
-  release: {},
   launcherUpdate: null,
   launcherUpdateProgress: null,
   launcherUpdateDismissedVersion: null,
@@ -90,7 +89,7 @@ const pageMeta = {
   logs: ['诊断', '日志', '查看本机启动、更新和运行过程中的事件记录。'],
   settings: ['偏好', '设置', '调整主题、数据位置和自动检查策略。'],
   backup: ['系统', '备份与同步', '创建完整备份，并同步到 OneDrive 文件夹或 WebDAV。'],
-  about: ['应用', '关于', '查看版本、更新源和官方资源。'],
+  about: ['应用', '关于', '查看工作台版本与更新记录。'],
 }
 
 const systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -308,6 +307,49 @@ function scheduleCourseTimes(schedule, course) {
     startTime: course.startTime || periodTimes.get(course.startPeriod)?.startTime || '',
     endTime: course.endTime || periodTimes.get(course.endPeriod)?.endTime || '',
   }
+}
+
+const SCHEDULE_COLORS = [
+  '#6F89A8',
+  '#6E8E7C',
+  '#B0715B',
+  '#826F9A',
+  '#A66C78',
+  '#9A7C4F',
+  '#5D8D8A',
+  '#6D748A',
+]
+
+function normalizeHexColor(value) {
+  const match = String(value || '')
+    .trim()
+    .match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!match) return ''
+  return `#${match[1].length === 3 ? [...match[1]].map((part) => part + part).join('') : match[1]}`.toUpperCase()
+}
+
+function scheduleCourseColor(course) {
+  const direct = normalizeHexColor(course?.color)
+  if (direct) return direct
+  const linked = state.workspace?.courses?.find((item) => item.id && item.id === course?.courseId)
+  const inherited = normalizeHexColor(linked?.color)
+  if (inherited) return inherited
+  const key = String(course?.courseId || course?.name || course?.id || '')
+  let hash = 0
+  for (const character of key) hash = (hash * 31 + character.codePointAt(0)) >>> 0
+  return SCHEDULE_COLORS[hash % SCHEDULE_COLORS.length]
+}
+
+function syncScheduleColorControls(value) {
+  const color = normalizeHexColor(value)
+  if (!color) return
+  const input = document.querySelector('#scheduleCourseColor')
+  if (input) input.value = color
+  document.querySelectorAll('.course-color-swatch').forEach((swatch) => {
+    swatch.classList.toggle('selected', swatch.dataset.color === color)
+  })
+  const valueLabel = document.querySelector('.course-color-value')
+  if (valueLabel) valueLabel.textContent = color
 }
 
 function inferPeriodTimesFromCourses(schedule) {
@@ -772,14 +814,6 @@ function guideSteps() {
   const workspace = state.workspace || {}
   return [
     {
-      id: 'dsh',
-      title: '装好官方 DeepSeek Harness',
-      body: 'DeepSeek Harness 官方已经有桌面端，安装、模型 API 和插件都由它自己管理。工作站只负责整理学习数据，把作业和资料拼成提示词交给它。',
-      done: manual.has('dsh'),
-      action: { label: '查看官方资源', page: 'about' },
-      manual: true,
-    },
-    {
       id: 'term',
       title: '填写开学日期',
       body: '只有填了开学日期，单双周课程和「今日」的课表才会按真实周次计算。',
@@ -796,7 +830,7 @@ function guideSteps() {
     {
       id: 'assignments',
       title: '添加第一条作业',
-      body: '零碎任务先收进「作业收件箱」，每条都能生成一段结构化提示词，交给 DSH 拆解步骤。',
+      body: '零碎任务先收进「作业收件箱」，每条都能生成一段结构化提示词，复制给常用的 AI 工具拆解步骤。',
       done: Boolean(workspace.assignments?.length),
       action: { label: '打开作业收件箱', page: 'assignments' },
     },
@@ -1223,7 +1257,7 @@ function renderGuide() {
       <div>
         <span class="eyebrow">GETTING STARTED</span>
         <h2>指南</h2>
-        <p>ZP Workbench 是一个本地学习工作站。它不替你写作业，而是把课程、作业和资料归到一处，再把需要动脑的部分交给 DeepSeek Harness。</p>
+        <p>ZP Workbench 是一个本地学习工作站。它不替你写作业，而是把课程、作业和资料归到一处，再把需要动脑的部分整理成可复制的提示词。</p>
       </div>
       <div class="guide-progress">
         <strong>${done} / ${total}</strong>
@@ -1861,7 +1895,7 @@ function syncLauncherUpdateBanner() {
     progressNode,
     progressBar,
     launcherProgressView(progress),
-    '启动器更新下载进度',
+    '工作台更新下载进度',
   )
   if (downloadButton) {
     downloadButton.disabled = !update.asset || downloading || opening
@@ -1895,7 +1929,7 @@ function syncLauncherUpdateAbout() {
     progressNode,
     progressBar,
     launcherProgressView(progress),
-    '启动器更新下载进度',
+    '工作台更新下载进度',
   )
   if (progressDetail) {
     progressDetail.textContent = progress
@@ -1924,6 +1958,13 @@ function render(options = {}) {
   const samePage = view.dataset.page === state.page
   view.classList.toggle('is-settled', samePage)
   const previousScrollTop = view.scrollTop
+  const nestedScrollSnapshots = [...view.querySelectorAll('[data-scroll-preserve]')].map(
+    (element) => ({
+      key: element.dataset.scrollPreserve,
+      top: element.scrollTop,
+      left: element.scrollLeft,
+    }),
+  )
   const anchorSelector = options.anchor || ''
   const previousAnchorTop = anchorSelector
     ? view.querySelector(anchorSelector)?.getBoundingClientRect().top
@@ -1963,6 +2004,12 @@ function render(options = {}) {
   if (state.page === 'logs') scrollLogs()
   requestAnimationFrame(() => {
     const nextView = document.querySelector('#view')
+    nestedScrollSnapshots.forEach(({ key, top, left }) => {
+      const target = nextView.querySelector(`[data-scroll-preserve="${CSS.escape(key)}"]`)
+      if (!target) return
+      target.scrollTop = top
+      target.scrollLeft = left
+    })
     if (!samePage || options.scroll === 'top') {
       nextView.scrollTop = 0
       return
@@ -2045,6 +2092,7 @@ function renderScheduleComposer() {
     (label, index) =>
       `<option value="${index + 1}" ${(editing?.weekday || 1) === index + 1 ? 'selected' : ''}>${label}</option>`,
   ).join('')
+  const courseColor = editing ? scheduleCourseColor(editing) : SCHEDULE_COLORS[0]
   return `
     <div class="schedule-editor-layer" data-schedule-editor-layer>
       <section class="workspace-composer schedule-composer schedule-editor-panel" role="dialog" aria-modal="true" aria-labelledby="scheduleComposerTitle">
@@ -2082,6 +2130,34 @@ function renderScheduleComposer() {
             <span>结束节次</span>
             <input id="scheduleEndPeriod" type="number" min="1" max="20" value="${editing?.endPeriod || 2}" />
           </label>
+          <div class="field schedule-color-field">
+            <span>课程颜色</span>
+            <div class="course-color-control">
+              <input
+                id="scheduleCourseColor"
+                type="color"
+                value="${courseColor}"
+                aria-label="自定义课程颜色"
+              />
+              <div class="course-color-swatches" role="group" aria-label="常用课程颜色">
+                ${SCHEDULE_COLORS.map(
+                  (color) => `
+                    <button
+                      class="course-color-swatch ${color === courseColor ? 'selected' : ''}"
+                      type="button"
+                      data-action="choose-schedule-color"
+                      data-color="${color}"
+                      style="--swatch-color:${color}"
+                      aria-label="使用颜色 ${color}"
+                      title="${color}"
+                    >
+                      <i data-lucide="check"></i>
+                    </button>`,
+                ).join('')}
+              </div>
+              <span class="course-color-value">${courseColor}</span>
+            </div>
+          </div>
           <div class="field">
             <span>开始时间</span>
             ${timeControlMarkup(editing?.startTime || '', 'id="scheduleStartTime"')}
@@ -2363,23 +2439,25 @@ function renderSchedule() {
                       times.startTime && times.endTime
                         ? `${times.startTime}–${times.endTime}`
                         : times.startTime || times.endTime || ''
+                    const courseColor = scheduleCourseColor(course)
                     return `
                       <button
                         type="button"
-                        class="schedule-course tone-${(course.name.length + weekday) % 4} ${state.highlightScheduleCourseId === course.id ? 'is-highlighted' : ''}"
-                        style="grid-column:${course.lane + 1};grid-row:${course.startPeriod} / span ${Math.max(1, course.endPeriod - course.startPeriod + 1)}"
+                        class="schedule-course ${state.highlightScheduleCourseId === course.id ? 'is-highlighted' : ''}"
+                        style="--course-color:${courseColor};grid-column:${course.lane + 1};grid-row:${course.startPeriod} / span ${Math.max(1, course.endPeriod - course.startPeriod + 1)}"
                         title="${escapeHtml([course.name, course.location, course.teacher].filter(Boolean).join(' · '))}"
                         data-action="edit-schedule-course"
                         data-id="${escapeHtml(course.id)}"
                         data-schedule-course-id="${escapeHtml(course.id)}"
+                        data-schedule-course-color="${courseColor}"
                       >
                         <div class="schedule-course-period">
-                          <span>${course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 节` : `第 ${course.startPeriod}-${course.endPeriod} 节`}</span>
-                          ${timeLabel ? `<time>${escapeHtml(timeLabel)}</time>` : ''}
+                          <span class="schedule-course-dot" aria-hidden="true"></span>
+                          <time>${escapeHtml(timeLabel || (course.startPeriod === course.endPeriod ? `第 ${course.startPeriod} 节` : `第 ${course.startPeriod}-${course.endPeriod} 节`))}</time>
                         </div>
                         <strong>${escapeHtml(course.name)}</strong>
-                        <span>${escapeHtml([course.location, course.teacher].filter(Boolean).join(' · ') || '地点待确认')}</span>
-                        <small>${escapeHtml(scheduleWeekText(course) || '每周')}</small>
+                        <span class="schedule-course-place"><i data-lucide="map-pin"></i>${escapeHtml([course.location, course.teacher].filter(Boolean).join(' · ') || '地点待确认')}</span>
+                        <small><i data-lucide="calendar-range"></i>${escapeHtml(scheduleWeekText(course) || '每周')}</small>
                         <i class="schedule-course-edit" data-lucide="pencil"></i>
                       </button>`
                   })
@@ -2492,8 +2570,12 @@ function renderAssignments() {
   `
 }
 
-function experimentGroups(experiments) {
+function experimentGroups(experiments, storedGroups = []) {
   const groups = new Map()
+  for (const group of storedGroups) {
+    const name = String(group?.name || group || '').trim()
+    if (name) groups.set(name, [])
+  }
   for (const experiment of experiments) {
     const group = experiment.group || '未分类实验'
     const items = groups.get(group) || []
@@ -2520,7 +2602,7 @@ function renderExperiments() {
     return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取资料库</span></div>'
   }
   const experiments = state.workspace.experiments || []
-  const groups = experimentGroups(experiments)
+  const groups = experimentGroups(experiments, state.workspace.experimentGroups || [])
   const totalSize = experiments.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
   const directory = state.settings?.experimentDir || '尚未设置'
   const selectedGroup =
@@ -2530,11 +2612,14 @@ function renderExperiments() {
     <section class="page-intro action-intro">
       <div>
         <h2>资料库</h2>
-        <p>拖入任意类型的课程资料后会先生成分类建议，等你确认后再归档。课程文件夹可以随时整体改名。</p>
+        <p>按自己的学习方式建立资料库，拖入文件即可归档。根目录迁移会连同已有资料一起转移。</p>
       </div>
       <div class="button-row">
         <button class="button secondary" type="button" data-action="open-experiment-directory">
           <i data-lucide="folder-open"></i><span>打开目录</span>
+        </button>
+        <button class="button secondary" type="button" data-action="create-experiment-group">
+          <i data-lucide="folder-plus"></i><span>新建资料库</span>
         </button>
         <button class="button primary" type="button" data-action="choose-experiment-files">
           <i data-lucide="plus"></i><span>选择文件</span>
@@ -2544,7 +2629,7 @@ function renderExperiments() {
 
     <section class="experiment-metrics">
       <div><span>资料文件</span><strong>${experiments.length}</strong></div>
-      <div><span>课程文件夹</span><strong>${groups.length}</strong></div>
+      <div><span>资料库</span><strong>${groups.length}</strong></div>
       <div><span>占用空间</span><strong>${formatBytes(totalSize)}</strong></div>
       <div class="experiment-path">
         <span>根目录</span>
@@ -2568,11 +2653,11 @@ function renderExperiments() {
     ${
       groups.length
         ? `<div class="experiment-explorer">
-            <aside class="experiment-explorer-sidebar" aria-label="课程资料文件夹">
+            <aside class="experiment-explorer-sidebar" aria-label="我的资料库">
               <header class="experiment-explorer-sidebar-head">
                 <div>
-                  <span class="eyebrow">COURSE FOLDERS</span>
-                  <strong>课程文件夹</strong>
+                  <span class="eyebrow">MY LIBRARIES</span>
+                  <strong>我的资料库</strong>
                 </div>
                 <span>${groups.length}</span>
               </header>
@@ -2581,7 +2666,7 @@ function renderExperiments() {
                 <strong>资料库</strong>
                 <span>${experiments.length} 个文件</span>
               </div>
-              <div class="experiment-group-list">
+              <div class="experiment-group-list" data-scroll-preserve="experiment-groups">
                 ${groups
                   .map(
                     (group) => `
@@ -2603,6 +2688,9 @@ function renderExperiments() {
                           </button>
                           <button class="icon-button compact" type="button" data-action="open-experiment-group" data-group="${escapeHtml(group.name)}" data-tooltip="在资源管理器中打开课程文件夹" aria-label="在资源管理器中打开课程文件夹">
                             <i data-lucide="folder-open"></i>
+                          </button>
+                          <button class="icon-button compact danger" type="button" data-action="remove-experiment-group" data-group="${escapeHtml(group.name)}" data-tooltip="删除空资料库" aria-label="删除空资料库" ${group.items.length ? 'disabled' : ''}>
+                            <i data-lucide="trash-2"></i>
                           </button>
                         </span>
                       </div>`,
@@ -2651,13 +2739,16 @@ function renderExperiments() {
                         )
                         .join('')}
                     </div>`
-                  : '<div class="empty-state"><span>这个文件夹里还没有文件。</span></div>'
+                  : `<div class="empty-state experiment-group-empty">
+                      <i data-lucide="folder-plus"></i>
+                      <span>这个资料库还是空的。把文件拖到这里，或使用上方“选择文件”。</span>
+                    </div>`
               }
             </section>
           </div>`
         : `<div class="empty-state experiment-empty">
             <i data-lucide="file-stack"></i>
-            <span>资料库还是空的。拖入第一份资料，工作站会替你建立课程文件夹。</span>
+            <span>还没有资料库。新建一个资料库后，把文件直接拖到它上面即可归档。</span>
           </div>`
     }
   `
@@ -2963,9 +3054,12 @@ function renderLogs() {
     <section class="page-intro">
       <div>
         <h2>运行日志</h2>
-        <p>日志同时保存在本机，API Key 和提示词不会由启动器主动写入日志。</p>
+        <p>日志同时保存在本机，API Key 和提示词不会由工作台主动写入日志。</p>
       </div>
       <div class="button-row">
+        <button class="button secondary" type="button" data-action="choose-log-dir">
+          <i data-lucide="folder-cog"></i><span>更改目录</span>
+        </button>
         <button class="button secondary" type="button" data-action="open-logs">
           <i data-lucide="folder-open"></i><span>日志目录</span>
         </button>
@@ -2976,7 +3070,7 @@ function renderLogs() {
     </section>
     <section class="log-console-shell">
       <div class="console-toolbar">
-        <span><i data-lucide="terminal"></i> launcher.log</span>
+        <span><i data-lucide="terminal"></i> workbench.log</span>
         <span>${state.logs.length} 条记录</span>
       </div>
       <pre class="log-console" id="logConsole">${escapeHtml(
@@ -2997,7 +3091,7 @@ function renderSettings() {
     <section class="page-intro">
       <div>
         <h2>工作台设置</h2>
-        <p>这些设置只影响 ZP Workbench。DeepSeek Harness 的模型、插件和权限由官方桌面端自己管理。</p>
+        <p>这些设置只影响 ZP Workbench，课程、作业与资料数据都保存在你选择的本机位置。</p>
       </div>
       <button class="button secondary" type="button" data-action="reset-settings">
         <i data-lucide="rotate-ccw"></i><span>恢复默认</span>
@@ -3011,13 +3105,13 @@ function renderSettings() {
           <span>主题</span>
           <div class="segmented small theme" role="group" aria-label="主题">
             <button type="button" data-setting-choice="theme" data-value="system" class="${settings.theme === 'system' ? 'active' : ''}">
-              <i data-lucide="monitor"></i><span>跟随系统</span>
+              <span>跟随系统</span>
             </button>
             <button type="button" data-setting-choice="theme" data-value="dark" class="${settings.theme === 'dark' ? 'active' : ''}">
-              <i data-lucide="moon"></i><span>深色</span>
+              <span>深色</span>
             </button>
             <button type="button" data-setting-choice="theme" data-value="light" class="${settings.theme === 'light' ? 'active' : ''}">
-              <i data-lucide="sun"></i><span>浅色</span>
+              <span>浅色</span>
             </button>
           </div>
         </div>
@@ -3026,21 +3120,35 @@ function renderSettings() {
 
       <div class="settings-group">
         <div class="settings-group-head"><h2>自动检查</h2><p>启动时发现 ZP Workbench 新版本会在顶部提示。</p></div>
-        ${toggleRow('autoCheckLauncher', '启动时检查启动器更新', settings.autoCheckLauncher)}
+        ${toggleRow('autoCheckLauncher', '启动时检查工作台更新', settings.autoCheckLauncher)}
         ${toggleRow('minimizeToTray', '关闭窗口后最小化到托盘', settings.minimizeToTray)}
       </div>
 
       <div class="settings-group">
-        <div class="settings-group-head"><h2>资料库</h2><p>拖入的资料会复制到这里，并按课程自动建立文件夹。</p></div>
+        <div class="settings-group-head"><h2>资料库存储</h2><p>更换根目录时会连同已有资料一起迁移。</p></div>
         <label class="field">
           <span>资料库目录</span>
           <div class="input-with-button">
-            <input type="text" data-setting="experimentDir" value="${escapeHtml(settings.experimentDir || '')}" />
-            <button class="icon-button" type="button" data-action="choose-experiment-dir" title="选择目录">
+            <input type="text" value="${escapeHtml(settings.experimentDir || '')}" readonly />
+            <button class="icon-button" type="button" data-action="choose-experiment-dir" title="选择并迁移资料库目录" aria-label="选择并迁移资料库目录">
               <i data-lucide="folder-open"></i>
             </button>
           </div>
-          <small>修改后只影响之后导入的文件，已有资料不会自动搬迁。</small>
+          <small>选择新位置后会先确认，再复制资料、更新索引并清理旧目录。</small>
+        </label>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-head"><h2>日志存储</h2><p>日志位置可以独立迁移，不受资料库目录影响。</p></div>
+        <label class="field">
+          <span>日志目录</span>
+          <div class="input-with-button">
+            <input type="text" value="${escapeHtml(state.status?.logsDir || settings.logDir || '默认目录')}" readonly />
+            <button class="icon-button" type="button" data-action="choose-log-dir" title="选择并迁移日志目录" aria-label="选择并迁移日志目录">
+              <i data-lucide="folder-open"></i>
+            </button>
+          </div>
+          <small>已有日志会转移到新目录，随后继续写入新位置。</small>
         </label>
       </div>
 
@@ -3303,13 +3411,13 @@ function renderBackup() {
           </div>
           <div class="segmented backup-provider-tabs" role="group" aria-label="同步方式">
             <button type="button" data-backup-provider="none" class="${config.syncProvider === 'none' ? 'active' : ''}">
-              <i data-lucide="circle-slash-2"></i><span>不同步</span>
+              <span>不同步</span>
             </button>
             <button type="button" data-backup-provider="local" class="${config.syncProvider === 'local' ? 'active' : ''}">
-              <i data-lucide="cloud"></i><span>OneDrive / 文件夹</span>
+              <span>OneDrive / 文件夹</span>
             </button>
             <button type="button" data-backup-provider="webdav" class="${config.syncProvider === 'webdav' ? 'active' : ''}">
-              <i data-lucide="server"></i><span>WebDAV</span>
+              <span>WebDAV</span>
             </button>
           </div>
 
@@ -3487,18 +3595,17 @@ function renderAbout() {
     <section class="about-hero">
       <img src="./icon.svg" alt="ZP Workbench" />
       <div>
-        <span class="badge info">Windows x64</span>
+        <span class="badge info">本地学习工作台</span>
         <h2>ZP Workbench</h2>
-        <p>面向本地学习、任务整理和知识沉淀的数据工作台。它把课程、作业和资料归到一处，DeepSeek Harness 的安装、模型和插件由官方桌面端自己管理。</p>
+        <p>面向本地学习、任务整理和知识沉淀的数据工作台。它把课程、作业和资料归到一处，所有学习数据都由你掌握。</p>
         <div class="about-version">
-          <span>启动器版本</span>
+          <span>工作台版本</span>
           <strong>${escapeHtml(state.status?.launcherVersion || '--')}</strong>
         </div>
       </div>
     </section>
 
-    <div class="dashboard-columns">
-      <section class="section launcher-update-section" id="launcherUpdateSection">
+    <section class="section launcher-update-section" id="launcherUpdateSection">
         <div class="section-heading"><div><h2>工作站更新</h2><p>${configured ? '从配置的发布仓库检查安装包。' : escapeHtml(launcher?.message || '尚未配置更新源。')}</p></div></div>
         <div class="update-source">
           <div><span>当前版本</span><strong>${escapeHtml(state.status?.launcherVersion || '--')}</strong></div>
@@ -3517,12 +3624,12 @@ function renderAbout() {
               </div>`
             : ''
         }
-        <div class="about-update-progress ${progressView.active ? '' : 'hidden'} ${progressView.indeterminate ? 'is-indeterminate' : ''}" id="launcherAboutProgress" role="progressbar" aria-label="启动器更新下载进度" aria-valuemin="0" aria-valuemax="100" ${progressView.indeterminate ? '' : `aria-valuenow="${Math.round(progressView.percent)}"`}>
+        <div class="about-update-progress ${progressView.active ? '' : 'hidden'} ${progressView.indeterminate ? 'is-indeterminate' : ''}" id="launcherAboutProgress" role="progressbar" aria-label="工作台更新下载进度" aria-valuemin="0" aria-valuemax="100" ${progressView.indeterminate ? '' : `aria-valuenow="${Math.round(progressView.percent)}"`}>
           <span id="launcherAboutProgressBar" ${progressView.indeterminate ? '' : `style="transform:scaleX(${progressView.percent / 100})"`}></span>
         </div>
         <div class="button-row">
           <button class="button secondary" type="button" data-action="check-launcher" ${configured && !launcher?.checking ? '' : 'disabled'}>
-            <i data-lucide="refresh-cw"></i><span>检查启动器更新</span>
+            <i data-lucide="refresh-cw"></i><span>检查工作台更新</span>
           </button>
           <button class="button primary" id="launcherAboutDownloadButton" type="button" data-action="download-launcher" ${launcher?.updateAvailable && launcher?.asset && !downloading && !opening ? '' : 'disabled'}>
             <i data-lucide="download"></i><span id="launcherAboutDownloadLabel">${downloadLabel}</span>
@@ -3530,21 +3637,11 @@ function renderAbout() {
         </div>
         <p class="setting-hint" id="launcherAboutProgressDetail">${escapeHtml(progress ? formatLauncherProgress(progress) : launcher?.message || '')}</p>
         ${releaseNotes ? `<p class="setting-hint">更新摘要：${escapeHtml(releaseNotes)}</p>` : ''}
-      </section>
-
-      <section class="section">
-        <div class="section-heading"><div><h2>官方资源</h2><p>查看上游文档、源码和发行说明。</p></div></div>
-        <div class="link-list">
-          <button type="button" data-url="${escapeHtml(state.release.docsUrl)}"><i data-lucide="book-open"></i><span>DeepSeek Harness 文档</span><i data-lucide="external-link"></i></button>
-          <button type="button" data-url="${escapeHtml(state.release.htmlUrl)}"><i data-lucide="code-xml"></i><span>官方 GitHub Releases</span><i data-lucide="external-link"></i></button>
-          <button type="button" data-url="https://www.npmjs.com/package/@deepseek-ai/dsh"><i data-lucide="package"></i><span>npm 包页面</span><i data-lucide="external-link"></i></button>
-        </div>
-      </section>
-    </div>
+    </section>
 
     <section class="legal-note">
       <i data-lucide="info"></i>
-      <p>这是独立的社区启动器，与 DeepSeek 不存在隶属或背书关系。DeepSeek Harness 本体遵循其官方开源许可；使用者应自行确认插件来源和模型服务条款。</p>
+      <p>ZP Workbench 是本地学习数据工作台。资料、日志和备份都保存在你选择的本机位置。</p>
     </section>
   `
 }
@@ -3891,6 +3988,7 @@ function collectScheduleInput() {
     startTime: document.querySelector('#scheduleStartTime')?.value || '',
     endTime: document.querySelector('#scheduleEndTime')?.value || '',
     weekText: document.querySelector('#scheduleWeekText')?.value || '',
+    color: normalizeHexColor(document.querySelector('#scheduleCourseColor')?.value),
   }
 }
 
@@ -4487,6 +4585,9 @@ async function handleAction(action, element) {
       state.editingScheduleCourseId = null
       render()
       break
+    case 'choose-schedule-color':
+      syncScheduleColorControls(element.dataset.color)
+      break
     case 'edit-schedule-course': {
       const course = state.workspace?.schedule?.courses.find(
         (item) => item.id === element.dataset.id,
@@ -4621,6 +4722,34 @@ async function handleAction(action, element) {
       state.experimentSelectedGroup = element.dataset.group || null
       render()
       break
+    case 'create-experiment-group': {
+      const name = await openTextDialog({
+        title: '新建资料库',
+        description: '资料库会显示在左侧列表，也可以直接把文件拖到它上面完成归档。',
+        label: '资料库名称',
+        confirmLabel: '创建资料库',
+        maxLength: 64,
+      })
+      if (!name) break
+      const result = await guard(() => api.createExperimentGroup(name), '新建资料库失败')
+      applyWorkspace(result.workspace)
+      state.experimentSelectedGroup = result.group
+      render()
+      toast(`资料库“${result.group}”已创建。`, 'success')
+      break
+    }
+    case 'remove-experiment-group': {
+      const group = element.dataset.group || ''
+      if (!group || !window.confirm(`删除空资料库“${group}”吗？文件夹中的资料不会被自动删除。`)) {
+        return
+      }
+      const result = await guard(() => api.removeExperimentGroup(group), '删除资料库失败')
+      applyWorkspace(result.workspace)
+      if (state.experimentSelectedGroup === group) state.experimentSelectedGroup = null
+      render()
+      toast(`资料库“${group}”已删除。`, 'success')
+      break
+    }
     case 'rename-experiment-group': {
       const currentGroup = element.dataset.group || ''
       const nextGroup = await openTextDialog({
@@ -4696,7 +4825,7 @@ async function handleAction(action, element) {
       break
     }
     case 'clear-logs':
-      if (!window.confirm('确定清空当前启动器日志吗？')) return
+      if (!window.confirm('确定清空当前工作台日志吗？')) return
       state.logs = []
       await api.clearLogs()
       render()
@@ -5051,11 +5180,69 @@ async function handleAction(action, element) {
       break
     }
     case 'choose-experiment-dir': {
+      const current = state.settings?.experimentDir || ''
       const selected = await api.chooseExperimentDir()
-      if (selected) {
-        await persistSettingsPatch({ experimentDir: selected }, 'experimentDir')
+      if (!selected || selected === current) break
+      if (
+        !window.confirm(
+          `把资料库根目录迁移到：\n${selected}\n\n当前目录中的资料会转移到新目录，完成后原目录会被移除。继续吗？`,
+        )
+      ) {
+        break
+      }
+      const taskId = beginUiTask('正在迁移资料库', '正在复制并更新资料索引，请勿关闭工作站。')
+      try {
+        const result = await api.changeExperimentRoot(selected)
+        applyWorkspace(result.workspace)
+        state.settings = await api.getSettings()
         render()
-        toast('资料库目录已更新。之后的资料会保存到新位置。', 'success')
+        const extra = [
+          result.renamedConflicts ? `${result.renamedConflicts} 个重名文件已自动改名` : '',
+          result.skipped?.length ? `${result.skipped.length} 个特殊文件未迁移` : '',
+          result.cleanupError ? '旧目录未能完全清理' : '',
+        ]
+          .filter(Boolean)
+          .join('；')
+        completeUiTask(
+          taskId,
+          '资料库迁移完成',
+          `已迁移 ${result.copiedFiles || 0} 个文件到新目录。`,
+        )
+        toast(
+          extra
+            ? `资料库目录已迁移，${extra}。`
+            : `资料库目录已迁移，${result.copiedFiles || 0} 个文件已转移。`,
+          extra ? 'info' : 'success',
+          7600,
+        )
+      } catch (error) {
+        failUiTask(taskId, '资料库迁移失败', error.message)
+        throw error
+      }
+      break
+    }
+    case 'choose-log-dir': {
+      const current = state.status?.logsDir || state.settings?.logDir || ''
+      const selected = await api.chooseLogDir()
+      if (!selected || selected === current) break
+      if (
+        !window.confirm(
+          `把日志目录迁移到：\n${selected}\n\n现有日志会转移到新目录，之后的新日志也会写在那里。继续吗？`,
+        )
+      ) {
+        break
+      }
+      const taskId = beginUiTask('正在迁移日志', '正在转移已有日志并更新写入位置。')
+      try {
+        const result = await api.changeLogDirectory(selected)
+        state.settings = result.settings || (await api.getSettings())
+        state.status = { ...(state.status || {}), logsDir: result.newDir }
+        render()
+        completeUiTask(taskId, '日志迁移完成', `已迁移 ${result.movedFiles || 0} 个日志文件。`)
+        toast(`日志目录已迁移，${result.movedFiles || 0} 个文件已转移。`, 'success')
+      } catch (error) {
+        failUiTask(taskId, '日志迁移失败', error.message)
+        throw error
       }
       break
     }
@@ -5414,6 +5601,9 @@ document.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('input', (event) => {
+  if (event.target.id === 'scheduleCourseColor') {
+    syncScheduleColorControls(event.target.value)
+  }
   if (event.target.matches?.('[data-time-input]')) {
     event.target.value = formatTimeInputValue(event.target.value)
     const control = event.target.closest('[data-time-control]')
@@ -5807,7 +5997,7 @@ api.on('launcher:download-progress', (progress) => {
     showTask({
       ...taskProgress,
       state: 'error',
-      label: '启动器更新下载失败',
+      label: '工作台更新下载失败',
       detail: progress.error || '请检查网络后重试。',
     })
   } else if (progress.phase === 'opening') {
@@ -5863,7 +6053,6 @@ async function start() {
     state.settings = bootstrap.settings
     state.onboarding = bootstrap.settings?.onboarding || { ...defaultOnboarding }
     state.status = bootstrap.status
-    state.release = bootstrap.release
     state.launcherUpdate = bootstrap.launcherUpdate
     state.logs = bootstrap.logs || []
     state.workspace = bootstrap.workspace || {
@@ -5913,7 +6102,7 @@ async function start() {
     document.querySelector('#view').innerHTML = `
       <section class="fatal-panel">
         <i data-lucide="circle-alert"></i>
-        <h2>启动器初始化失败</h2>
+        <h2>工作台初始化失败</h2>
         <p>${escapeHtml(error.message)}</p>
         <button class="button primary" type="button" onclick="location.reload()">重新加载</button>
       </section>

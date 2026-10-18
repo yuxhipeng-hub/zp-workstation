@@ -40,6 +40,13 @@ function cleanText(value, maxLength = 240) {
     .slice(0, maxLength)
 }
 
+function cleanColor(value) {
+  const match = cleanText(value, 24).match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!match) return ''
+  const hex = match[1].length === 3 ? [...match[1]].map((part) => part + part).join('') : match[1]
+  return `#${hex.toUpperCase()}`
+}
+
 function compactText(value) {
   return cleanText(value).replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
 }
@@ -853,6 +860,7 @@ function normalizeCourses(courses) {
       endTime: cleanText(course.endTime, 8),
       weeks: uniqueNumbers(course.weeks || [], 30),
       weekText: cleanText(course.weekText, 80),
+      color: cleanColor(course.color),
       raw: cleanText(course.raw, 1000),
     })
   }
