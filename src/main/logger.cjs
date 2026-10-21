@@ -3,6 +3,10 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 
+const MAX_MEMORY_ENTRIES = 800
+const MAX_LOG_TAIL_BYTES = 1024 * 1024
+const LOG_ENTRY_PATTERN = /^(\S+) \[(INFO|WARN|ERROR)\] \[([^\]]+)\] (.*)$/
+
 function samePath(left, right) {
   return (
     path.resolve(left).toLocaleLowerCase('zh-CN') === path.resolve(right).toLocaleLowerCase('zh-CN')
@@ -43,6 +47,55 @@ async function moveEntry(source, targetDirectory) {
   return destination
 }
 
+function readLogTail(filePath) {
+  try {
+    const stats = fs.statSync(filePath)
+    if (!stats.isFile() || stats.size === 0) return ''
+    const start = Math.max(0, stats.size - MAX_LOG_TAIL_BYTES)
+    const length = stats.size - start
+    const buffer = Buffer.allocUnsafe(length)
+    const descriptor = fs.openSync(filePath, 'r')
+    try {
+      fs.readSync(descriptor, buffer, 0, length, start)
+    } finally {
+      fs.closeSync(descriptor)
+    }
+    const text = buffer.toString('utf8')
+    if (start === 0) return text
+    const firstCompleteLine = text.indexOf('\n')
+    return firstCompleteLine === -1 ? '' : text.slice(firstCompleteLine + 1)
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('Unable to read existing launcher log:', error.message)
+    }
+    return ''
+  }
+}
+
+function parseLogEntries(text) {
+  const entries = []
+  let current = null
+  const lines = String(text || '').split(/\r?\n/)
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const match = line.match(LOG_ENTRY_PATTERN)
+    if (match) {
+      if (current) entries.push(current)
+      current = {
+        id: `persisted-${entries.length}-${match[1]}`,
+        at: match[1],
+        level: match[2].toLowerCase(),
+        scope: match[3],
+        message: match[4],
+      }
+    } else if (current && (line !== '' || index < lines.length - 1)) {
+      current.message += `\n${line}`
+    }
+  }
+  if (current) entries.push(current)
+  return entries.slice(-MAX_MEMORY_ENTRIES)
+}
+
 class Logger extends EventEmitter {
   constructor(userDataDir, preferredLogDir = '') {
     super()
@@ -66,7 +119,7 @@ class Logger extends EventEmitter {
     } catch (error) {
       console.warn('Unable to rename the legacy log file:', error.message)
     }
-    this.entries = []
+    this.entries = parseLogEntries(readLogTail(this.logFile))
   }
 
   write(scope, level, message) {
@@ -79,7 +132,7 @@ class Logger extends EventEmitter {
       message: clean,
     }
     this.entries.push(entry)
-    if (this.entries.length > 800) this.entries.shift()
+    if (this.entries.length > MAX_MEMORY_ENTRIES) this.entries.shift()
     try {
       fs.appendFileSync(
         this.logFile,
