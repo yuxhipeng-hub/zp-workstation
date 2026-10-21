@@ -27,6 +27,9 @@ const state = {
   aihotItems: [],
   aihotError: null,
   aihotBusy: false,
+  aiConfig: null,
+  aiProfileEditorOpen: false,
+  aiEditingProfileId: null,
   newsTab: 'selected',
   newsCategory: '',
   newsWindow: '7d',
@@ -85,6 +88,7 @@ const pageMeta = {
   assignments: ['学习', '作业收件箱', '收集零碎任务，按截止时间和处理状态逐项清空。'],
   experiments: ['学习', '资料库', '按课程归纳文件，像 Windows 文件夹一样逐层展开。'],
   news: ['资讯', 'AI 资讯', '内置阅读 AI 行业动态：精选条目、热点事件综述与每日日报。'],
+  ai: ['系统', '模型配置', '管理模型服务、API Key、调用协议和能力参数。'],
   guide: ['帮助', '指南', '先了解工作站能做什么，再按顺序完成第一次配置。'],
   logs: ['诊断', '日志', '查看本机启动、更新和运行过程中的事件记录。'],
   settings: ['偏好', '设置', '调整主题、数据位置和自动检查策略。'],
@@ -216,6 +220,70 @@ const assignmentPriorityMeta = {
   high: { label: '高优先级', tone: 'danger' },
   medium: { label: '普通', tone: 'neutral' },
   low: { label: '低优先级', tone: 'neutral' },
+}
+
+const AI_PROVIDER_PRESETS = [
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-chat',
+  },
+  {
+    id: 'kimi',
+    label: 'Kimi / Moonshot',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    model: '',
+  },
+  {
+    id: 'qwen',
+    label: '通义千问',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: '',
+  },
+  {
+    id: 'zhipu',
+    label: '智谱 GLM',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    model: '',
+  },
+  {
+    id: 'siliconflow',
+    label: 'SiliconFlow',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    model: '',
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: '',
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama（本机）',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    model: '',
+  },
+  {
+    id: 'custom',
+    label: '自定义 OpenAI Compatible',
+    baseUrl: '',
+    model: '',
+  },
+]
+
+function aiProfiles() {
+  return Array.isArray(state.aiConfig?.profiles) ? state.aiConfig.profiles : []
+}
+
+function activeAiProfile() {
+  const activeId = state.aiConfig?.activeProfileId || ''
+  return aiProfiles().find((profile) => profile.id === activeId) || null
+}
+
+function aiProtocolLabel(protocol) {
+  return protocol === 'responses' ? 'Responses API' : 'Chat Completions'
 }
 
 function assignmentStats(workspace = state.workspace) {
@@ -828,9 +896,16 @@ function guideSteps() {
       action: { label: '打开课表', page: 'schedule' },
     },
     {
+      id: 'ai',
+      title: '配置模型',
+      body: '至少添加一个可用的模型和 API Key，才能在作业收件箱里直接生成执行计划。',
+      done: aiProfiles().some((profile) => profile.hasKey || !profile.requiresKey),
+      action: { label: '打开模型配置', page: 'ai' },
+    },
+    {
       id: 'assignments',
       title: '添加第一条作业',
-      body: '零碎任务先收进「作业收件箱」，每条都能生成一段结构化提示词，复制给常用的 AI 工具拆解步骤。',
+      body: '零碎任务先收进「作业收件箱」，可以直接用配置好的模型拆解步骤，也可以复制结构化提示词到常用 AI 工具。',
       done: Boolean(workspace.assignments?.length),
       action: { label: '打开作业收件箱', page: 'assignments' },
     },
@@ -839,7 +914,7 @@ function guideSteps() {
       title: '确认备份与恢复',
       body: '工作站会定期自动备份。建议现在手动创建一份，以后换电脑可以用快照导出、导入整套数据。',
       done: manual.has('backup'),
-      action: { label: '去备份设置', page: 'settings' },
+      action: { label: '去备份与同步', page: 'backup' },
       manual: true,
     },
   ]
@@ -863,7 +938,7 @@ function renderWelcomeOverlay() {
       <section class="welcome-card" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
         <span class="welcome-eyebrow">WELCOME</span>
         <h2 id="welcomeTitle">欢迎使用 ZP Workbench</h2>
-        <p class="welcome-lead">一个面向学习与知识整理的本地工作站。它把日常学习中的内容集中起来，再用你自己的 DeepSeek Harness 和 API 提供智能辅助。</p>
+        <p class="welcome-lead">一个面向学习与知识整理的本地工作站。它把日常学习中的内容集中起来，再使用你自己配置的 AI 模型提供智能辅助。</p>
         <div class="welcome-points">
           <div>
             <i data-lucide="layout-dashboard"></i>
@@ -875,7 +950,7 @@ function renderWelcomeOverlay() {
           </div>
           <div>
             <i data-lucide="sparkles"></i>
-            <span><strong>智能辅助</strong>在需要时调用 DSH，帮助理解资料和处理复杂任务。</span>
+            <span><strong>智能辅助</strong>用你配置的模型拆解作业、制定计划和处理复杂任务。</span>
           </div>
           <div>
             <i data-lucide="shield-check"></i>
@@ -1986,6 +2061,7 @@ function render(options = {}) {
     assignments: renderAssignments,
     experiments: renderExperiments,
     news: renderNews,
+    ai: renderAiModels,
     guide: renderGuide,
     logs: renderLogs,
     settings: renderSettings,
@@ -2479,6 +2555,239 @@ function renderSchedule() {
   `
 }
 
+function renderAssignmentAiPlan(plan) {
+  if (!plan || !Array.isArray(plan.steps) || !plan.steps.length) return ''
+  const list = (items, ordered = false) => {
+    if (!Array.isArray(items) || !items.length) return ''
+    const tag = ordered ? 'ol' : 'ul'
+    return `<${tag}>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</${tag}>`
+  }
+  return `
+    <details class="assignment-ai-plan">
+      <summary>
+        <span><i data-lucide="list-checks"></i>AI 执行计划</span>
+        <small>${escapeHtml(plan.provider || 'AI')} · ${escapeHtml(plan.model || '')} · ${plan.steps.length} 步 · ${escapeHtml(formatTime(plan.generatedAt))}</small>
+      </summary>
+      <div class="assignment-ai-plan-body">
+        ${plan.summary ? `<p>${escapeHtml(plan.summary)}</p>` : ''}
+        ${plan.prerequisites?.length ? `<section><strong>前置条件</strong>${list(plan.prerequisites)}</section>` : ''}
+        <section><strong>执行步骤</strong>${list(plan.steps, true)}</section>
+        ${plan.risks?.length ? `<section><strong>风险与易错点</strong>${list(plan.risks)}</section>` : ''}
+        ${plan.checklist?.length ? `<section><strong>提交前检查</strong>${list(plan.checklist)}</section>` : ''}
+      </div>
+    </details>
+  `
+}
+
+function renderAiProfileEditor() {
+  if (!state.aiProfileEditorOpen) return ''
+  const editing = aiProfiles().find((profile) => profile.id === state.aiEditingProfileId)
+  return `
+    <form class="ai-profile-editor" id="aiProfileForm">
+      <div class="ai-profile-editor-head">
+        <div>
+          <strong>${editing ? '编辑模型配置' : '添加模型配置'}</strong>
+          <span>Key 只保存在 Windows 安全凭据存储中，不会进入工作区或备份。</span>
+        </div>
+        <button class="icon-button compact" type="button" data-action="close-ai-profile" title="关闭">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="ai-profile-fields">
+        <label class="field">
+          <span>服务商预设</span>
+          <select id="aiProfilePreset">
+            ${AI_PROVIDER_PRESETS.map(
+              (preset) =>
+                `<option value="${escapeHtml(preset.id)}" ${preset.id === 'custom' ? 'selected' : ''}>${escapeHtml(preset.label)}</option>`,
+            ).join('')}
+          </select>
+        </label>
+        <label class="field">
+          <span>显示名称</span>
+          <input id="aiProfileLabel" type="text" maxlength="80" required value="${escapeHtml(editing?.label || '')}" placeholder="例如：DeepSeek 主模型" />
+        </label>
+        <label class="field ai-profile-field-wide">
+          <span>Base URL</span>
+          <input id="aiProfileBaseUrl" type="url" maxlength="2048" required value="${escapeHtml(editing?.baseUrl || '')}" placeholder="https://api.example.com/v1" />
+        </label>
+        <label class="field">
+          <span>模型 ID</span>
+          <input id="aiProfileModel" type="text" maxlength="160" required value="${escapeHtml(editing?.model || '')}" placeholder="例如：deepseek-chat" />
+        </label>
+        <label class="field">
+          <span>API Key</span>
+          <input id="aiProfileApiKey" type="password" maxlength="4096" autocomplete="off" placeholder="${editing?.hasKey ? '已保存，留空保持不变' : '输入 API Key；本机模型可留空'}" />
+        </label>
+      </div>
+      <details class="ai-advanced-settings">
+        <summary>
+          <span class="ai-advanced-icon"><i data-lucide="sliders-horizontal"></i></span>
+          <span class="ai-advanced-copy">
+            <strong>高级模型设置</strong>
+            <small>控制调用协议、上下文长度、输出预算、推理强度和请求头。</small>
+          </span>
+          <span class="ai-advanced-toggle">
+            <span>可选配置</span>
+            <i data-lucide="chevron-down"></i>
+          </span>
+        </summary>
+        <div class="ai-advanced-content">
+          <div class="ai-advanced-section-head">
+            <strong>调用参数</strong>
+            <span>用于控制请求方式和模型的输出范围。</span>
+          </div>
+          <div class="ai-profile-fields">
+            <label class="field">
+              <span>API 协议</span>
+              <select id="aiProfileProtocol">
+                <option value="chat-completions" ${editing?.protocol !== 'responses' ? 'selected' : ''}>Chat Completions</option>
+                <option value="responses" ${editing?.protocol === 'responses' ? 'selected' : ''}>Responses API</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>请求超时（秒）</span>
+              <input id="aiProfileTimeout" type="number" min="5" max="300" step="1" value="${Math.round((editing?.timeoutMs || 90000) / 1000)}" />
+            </label>
+            <label class="field">
+              <span>上下文窗口（tokens）</span>
+              <input id="aiProfileContextWindow" type="number" min="0" max="10000000" step="1024" value="${editing?.contextWindow || 0}" />
+            </label>
+            <label class="field">
+              <span>默认最大输出（tokens）</span>
+              <input id="aiProfileMaxOutput" type="number" min="64" max="100000" step="1" value="${editing?.maxOutputTokens || 1800}" />
+            </label>
+            <label class="field">
+              <span>温度</span>
+              <input id="aiProfileTemperature" type="number" min="0" max="2" step="0.1" value="${editing?.temperature ?? 0.2}" />
+            </label>
+            <label class="field">
+              <span>推理强度</span>
+              <select id="aiProfileReasoningEffort">
+                <option value="" ${!editing?.reasoningEffort ? 'selected' : ''}>默认</option>
+                <option value="low" ${editing?.reasoningEffort === 'low' ? 'selected' : ''}>低</option>
+                <option value="medium" ${editing?.reasoningEffort === 'medium' ? 'selected' : ''}>中</option>
+                <option value="high" ${editing?.reasoningEffort === 'high' ? 'selected' : ''}>高</option>
+              </select>
+            </label>
+            <label class="field ai-profile-field-wide">
+              <span>附加请求头（JSON）</span>
+              <textarea id="aiProfileHeaders" rows="3" spellcheck="false" placeholder='{"HTTP-Referer":"https://example.com"}'>${escapeHtml(JSON.stringify(editing?.headers || {}, null, 2))}</textarea>
+              <small>用于 OpenRouter 等服务的追踪头；密钥请只填写在上方 API Key 字段。</small>
+            </label>
+          </div>
+          <div class="ai-advanced-section-head">
+            <strong>能力声明</strong>
+            <span>仅用于标记模型能力，不会改变服务商的账户权限。</span>
+          </div>
+          <div class="ai-capability-row">
+            <label><input id="aiProfileSupportsTools" type="checkbox" ${editing?.supportsTools ? 'checked' : ''} /><span>支持工具调用</span></label>
+            <label><input id="aiProfileSupportsVision" type="checkbox" ${editing?.supportsVision ? 'checked' : ''} /><span>支持视觉输入</span></label>
+          </div>
+        </div>
+      </details>
+      ${
+        editing?.hasKey
+          ? `<label class="ai-clear-key">
+              <input id="aiProfileClearKey" type="checkbox" />
+              <span>删除当前已保存的 API Key</span>
+            </label>`
+          : ''
+      }
+      <div class="button-row ai-profile-editor-actions">
+        <button class="button secondary" type="button" data-action="close-ai-profile">取消</button>
+        <button class="button primary" type="button" data-action="save-ai-profile">
+          <i data-lucide="check"></i><span>保存模型</span>
+        </button>
+      </div>
+    </form>
+  `
+}
+
+function renderAiSettings() {
+  const profiles = aiProfiles()
+  const active = activeAiProfile()
+  return `
+    <div class="settings-group settings-group-wide" id="aiSettingsGroup">
+      <div class="settings-group-head">
+        <h2>模型档案</h2>
+        <p>每个档案对应一个模型。Key 与配置分离保存，作业只发送你确认后的字段。</p>
+      </div>
+      ${
+        profiles.length
+          ? `<div class="ai-profile-list">
+              ${profiles
+                .map((profile) => {
+                  const isActive = profile.id === active?.id
+                  const keyLabel = profile.hasKey
+                    ? 'Key 已保存'
+                    : !profile.requiresKey
+                      ? '本机免 Key'
+                      : '缺少 Key'
+                  return `
+                    <div class="ai-profile-row ${isActive ? 'is-active' : ''}">
+                      <button class="ai-profile-select" type="button" data-action="activate-ai-profile" data-id="${escapeHtml(profile.id)}" title="${isActive ? '当前模型' : '设为当前模型'}">
+                        <span class="ai-profile-dot"><i data-lucide="${isActive ? 'check' : 'server'}"></i></span>
+                        <span class="ai-profile-copy">
+                          <strong>${escapeHtml(profile.label)}</strong>
+                          <small>${escapeHtml(profile.model)} · ${escapeHtml(aiProtocolLabel(profile.protocol))} · ${escapeHtml(profile.baseUrl)}</small>
+                        </span>
+                        <span class="badge ${profile.hasKey || !profile.requiresKey ? 'info' : 'danger'}">${keyLabel}</span>
+                      </button>
+                      <div class="ai-profile-actions">
+                        <button class="icon-button compact" type="button" data-action="test-ai-profile" data-id="${escapeHtml(profile.id)}" title="测试连接">
+                          <i data-lucide="plug-zap"></i>
+                        </button>
+                        <button class="icon-button compact" type="button" data-action="edit-ai-profile" data-id="${escapeHtml(profile.id)}" title="编辑模型">
+                          <i data-lucide="pencil"></i>
+                        </button>
+                        <button class="icon-button compact danger" type="button" data-action="delete-ai-profile" data-id="${escapeHtml(profile.id)}" title="删除模型">
+                          <i data-lucide="trash-2"></i>
+                        </button>
+                      </div>
+                    </div>
+                  `
+                })
+                .join('')}
+            </div>`
+          : '<div class="ai-profile-empty"><i data-lucide="key-round"></i><span>还没有模型配置。点击右上角“添加模型”开始配置。</span></div>'
+      }
+      ${
+        active
+          ? `<p class="setting-hint ai-profile-summary">当前：${escapeHtml(active.label)} · ${escapeHtml(active.model)} · ${escapeHtml(aiProtocolLabel(active.protocol))}${active.hasKey || !active.requiresKey ? '' : ' · 请补充 API Key'}</p>`
+          : ''
+      }
+      ${renderAiProfileEditor()}
+    </div>
+  `
+}
+
+function renderAiModels() {
+  const profiles = aiProfiles()
+  const active = activeAiProfile()
+  const activeReady = Boolean(active && (active.hasKey || !active.requiresKey))
+  return `
+    <section class="page-intro action-intro">
+      <div>
+        <h2>模型配置</h2>
+        <p>管理 OpenAI Compatible 模型服务、API Key、调用协议和能力参数。作业拆解始终使用当前启用的模型。</p>
+      </div>
+      <button class="button primary" type="button" data-action="open-ai-profile">
+        <i data-lucide="plus"></i><span>添加模型</span>
+      </button>
+    </section>
+
+    <div class="workspace-metrics ai-model-metrics">
+      <div><span>模型档案</span><strong>${profiles.length}</strong></div>
+      <div><span>当前模型</span><strong>${escapeHtml(active?.label || '未配置')}</strong></div>
+      <div><span>API 协议</span><strong>${escapeHtml(active ? aiProtocolLabel(active.protocol) : '--')}</strong></div>
+      <div><span>连接状态</span><strong>${active ? (activeReady ? '可调用' : '缺少 Key') : '未配置'}</strong></div>
+    </div>
+
+    ${renderAiSettings()}
+  `
+}
+
 function renderAssignments() {
   if (!state.workspace) {
     return '<div class="loading-panel"><i data-lucide="loader"></i><span>正在读取作业收件箱</span></div>'
@@ -2496,7 +2805,7 @@ function renderAssignments() {
     <section class="page-intro action-intro">
       <div>
         <h2>把杂碎作业先收进来</h2>
-        <p>录标题、课程和截止时间即可，详细信息后再补。每条作业都能生成结构化提示词，交给 DSH 拆解。</p>
+        <p>录标题、课程和截止时间即可，详细信息后再补。选择你配置的模型，把零散任务拆成可执行步骤。</p>
       </div>
       <button class="button primary" type="button" data-action="open-assignment-composer">
         <i data-lucide="plus"></i><span>添加作业</span>
@@ -2534,6 +2843,7 @@ function renderAssignments() {
                     assignmentPriorityMeta[assignment.priority] || assignmentPriorityMeta.medium
                   const status =
                     assignmentStatusMeta[assignment.status] || assignmentStatusMeta.inbox
+                  const activeProfile = activeAiProfile()
                   return `
                     <article class="assignment-card status-${escapeHtml(assignment.status)} ${state.highlightAssignmentId === assignment.id ? 'highlight' : ''}" data-assignment-id="${escapeHtml(assignment.id)}">
                       <button class="assignment-state" type="button" data-action="cycle-assignment" data-id="${escapeHtml(assignment.id)}" title="切换到${assignmentStatusMeta[status.next].label}">
@@ -2548,10 +2858,14 @@ function renderAssignments() {
                         </div>
                         <h3>${escapeHtml(assignment.title)}</h3>
                         ${assignment.notes ? `<p>${escapeHtml(assignment.notes)}</p>` : ''}
+                        ${renderAssignmentAiPlan(assignment.aiPlan)}
                       </div>
                       <div class="assignment-actions">
-                        <button class="icon-button compact" type="button" data-action="copy-assignment-prompt" data-id="${escapeHtml(assignment.id)}" title="复制处理提示词">
+                        <button class="icon-button compact" type="button" data-action="run-assignment-ai" data-id="${escapeHtml(assignment.id)}" title="${activeProfile && (activeProfile.hasKey || !activeProfile.requiresKey) ? `用 ${activeProfile.label} 拆解作业` : '配置 AI 模型后可拆解作业'}">
                           <i data-lucide="sparkles"></i>
+                        </button>
+                        <button class="icon-button compact" type="button" data-action="copy-assignment-prompt" data-id="${escapeHtml(assignment.id)}" title="复制处理提示词">
+                          <i data-lucide="copy"></i>
                         </button>
                         <button class="icon-button compact" type="button" data-action="edit-assignment" data-id="${escapeHtml(assignment.id)}" title="编辑作业">
                           <i data-lucide="pencil"></i>
@@ -3087,6 +3401,8 @@ function renderLogs() {
 
 function renderSettings() {
   const settings = state.settings
+  const currentAi = activeAiProfile()
+  const latestBackup = state.backups?.[0] || null
   return `
     <section class="page-intro">
       <div>
@@ -3119,41 +3435,35 @@ function renderSettings() {
       </div>
 
       <div class="settings-group">
-        <div class="settings-group-head"><h2>自动检查</h2><p>启动时发现 ZP Workbench 新版本会在顶部提示。</p></div>
+        <div class="settings-group-head"><h2>启动与托盘</h2><p>控制更新检查、后台驻留和关闭窗口行为。</p></div>
         ${toggleRow('autoCheckLauncher', '启动时检查工作台更新', settings.autoCheckLauncher)}
         ${toggleRow('minimizeToTray', '关闭窗口后最小化到托盘', settings.minimizeToTray)}
       </div>
 
-      <div class="settings-group">
-        <div class="settings-group-head"><h2>资料库存储</h2><p>更换根目录时会连同已有资料一起迁移。</p></div>
-        <label class="field">
-          <span>资料库目录</span>
-          <div class="input-with-button">
-            <input type="text" value="${escapeHtml(settings.experimentDir || '')}" readonly />
-            <button class="icon-button" type="button" data-action="choose-experiment-dir" title="选择并迁移资料库目录" aria-label="选择并迁移资料库目录">
-              <i data-lucide="folder-open"></i>
-            </button>
-          </div>
-          <small>选择新位置后会先确认，再复制资料、更新索引并清理旧目录。</small>
-        </label>
-      </div>
-
-      <div class="settings-group">
-        <div class="settings-group-head"><h2>日志存储</h2><p>日志位置可以独立迁移，不受资料库目录影响。</p></div>
-        <label class="field">
-          <span>日志目录</span>
-          <div class="input-with-button">
-            <input type="text" value="${escapeHtml(state.status?.logsDir || settings.logDir || '默认目录')}" readonly />
-            <button class="icon-button" type="button" data-action="choose-log-dir" title="选择并迁移日志目录" aria-label="选择并迁移日志目录">
-              <i data-lucide="folder-open"></i>
-            </button>
-          </div>
-          <small>已有日志会转移到新目录，随后继续写入新位置。</small>
-        </label>
-      </div>
-
-      <div class="settings-group">
-        <div class="settings-group-head"><h2>数据与维护</h2><p>快速定位本机数据位置。</p></div>
+      <div class="settings-group settings-group-wide data-storage-group">
+        <div class="settings-group-head"><h2>数据与存储</h2><p>管理课表、作业、资料和日志的本机位置。</p></div>
+        <div class="two-fields">
+          <label class="field">
+            <span>资料库目录</span>
+            <div class="input-with-button">
+              <input type="text" value="${escapeHtml(settings.experimentDir || '')}" readonly />
+              <button class="icon-button" type="button" data-action="choose-experiment-dir" title="选择并迁移资料库目录" aria-label="选择并迁移资料库目录">
+                <i data-lucide="folder-open"></i>
+              </button>
+            </div>
+            <small>更换位置时会先复制资料、更新索引，再清理旧目录。</small>
+          </label>
+          <label class="field">
+            <span>日志目录</span>
+            <div class="input-with-button">
+              <input type="text" value="${escapeHtml(state.status?.logsDir || settings.logDir || '默认目录')}" readonly />
+              <button class="icon-button" type="button" data-action="choose-log-dir" title="选择并迁移日志目录" aria-label="选择并迁移日志目录">
+                <i data-lucide="folder-open"></i>
+              </button>
+            </div>
+            <small>已有日志会转移到新目录，之后继续写入新位置。</small>
+          </label>
+        </div>
         <div class="path-list">
           <button type="button" data-action="open-experiment-directory"><i data-lucide="folder-open"></i><span><strong>资料库</strong><small>${escapeHtml(settings.experimentDir || '')}</small></span><i data-lucide="chevron-right"></i></button>
           <button type="button" data-action="open-logs"><i data-lucide="file-text"></i><span><strong>日志目录</strong><small>${escapeHtml(state.status?.logsDir || '')}</small></span><i data-lucide="chevron-right"></i></button>
@@ -3197,74 +3507,26 @@ function renderSettings() {
 
       <div class="settings-group settings-group-wide">
         <div class="settings-group-head">
-          <h2>备份与恢复</h2>
-          <p>完整备份、加密、OneDrive 文件夹和 WebDAV 同步已经集中到独立页面；这里保留轻量数据快照和文件校验。</p>
+          <h2>连接与工具</h2>
+          <p>模型和备份拥有独立管理页面，这里显示当前状态并提供入口。</p>
         </div>
-        <div class="button-row">
-          <button class="button primary" type="button" data-page-jump="backup">
-            <i data-lucide="archive-restore"></i><span>打开备份与同步</span>
+        <div class="path-list settings-link-list">
+          <button type="button" data-page-jump="ai">
+            <i data-lucide="bot"></i>
+            <span>
+              <strong>模型配置</strong>
+              <small>${currentAi ? `${escapeHtml(currentAi.label)} · ${escapeHtml(currentAi.model)} · ${escapeHtml(aiProtocolLabel(currentAi.protocol))}` : '尚未配置模型'}</small>
+            </span>
+            <i data-lucide="chevron-right"></i>
           </button>
-          <button class="button secondary" type="button" data-action="create-backup">
-            <i data-lucide="save"></i><span>立即备份</span>
+          <button type="button" data-page-jump="backup">
+            <i data-lucide="archive-restore"></i>
+            <span>
+              <strong>备份与同步</strong>
+              <small>${latestBackup ? `最近快照 ${escapeHtml(formatTime(latestBackup.createdAt))}` : '管理快照、加密备份和远端同步'}</small>
+            </span>
+            <i data-lucide="chevron-right"></i>
           </button>
-          <button class="button secondary" type="button" data-action="export-snapshot">
-            <i data-lucide="download"></i><span>导出快照</span>
-          </button>
-          <button class="button secondary" type="button" data-action="import-snapshot">
-            <i data-lucide="upload"></i><span>导入快照</span>
-          </button>
-          <button class="button secondary" type="button" data-action="check-workspace-health">
-            <i data-lucide="file-check-2"></i><span>校验资料文件</span>
-          </button>
-        </div>
-        ${
-          state.workspaceHealth
-            ? `<div class="health-report ${state.workspaceHealth.healthy ? 'healthy' : 'missing'}">
-                <i data-lucide="${state.workspaceHealth.healthy ? 'circle-check' : 'triangle-alert'}"></i>
-                <div>
-                  <strong>${state.workspaceHealth.healthy ? '资料文件完整' : `发现 ${state.workspaceHealth.missing.length} 个文件不在原位置`}</strong>
-                  <span>共校验 ${state.workspaceHealth.total} 个文件 · ${escapeHtml(formatTime(state.workspaceHealth.checkedAt))}</span>
-                  ${
-                    state.workspaceHealth.missing.length
-                      ? `<ul>${state.workspaceHealth.missing
-                          .slice(0, 5)
-                          .map(
-                            (item) =>
-                              `<li>${escapeHtml(item.title)}（${escapeHtml(item.filePath)}）</li>`,
-                          )
-                          .join('')}</ul>`
-                      : ''
-                  }
-                </div>
-              </div>`
-            : ''
-        }
-        <div class="backup-list">
-          ${
-            state.backups === null
-              ? '<p class="setting-hint">正在读取备份列表…</p>'
-              : state.backups.length
-                ? state.backups
-                    .slice(0, 8)
-                    .map(
-                      (backup) => `
-                      <div class="backup-row">
-                        <span class="backup-copy">
-                          <strong>${escapeHtml(formatTime(backup.createdAt))}</strong>
-                          <small>${escapeHtml(
-                            backup.summary
-                              ? `${backup.summary.assignments} 作业 · ${backup.summary.experiments} 资料 · ${formatBytes(backup.size)}`
-                              : formatBytes(backup.size),
-                          )}</small>
-                        </span>
-                        <button class="button secondary compact" type="button" data-action="restore-backup" data-file="${escapeHtml(backup.fileName)}">
-                          恢复
-                        </button>
-                      </div>`,
-                    )
-                    .join('')
-                : '<p class="setting-hint">还没有备份，点击“立即备份”创建第一份。</p>'
-          }
         </div>
       </div>
     </section>
@@ -3279,6 +3541,80 @@ function toggleRow(key, label, checked) {
       <input type="checkbox" data-setting="${escapeHtml(key)}" ${checked ? 'checked' : ''} />
       <span class="toggle" aria-hidden="true"></span>
     </label>
+  `
+}
+
+function renderWorkspaceMaintenance() {
+  return `
+    <section class="settings-group backup-maintenance-panel">
+      <div class="settings-group-head">
+        <h2>工作区快照与文件校验</h2>
+        <p>轻量快照用于快速恢复课程、作业和资料索引；完整加密备份在下方单独管理。</p>
+      </div>
+      <div class="button-row">
+        <button class="button secondary compact" type="button" data-action="create-backup">
+          <i data-lucide="save"></i><span>创建快照</span>
+        </button>
+        <button class="button secondary compact" type="button" data-action="export-snapshot">
+          <i data-lucide="download"></i><span>导出快照</span>
+        </button>
+        <button class="button secondary compact" type="button" data-action="import-snapshot">
+          <i data-lucide="upload"></i><span>导入快照</span>
+        </button>
+        <button class="button secondary compact" type="button" data-action="check-workspace-health">
+          <i data-lucide="file-check-2"></i><span>校验资料文件</span>
+        </button>
+      </div>
+      ${
+        state.workspaceHealth
+          ? `<div class="health-report ${state.workspaceHealth.healthy ? 'healthy' : 'missing'}">
+              <i data-lucide="${state.workspaceHealth.healthy ? 'circle-check' : 'triangle-alert'}"></i>
+              <div>
+                <strong>${state.workspaceHealth.healthy ? '资料文件完整' : `发现 ${state.workspaceHealth.missing.length} 个文件不在原位置`}</strong>
+                <span>共校验 ${state.workspaceHealth.total} 个文件 · ${escapeHtml(formatTime(state.workspaceHealth.checkedAt))}</span>
+                ${
+                  state.workspaceHealth.missing.length
+                    ? `<ul>${state.workspaceHealth.missing
+                        .slice(0, 5)
+                        .map(
+                          (item) =>
+                            `<li>${escapeHtml(item.title)}（${escapeHtml(item.filePath)}）</li>`,
+                        )
+                        .join('')}</ul>`
+                    : ''
+                }
+              </div>
+            </div>`
+          : ''
+      }
+      <div class="backup-list">
+        ${
+          state.backups === null
+            ? '<p class="setting-hint">正在读取快照列表…</p>'
+            : state.backups.length
+              ? state.backups
+                  .slice(0, 8)
+                  .map(
+                    (backup) => `
+                      <div class="backup-row">
+                        <span class="backup-copy">
+                          <strong>${escapeHtml(formatTime(backup.createdAt))}</strong>
+                          <small>${escapeHtml(
+                            backup.summary
+                              ? `${backup.summary.assignments} 作业 · ${backup.summary.experiments} 资料 · ${formatBytes(backup.size)}`
+                              : formatBytes(backup.size),
+                          )}</small>
+                        </span>
+                        <button class="button secondary compact" type="button" data-action="restore-backup" data-file="${escapeHtml(backup.fileName)}">
+                          恢复
+                        </button>
+                      </div>`,
+                  )
+                  .join('')
+              : '<p class="setting-hint">还没有工作区快照。</p>'
+        }
+      </div>
+    </section>
   `
 }
 
@@ -3325,7 +3661,7 @@ function renderBackup() {
     <section class="page-intro action-intro">
       <div>
         <h2>备份与同步</h2>
-        <p>完整备份包含工作站数据、设置和 DeepSeek Harness 数据目录下的会话与技能；资料文件可选加入。远端同步备份会自动加密。</p>
+        <p>完整备份包含工作站数据、设置和可选的 DSH 技能目录；资料文件可选加入。远端同步备份会自动加密。</p>
       </div>
       <div class="button-row">
         <button class="button secondary" type="button" data-action="open-backups">
@@ -3352,6 +3688,8 @@ function renderBackup() {
           </div>`
         : ''
     }
+
+    ${renderWorkspaceMaintenance()}
 
     <section class="backup-center-grid">
       <div class="backup-center-main">
@@ -3796,12 +4134,14 @@ async function downloadLauncherUpdate() {
 async function loadBackupCenter({ refresh = false } = {}) {
   if (refresh || state.backupArchives === null || state.backupStatus === null) {
     try {
-      const [archives, status] = await Promise.all([
+      const [archives, status, snapshots] = await Promise.all([
         api.listBackupArchives(),
         api.getBackupStatus(),
+        api.listBackups(),
       ])
       state.backupArchives = archives
       state.backupStatus = status
+      state.backups = snapshots
     } catch (error) {
       state.backupArchives ||= []
       state.backupNotice = { tone: 'error', message: error.message }
@@ -3974,6 +4314,35 @@ function collectAssignmentInput() {
     priority: document.querySelector('#assignmentPriority')?.value || 'medium',
     status: document.querySelector('#assignmentStatus')?.value || 'inbox',
     notes: document.querySelector('#assignmentNotes')?.value || '',
+  }
+}
+
+function collectAiProfileInput() {
+  let headers = {}
+  const headersValue = document.querySelector('#aiProfileHeaders')?.value?.trim() || '{}'
+  try {
+    headers = JSON.parse(headersValue)
+  } catch {
+    throw new Error('附加请求头必须是有效的 JSON 对象。')
+  }
+  return {
+    profile: {
+      id: state.aiEditingProfileId || undefined,
+      label: document.querySelector('#aiProfileLabel')?.value || '',
+      baseUrl: document.querySelector('#aiProfileBaseUrl')?.value || '',
+      model: document.querySelector('#aiProfileModel')?.value || '',
+      protocol: document.querySelector('#aiProfileProtocol')?.value || 'chat-completions',
+      timeoutMs: Number(document.querySelector('#aiProfileTimeout')?.value || 90) * 1000,
+      contextWindow: Number(document.querySelector('#aiProfileContextWindow')?.value || 0),
+      maxOutputTokens: Number(document.querySelector('#aiProfileMaxOutput')?.value || 1800),
+      temperature: Number(document.querySelector('#aiProfileTemperature')?.value ?? 0.2),
+      reasoningEffort: document.querySelector('#aiProfileReasoningEffort')?.value || '',
+      supportsTools: Boolean(document.querySelector('#aiProfileSupportsTools')?.checked),
+      supportsVision: Boolean(document.querySelector('#aiProfileSupportsVision')?.checked),
+      headers,
+    },
+    apiKey: document.querySelector('#aiProfileApiKey')?.value || '',
+    clearKey: Boolean(document.querySelector('#aiProfileClearKey')?.checked),
   }
 }
 
@@ -4500,6 +4869,60 @@ async function persistSettingField(element) {
 
 async function handleAction(action, element) {
   switch (action) {
+    case 'open-ai-profile':
+      state.aiProfileEditorOpen = true
+      state.aiEditingProfileId = null
+      render()
+      requestAnimationFrame(() => document.querySelector('#aiProfileLabel')?.focus())
+      break
+    case 'edit-ai-profile':
+      state.aiProfileEditorOpen = true
+      state.aiEditingProfileId = element.dataset.id || null
+      render()
+      requestAnimationFrame(() => document.querySelector('#aiProfileLabel')?.focus())
+      break
+    case 'close-ai-profile':
+      state.aiProfileEditorOpen = false
+      state.aiEditingProfileId = null
+      render()
+      break
+    case 'save-ai-profile': {
+      const form = document.querySelector('#aiProfileForm')
+      if (!form?.checkValidity()) {
+        form?.reportValidity()
+        break
+      }
+      const input = collectAiProfileInput()
+      state.aiConfig = await api.saveAiProfile(input.profile, input.apiKey, input.clearKey)
+      state.aiProfileEditorOpen = false
+      state.aiEditingProfileId = null
+      render()
+      toast('模型配置已保存。', 'success')
+      break
+    }
+    case 'activate-ai-profile':
+      state.aiConfig = await api.activateAiProfile(element.dataset.id)
+      render()
+      toast('已切换当前 AI 模型。', 'success')
+      break
+    case 'test-ai-profile': {
+      const profile = aiProfiles().find((item) => item.id === element.dataset.id)
+      const result = await api.testAiProfile(element.dataset.id)
+      toast(`${profile?.label || '模型'} 连接成功：${result.message || 'OK'}`, 'success', 6000)
+      break
+    }
+    case 'delete-ai-profile': {
+      const profile = aiProfiles().find((item) => item.id === element.dataset.id)
+      if (!profile || !window.confirm(`删除模型配置“${profile.label}”及其 API Key 吗？`)) break
+      state.aiConfig = await api.deleteAiProfile(profile.id)
+      if (state.aiEditingProfileId === profile.id) {
+        state.aiProfileEditorOpen = false
+        state.aiEditingProfileId = null
+      }
+      render()
+      toast('模型配置已删除。', 'success')
+      break
+    }
     case 'open-assignment-composer':
       state.assignmentComposerOpen = true
       state.editingAssignmentId = null
@@ -4559,6 +4982,42 @@ async function handleAction(action, element) {
         assignmentPrompt(assignment),
         `已准备“${assignment.title}”的处理提示词`,
       )
+      break
+    }
+    case 'run-assignment-ai': {
+      const assignment = state.workspace?.assignments.find((item) => item.id === element.dataset.id)
+      if (!assignment) return
+      const profile = activeAiProfile()
+      if (!profile || (profile.requiresKey && !profile.hasKey)) {
+        state.page = 'ai'
+        state.aiProfileEditorOpen = true
+        state.aiEditingProfileId = profile?.id || null
+        render({ scroll: 'top' })
+        toast(
+          profile ? '请为当前模型补充 API Key。' : '请先添加一个 AI 模型和 API Key。',
+          'info',
+          7000,
+        )
+        requestAnimationFrame(() => document.querySelector('#aiProfileLabel')?.focus())
+        return
+      }
+      const sentFields = [
+        `作业：${assignment.title}`,
+        `课程：${assignment.course || '未填写'}`,
+        `截止：${assignment.dueAt || '未填写'}`,
+        `说明：${assignment.notes || '无'}`,
+      ].join('\n')
+      if (
+        !window.confirm(
+          `将把以下内容发送给 ${profile.label}（${profile.model}）：\n\n${sentFields}\n\n继续生成执行计划吗？`,
+        )
+      ) {
+        return
+      }
+      const result = await api.generateAssignmentPlan(assignment.id)
+      applyWorkspace(result.workspace)
+      render()
+      toast(`AI 已生成 ${result.plan.steps.length} 个执行步骤。`, 'success', 6000)
       break
     }
     case 'open-logs':
@@ -4875,7 +5334,7 @@ async function handleAction(action, element) {
       const backup = await guard(() => api.createBackup('manual'), '创建备份失败')
       state.backups = await api.listBackups()
       render()
-      toast(backup ? '已创建本地备份。' : '暂无可备份的数据。', backup ? 'success' : 'info')
+      toast(backup ? '已创建工作区快照。' : '暂无可快照的数据。', backup ? 'success' : 'info')
       break
     }
     case 'restore-backup': {
@@ -5643,6 +6102,23 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (event.target.id === 'aiProfilePreset') {
+    const preset = AI_PROVIDER_PRESETS.find((item) => item.id === event.target.value)
+    if (preset?.id !== 'custom') {
+      const labelInput = document.querySelector('#aiProfileLabel')
+      const baseUrlInput = document.querySelector('#aiProfileBaseUrl')
+      const modelInput = document.querySelector('#aiProfileModel')
+      if (labelInput) labelInput.value = preset.label
+      if (baseUrlInput) baseUrlInput.value = preset.baseUrl
+      if (modelInput) {
+        modelInput.value = preset.model
+        modelInput.placeholder = preset.model
+          ? '例如：deepseek-chat'
+          : `输入 ${preset.label} 的模型 ID`
+      }
+    }
+    return
+  }
   if (event.target.matches?.('[data-setting]')) await persistSettingField(event.target)
   if (
     event.target.matches?.('#scheduleStartPeriod, #scheduleEndPeriod') &&
@@ -6053,6 +6529,7 @@ async function start() {
     state.settings = bootstrap.settings
     state.onboarding = bootstrap.settings?.onboarding || { ...defaultOnboarding }
     state.status = bootstrap.status
+    state.aiConfig = bootstrap.ai || { profiles: [], activeProfileId: '' }
     state.launcherUpdate = bootstrap.launcherUpdate
     state.logs = bootstrap.logs || []
     state.workspace = bootstrap.workspace || {

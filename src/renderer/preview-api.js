@@ -765,6 +765,28 @@ function createPreviewState() {
       },
       updateHistory: [],
     },
+    ai: {
+      profiles: [
+        {
+          id: 'preview-deepseek',
+          label: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com',
+          model: 'deepseek-chat',
+          hasKey: true,
+          requiresKey: true,
+          protocol: 'chat-completions',
+          timeoutMs: 90000,
+          contextWindow: 128000,
+          maxOutputTokens: 8192,
+          temperature: 0.2,
+          reasoningEffort: '',
+          supportsTools: true,
+          supportsVision: false,
+          headers: {},
+        },
+      ],
+      activeProfileId: 'preview-deepseek',
+    },
     backups: [
       {
         fileName: 'workspace-preview-auto.json',
@@ -1153,6 +1175,82 @@ export function createPreviewLauncherApi() {
       }
       emit('settings:changed', state.settings)
       return clone(state.settings)
+    },
+    async getAiConfig() {
+      return clone(state.ai)
+    },
+    async saveAiProfile(profile, apiKey, clearKey = false) {
+      const existingIndex = state.ai.profiles.findIndex((item) => item.id === profile?.id)
+      const existing = existingIndex >= 0 ? state.ai.profiles[existingIndex] : null
+      const next = {
+        id: existing?.id || createId(),
+        label: String(profile?.label || '').trim(),
+        baseUrl: String(profile?.baseUrl || '')
+          .trim()
+          .replace(/\/+$/, ''),
+        model: String(profile?.model || '').trim(),
+        hasKey: Boolean(apiKey) || (existing?.hasKey && !clearKey),
+        protocol: profile?.protocol === 'responses' ? 'responses' : 'chat-completions',
+        timeoutMs: Number(profile?.timeoutMs) || 90000,
+        contextWindow: Number(profile?.contextWindow) || 0,
+        maxOutputTokens: Number(profile?.maxOutputTokens) || 1800,
+        temperature: Number.isFinite(Number(profile?.temperature))
+          ? Number(profile.temperature)
+          : 0.2,
+        reasoningEffort: String(profile?.reasoningEffort || ''),
+        supportsTools: Boolean(profile?.supportsTools),
+        supportsVision: Boolean(profile?.supportsVision),
+        headers: profile?.headers && typeof profile.headers === 'object' ? profile.headers : {},
+      }
+      try {
+        const url = new URL(next.baseUrl)
+        next.requiresKey = !['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname)
+      } catch {
+        next.requiresKey = true
+      }
+      if (existingIndex >= 0) state.ai.profiles[existingIndex] = next
+      else state.ai.profiles.push(next)
+      if (!state.ai.activeProfileId) state.ai.activeProfileId = next.id
+      return clone(state.ai)
+    },
+    async deleteAiProfile(id) {
+      state.ai.profiles = state.ai.profiles.filter((item) => item.id !== id)
+      if (state.ai.activeProfileId === id) {
+        state.ai.activeProfileId = state.ai.profiles[0]?.id || ''
+      }
+      return clone(state.ai)
+    },
+    async activateAiProfile(id) {
+      if (!state.ai.profiles.some((item) => item.id === id))
+        throw new Error('没有找到这个模型配置。')
+      state.ai.activeProfileId = id
+      return clone(state.ai)
+    },
+    async testAiProfile(id) {
+      if (!state.ai.profiles.some((item) => item.id === id))
+        throw new Error('没有找到这个模型配置。')
+      return { ok: true, message: 'OK', profileId: id }
+    },
+    async generateAssignmentPlan(id) {
+      const assignment = state.workspace.assignments.find((item) => item.id === id)
+      if (!assignment) throw new Error('没有找到这条作业。')
+      const profile = state.ai.profiles.find((item) => item.id === state.ai.activeProfileId)
+      if (!profile?.hasKey) throw new Error('当前模型还没有保存 API Key。')
+      assignment.aiPlan = {
+        generatedAt: new Date().toISOString(),
+        provider: profile.label,
+        model: profile.model,
+        summary: `完成“${assignment.title}”`,
+        prerequisites: ['确认题目范围与提交要求'],
+        steps: ['梳理任务要求', '完成核心工作', '检查并提交'],
+        risks: ['忽略题目中的格式或截止要求'],
+        checklist: ['检查文件命名', '确认提交入口'],
+      }
+      return clone({
+        workspace: state.workspace,
+        plan: assignment.aiPlan,
+        profile: { id: profile.id, label: profile.label, model: profile.model },
+      })
     },
     async getWorkspace() {
       return clone(state.workspace)

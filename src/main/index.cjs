@@ -15,6 +15,7 @@ const { ExperimentLibrary } = require('./experiment-library.cjs')
 const { ScheduleManager } = require('./schedule-manager.cjs')
 const { Logger } = require('./logger.cjs')
 const { AihotClient } = require('./aihot-client.cjs')
+const { AiService } = require('./ai-service.cjs')
 const { LauncherUpdater } = require('./launcher-updater.cjs')
 const { BackupManager } = require('./backup-manager.cjs')
 const { ReminderManager } = require('./reminder-manager.cjs')
@@ -49,6 +50,7 @@ let experimentLibrary
 let scheduleManager
 let logger
 let aihotClient
+let aiService
 let launcherUpdater
 let backupManager
 let reminderManager
@@ -180,6 +182,12 @@ async function bootstrap() {
   settings = new SettingsStore(userData)
   workspace = new WorkspaceStore(userData)
   logger = new Logger(userData, settings.get().logDir)
+  aiService = new AiService({
+    userDataDir: userData,
+    settings,
+    safeStorage,
+    logger,
+  })
   experimentLibrary = new ExperimentLibrary({ settings, workspace })
   scheduleManager = new ScheduleManager({ workspace })
   nativeTheme.themeSource = settings.get().theme || 'system'
@@ -216,6 +224,7 @@ async function bootstrap() {
     scheduleManager,
     logger,
     aihotClient,
+    aiService,
     launcherUpdater,
     backupManager,
     reminderManager,

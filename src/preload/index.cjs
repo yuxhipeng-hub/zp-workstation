@@ -17,6 +17,13 @@ contextBridge.exposeInMainWorld('launcher', {
   getAihotItems: (options) => ipcRenderer.invoke('aihot:items', options),
   getAihotHot: (options) => ipcRenderer.invoke('aihot:hot', options),
   getAihotStory: (publicId, options) => ipcRenderer.invoke('aihot:story', publicId, options),
+  getAiConfig: () => ipcRenderer.invoke('ai:config'),
+  saveAiProfile: (profile, apiKey, clearKey) =>
+    ipcRenderer.invoke('ai:profile-save', profile, apiKey, clearKey),
+  deleteAiProfile: (id) => ipcRenderer.invoke('ai:profile-delete', id),
+  activateAiProfile: (id) => ipcRenderer.invoke('ai:profile-activate', id),
+  testAiProfile: (id) => ipcRenderer.invoke('ai:profile-test', id),
+  generateAssignmentPlan: (id) => ipcRenderer.invoke('ai:assignment-plan', id),
   getWorkspace: () => ipcRenderer.invoke('workspace:get'),
   listCourses: () => ipcRenderer.invoke('workspace:courses'),
   createCourse: (input) => ipcRenderer.invoke('workspace:course-create', input),

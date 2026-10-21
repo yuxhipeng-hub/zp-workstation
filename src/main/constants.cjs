@@ -33,6 +33,8 @@ const DEFAULT_SETTINGS = {
   syncAutoUpload: false,
   syncIntervalHours: 24,
   syncLastAt: null,
+  aiProfiles: [],
+  activeAiProfileId: '',
   reminderLog: {},
   onboarding: {
     welcomeSeen: false,

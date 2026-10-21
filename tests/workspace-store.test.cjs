@@ -76,6 +76,35 @@ test('normalizes invalid assignment fields and supports updates', (t) => {
   assert.throws(() => store.createAssignment({ title: '   ' }), /标题不能为空/)
 })
 
+test('persists a structured AI execution plan with an assignment', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const workspace = store.createAssignment({
+    title: '操作系统实验',
+    course: '操作系统',
+    aiPlan: {
+      generatedAt: '2026-10-21T12:00:00.000Z',
+      provider: 'DeepSeek',
+      model: 'deepseek-chat',
+      summary: '完成进程调度实验',
+      prerequisites: ['阅读实验要求'],
+      steps: ['分析需求', '实现调度算法', '运行测试'],
+      risks: ['忽略边界条件'],
+      checklist: ['提交实验报告'],
+    },
+  })
+  const assignment = workspace.assignments[0]
+  assert.equal(assignment.aiPlan.steps.length, 3)
+  assert.equal(assignment.aiPlan.provider, 'DeepSeek')
+
+  const reloaded = new WorkspaceStore(directory).get()
+  assert.deepEqual(reloaded.assignments[0].aiPlan.prerequisites, ['阅读实验要求'])
+
+  const removed = store.updateAssignment(assignment.id, { aiPlan: null })
+  assert.equal(removed.assignments[0].aiPlan, null)
+})
+
 test('links assignments, experiments, and schedule entries to one course entity', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

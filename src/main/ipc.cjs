@@ -31,6 +31,7 @@ function registerIpc({
   scheduleManager,
   logger,
   aihotClient,
+  aiService,
   launcherUpdater,
   backupManager,
   reminderManager,
@@ -61,9 +62,27 @@ function registerIpc({
       launcherVersion: app.getVersion(),
     },
     launcherUpdate: launcherUpdater.getState(),
+    ai: aiService.getConfig(),
     logs: logger.list(160),
     workspace: workspace.get(),
   }))
+
+  ipcMain.handle('ai:config', () => aiService.getConfig())
+  ipcMain.handle('ai:profile-save', (_event, profile, apiKey, clearKey) =>
+    aiService.saveProfile(profile, apiKey, clearKey === true),
+  )
+  ipcMain.handle('ai:profile-delete', (_event, id) => aiService.deleteProfile(id))
+  ipcMain.handle('ai:profile-activate', (_event, id) => aiService.activateProfile(id))
+  ipcMain.handle('ai:profile-test', (_event, id) => aiService.testProfile(id))
+  ipcMain.handle('ai:assignment-plan', async (_event, assignmentId) => {
+    const assignment = workspace
+      .get()
+      .assignments.find((item) => item.id === String(assignmentId || ''))
+    if (!assignment) throw new Error('没有找到这条作业。')
+    const result = await aiService.generateAssignmentPlan(assignment)
+    const nextWorkspace = workspace.updateAssignment(assignment.id, { aiPlan: result.plan })
+    return { ...result, workspace: nextWorkspace }
+  })
 
   ipcMain.handle('aihot:daily', (_event, options = {}) => {
     if (options && typeof options !== 'object') throw new Error('参数无效。')
