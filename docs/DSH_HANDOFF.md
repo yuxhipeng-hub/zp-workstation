@@ -51,7 +51,7 @@ ZP Workbench 是一个面向学生的 Windows 桌面学习数据工作台。它�
 | -------- | ----------------------------------------------------- |
 | 产品名   | ZP Workbench                                          |
 | 包名     | `zp-workstation`                                      |
-| 稳定版本 | `0.5.1`，已发布到 GitHub Release                      |
+| 稳定版本 | `0.6.0`，已发布到 GitHub Release                      |
 | App ID   | `com.zp.workbench`                                    |
 | 仓库     | `https://github.com/yuxhipeng-hub/zp-workstation.git` |
 | 技术栈   | Electron + Vite + 原生 JS/CSS                         |
@@ -70,14 +70,12 @@ ZP Workbench 是一个面向学生的 Windows 桌面学习数据工作台。它�
 
 这个目录名是历史兼容项，不代表应用仍托管 DSH。
 
-### 创建本文件时的 Git 快照
+### 当前发布状态
 
-- 当前分支：`codex/model-settings-polish`
-- 稳定分支：`main`，指向已发布的 `0.5.1`
-- 当前分支比 `origin/main` 多 9 个提交
-- 当前分支在远端没有 upstream
-- 工作区有一个未跟踪的空文件 `button`
-- 当前分支包含日志恢复、安装器身份修复、模型配置与 AI 作业拆解等功能，但尚未合并发布
+- `0.6.0` 已合并到 `main` 并发布为 Latest
+- 该版本包含日志恢复、安装器身份修复、模型配置与 AI 作业拆解
+- DSH 接手手册已进入仓库和 Obsidian 镜像
+- 新任务应从最新 `main` 创建独立短生命周期分支
 
 不要根据这个快照猜测以后的状态。每次任务开始时重新运行：
 
@@ -87,7 +85,7 @@ git log --oneline --decorate -12
 git branch -vv
 ```
 
-如果 `button` 仍然存在，先判断它是否与本任务有关。它是未跟踪文件，不要擅自删除。
+工作区里如果有未跟踪文件，先判断来源和用途，不要擅自删除。
 
 ## 4. 在 DSH 中建立开发环境
 
@@ -103,8 +101,8 @@ npm test
 npm run dev
 ```
 
-如果继续当前未合并工作，需要先从原开发机推送
-`codex/model-settings-polish`，再在 DSH 中检出同名分支。不要在 DSH 里从零重建这些提交。
+如果要继续一个远端开发分支，先 `git fetch origin` 并确认分支和提交都已存在。不要在 DSH
+里从零重建已有提交。
 
 环境要求：
 
@@ -403,19 +401,17 @@ E2E 每个用例使用隔离的临时 `userData`，通过 `ZP_WORKBENCH_USER_DAT
 
 接手时以 `docs/HANDOFF.md` 为准，以下是创建本文件时的重点风险：
 
-1. 当前 `codex/model-settings-polish` 分支未推送、未合并、未发布。它包含 9 个提交和约 2,000
-   行以上改动，下一项自然工作是代码审查、验证、推送 PR 和合并。
-2. 当前包版本仍是 `0.5.1`。合并未发布功能前必须决定新版本号并完整同步版本文件。
-3. AI 只支持 OpenAI Compatible 协议，不支持 Anthropic Messages、Gemini 原生协议或 DSH
+1. 当前稳定版本是 `0.6.0`。下一项功能开发应从最新 `main` 创建新的短生命周期分支。
+2. AI 只支持 OpenAI Compatible 协议，不支持 Anthropic Messages、Gemini 原生协议或 DSH
    Headless。
-4. `knowledge` 字段仍作为兼容数据存在。删除前必须处理旧快照和旧备份。
-5. `dshHome` 没有设置页入口，但仍用于可选备份 `skills/`。不要误以为应用仍在管理 DSH。
-6. Windows 旧版本可能留下当前用户和所有用户两套安装记录。应用代码不应自动删除注册表、
+3. `knowledge` 字段仍作为兼容数据存在。删除前必须处理旧快照和旧备份。
+4. `dshHome` 没有设置页入口，但仍用于可选备份 `skills/`。不要误以为应用仍在管理 DSH。
+5. Windows 旧版本可能留下当前用户和所有用户两套安装记录。应用代码不应自动删除注册表、
    快捷方式或用户文件。
-7. `vendor/` 仍在本地但已被 Git 忽略，打包不包含，可以保持不动。
-8. `docs/DEVELOPMENT_FRAMEWORK.md` 有部分历史内容已过期，任务相关事实应以代码和最新
+6. `vendor/` 仍在本地但已被 Git 忽略，打包不包含，可以保持不动。
+7. `docs/DEVELOPMENT_FRAMEWORK.md` 有部分历史内容已过期，任务相关事实应以代码和最新
    `docs/HANDOFF.md` 为准。
-9. `AGENTS.md` 仍保留一项历史待办：把 `sync:vault` 命令补进常用命令表。当前线程不要中途
+8. `AGENTS.md` 仍保留一项历史待办：把 `sync:vault` 命令补进常用命令表。当前线程不要中途
    修改 `AGENTS.md`，否则会让上下文缓存失效；需要时另开线程完成。
 
 ## 13. 首次接手检查表
