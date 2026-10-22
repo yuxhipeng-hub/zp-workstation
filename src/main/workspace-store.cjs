@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
+const { cleanAiPlan } = require('./ai-plan.cjs')
 
 const ASSIGNMENT_STATUSES = new Set(['inbox', 'doing', 'done'])
 const ASSIGNMENT_PRIORITIES = new Set(['low', 'medium', 'high'])
@@ -80,6 +81,9 @@ function cleanAssignment(input, existing = {}) {
   const priority = ASSIGNMENT_PRIORITIES.has(input.priority)
     ? input.priority
     : existing.priority || 'medium'
+  const aiPlan = Object.hasOwn(input, 'aiPlan')
+    ? cleanAiPlan(input.aiPlan)
+    : cleanAiPlan(existing.aiPlan)
   const now = new Date().toISOString()
   return {
     id: existing.id || randomUUID(),
@@ -93,6 +97,7 @@ function cleanAssignment(input, existing = {}) {
     priority,
     status,
     notes: cleanString(input.notes, 2000),
+    aiPlan: aiPlan || null,
     createdAt: existing.createdAt || now,
     updatedAt: now,
   }

@@ -30,6 +30,13 @@ export const MIRROR_NOTES = [
     description: '当前状态、上次改动、待办与已知问题；每条线程收尾更新',
   },
   {
+    source: 'docs/DSH_HANDOFF.md',
+    note: '20 工程/DSH 接手手册.md',
+    title: 'DSH 接手手册',
+    category: '工程',
+    description: 'DSH 开发环境、架构边界、数据红线、测试矩阵与首次接手检查表',
+  },
+  {
     source: 'docs/DECISIONS.md',
     note: '40 决策/决策记录.md',
     title: '决策记录',
@@ -246,19 +253,23 @@ export function rewriteLinks(body, currentSource, targets) {
       }
       if (fence !== null) return line
 
-      const withMarkdownLinks = line.replace(
-        /\[([^\]\n]+)\]\(([^)\s]+\.md)\)/g,
-        (match, text, target) => {
-          const note = resolve(target)
-          if (!note) return match
-          return text.trim() === note ? `[[${note}]]` : `[[${note}|${text}]]`
+      return line.replace(
+        /\[([^\]\n]+)\]\(([^)\s]+\.md)\)|`([^`\n]+)`/g,
+        (match, text, target, code) => {
+          if (target) {
+            const note = resolve(target)
+            if (!note) return match
+            const label = text.trim()
+            const codeLabel = label.match(/^`([^`]+)`$/)
+            if (label === note || (codeLabel && resolve(codeLabel[1]) === note)) {
+              return `[[${note}]]`
+            }
+            return `[[${note}|${text}]]`
+          }
+          const note = resolve(code)
+          return note ? `[[${note}]]` : match
         },
       )
-
-      return withMarkdownLinks.replace(/`([^`\n]+)`/g, (match, code) => {
-        const note = resolve(code)
-        return note ? `[[${note}]]` : match
-      })
     })
     .join('\n')
 }

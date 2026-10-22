@@ -25,3 +25,23 @@ test('migrates existing logs when the log directory changes', async (t) => {
   assert.match(contents, /first entry/)
   assert.match(contents, /second entry/)
 })
+
+test('reloads persisted entries after the application restarts', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-logger-restart-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const firstRun = new Logger(directory)
+  firstRun.info('startup', 'before restart')
+  firstRun.warn('launcher-update', 'line one\nline two')
+
+  const secondRun = new Logger(directory)
+  const entries = secondRun.list(10)
+
+  assert.deepEqual(
+    entries.map(({ scope, level, message }) => ({ scope, level, message })),
+    [
+      { scope: 'startup', level: 'info', message: 'before restart' },
+      { scope: 'launcher-update', level: 'warn', message: 'line one\nline two' },
+    ],
+  )
+})
