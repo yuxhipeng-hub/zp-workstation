@@ -50,6 +50,18 @@ test('keeps markdown link labels when they differ from the note name', async () 
   assert.equal(rewritten, '- [[设计系统（中文）|视觉规范]]')
 })
 
+test('does not nest wikilinks when a markdown link label is a code path', async () => {
+  const { rewriteLinks } = await loadModule()
+  const targets = new Map([['docs/DSH_HANDOFF.md', 'DSH 接手手册']])
+
+  const rewritten = rewriteLinks(
+    '见 [`docs/DSH_HANDOFF.md`](docs/DSH_HANDOFF.md)。',
+    'docs/HANDOFF.md',
+    targets,
+  )
+  assert.equal(rewritten, '见 [[DSH 接手手册]]。')
+})
+
 test('extracts a level-two section from a document', async () => {
   const { extractSection } = await loadModule()
   const text = [
@@ -111,6 +123,15 @@ test('every mirrored source file still exists', async () => {
       `缺少源文件：${entry.source}`,
     )
   }
+})
+
+test('mirrors the DSH handoff into the engineering folder', async () => {
+  const { MIRROR_NOTES } = await loadModule()
+  const note = MIRROR_NOTES.find((entry) => entry.source === 'docs/DSH_HANDOFF.md')
+
+  assert.equal(note?.note, '20 工程/DSH 接手手册.md')
+  assert.equal(note?.title, 'DSH 接手手册')
+  assert.equal(note?.category, '工程')
 })
 
 test('vault note names and folder structure stay unique', async () => {
