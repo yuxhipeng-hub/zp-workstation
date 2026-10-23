@@ -1,83 +1,97 @@
-# DSH 接手 ZP Workbench 手册
+# DSH 接手 ZP Workbench 操作手册
 
-> 快照日期：2026-10-22
+> 更新时间：2026-10-23
 >
-> 适用对象：在 DeepSeek Harness（DSH）中接手本项目的编码代理。
+> 当前稳定版：`0.6.1`
 >
-> 一句话定位：DSH 是开发环境，不是 ZP Workbench 的运行时依赖。可以在 DSH 中克隆、开发、
-> 测试和提交本项目，但不要把 DSH 管理能力重新接回应用。
+> 适用对象：在 DeepSeek Harness（DSH）中继续开发 ZP Workbench 的编码代理。
 
-## 1. 先建立正确的工作模型
+## 0. 先看这里
 
-ZP Workbench 是一个面向学生的 Windows 桌面学习数据工作台。它把课表、作业、资料库、AI 资讯、
-备份和可选的作业 AI 拆解放在同一个本地应用中。应用不依赖云端账户，核心用户数据保存在本机。
+### 0.1 你和项目的关系
 
-在 DSH 中工作时，请把下面三件事分开：
+DSH 是开发环境，不是 ZP Workbench 的运行时依赖。
 
-| 事项     | 正确做法                                             |
-| -------- | ---------------------------------------------------- |
-| 源码     | 通过 Git 克隆和同步，GitHub 是唯一源码来源           |
-| 开发环境 | 准备 Windows x64、Node.js 24、npm 和项目依赖         |
-| 用户数据 | 留在各自机器的应用数据目录，不进入仓库，不随源码同步 |
+- 在 DSH 中克隆、修改、测试、提交和发布这个仓库。
+- 不要因此把 DSH 安装器、插件管理、Skills 或模型连接重新做回应用。
+- ZP Workbench 自己是本地学习数据工作台，DSH 只是开发工具。
 
-不要把 `node_modules/`、`dist/`、`release/`、`test-results/`、日志、`workspace.json` 或
-`ai-secrets.bin` 直接复制到另一台机器。不要用共享文件夹同时打开同一个工作区。
+### 0.2 默认使用标准模式
 
-## 2. 接手阅读顺序
+| DSH 模式     | 什么时候使用                                            |
+| ------------ | ------------------------------------------------------- |
+| **标准模式** | 默认选择。功能开发、修 bug、文档、测试和普通重构        |
+| PTC 模式     | 明确要做全仓库审计、批量统计、大量日志或迁移时          |
+| 极简模式     | 只复现一个问题、看日志、对比截图或做单点诊断时          |
+| 创造模式     | 只用于扩展 DSH 自身，不用于改造 ZP Workbench 的产品边界 |
 
-每次开始一个任务，按这个顺序读取上下文：
+本节是 DSH 的产品概念，只约束"在 DSH 里怎么选模式"。换用其他开发工具时忽略本节，
+其余规则通用。
 
-1. `AGENTS.md`：仓库硬性约定。
-2. `docs/HANDOFF.md`：最新进度、待办和本线程应继续的工作。
-3. 本文件：DSH 专用的项目全景、边界和常见改动方法。
-4. 当前任务相关的 `docs/specs/` 文档。
-5. 需要理解“为什么”时再读 `docs/DECISIONS.md`。
+### 0.3 第一次接手必须阅读
 
-读完 `docs/HANDOFF.md` 后，先用一句话告诉用户你理解的当前进度和下一步，再开始改代码。
+1. `AGENTS.md`：仓库硬性规则。
+2. `docs/HANDOFF.md`：最新进度、最近发布和待办。
+3. 本文件：当前架构、边界和开发方法。
+4. 与任务直接相关的源码、测试和 `docs/DECISIONS.md`。
 
-文档优先级：
+读完后，先用一句话向用户说明你理解的当前状态和下一步，再开始动手。
 
-1. `AGENTS.md` 与 `docs/HANDOFF.md` 的最新状态。
-2. 本文件。
-3. `README.md`。
-4. `docs/DEVELOPMENT_FRAMEWORK.md`。
+不要依赖旧聊天记录。文件、Git 状态和测试结果才是当前事实。
 
-`docs/DEVELOPMENT_FRAMEWORK.md` 记录过更早的 DSH 桌面壳、知识点和运行时管理方向，其中部分能力
-已经删除。发生冲突时，以当前代码和 `docs/HANDOFF.md` 为准，不要按旧规划恢复废功能。
+## 1. 项目是什么
 
-## 3. 项目快照
+ZP Workbench 是一个面向学生的 Windows 本地学习数据工作台，主要功能包括：
 
-| 项目     | 当前值                                                |
-| -------- | ----------------------------------------------------- |
-| 产品名   | ZP Workbench                                          |
-| 包名     | `zp-workstation`                                      |
-| 稳定版本 | `0.6.1`，已发布到 GitHub Release                      |
-| App ID   | `com.zp.workbench`                                    |
-| 仓库     | `https://github.com/yuxhipeng-hub/zp-workstation.git` |
-| 技术栈   | Electron + Vite + 原生 JS/CSS                         |
-| 运行平台 | Windows 10/11 x64                                     |
-| Node.js  | `24.18.0`，见 `.node-version`                         |
-| 主进程   | CommonJS，`src/main/`                                 |
-| 渲染层   | ES Modules，`src/renderer/main.js`                    |
-| 测试     | Node 内置 test runner + Playwright Electron           |
-| 发布     | GitHub Actions，`windows-latest`                      |
+- 课表导入、周视图、节次时间和课程颜色。
+- 作业收件箱、结构化提示词和 AI 执行计划。
+- 资料库归档、分组、移动、校验和目录迁移。
+- 今日页、AI 资讯、提醒和日志。
+- 本地备份、快照、完整备份和可选远端同步。
+- 应用自身更新检查、下载、校验和安装。
+- 用户自行配置的 OpenAI Compatible 模型。
 
-应用为了兼容历史安装，用户数据目录仍然是：
+### 当前重点
+
+继续把课程、作业、资料和学习数据做得可靠、可恢复、可解释。
+
+### 当前不做
+
+- DSH 安装、启动、版本、插件、Skills 或模型连接管理。
+- 通用桌面 Agent、应用托管、窗口捕获或 Computer Driver。
+- 复习板块。
+- 知识点页面和新的知识点生成链路。
+- 把 AI 资讯写入资料库。
+- 自动抽取资料库正文并发送给模型。
+- 未经用户确认的自动命令执行或文件修改。
+
+## 2. 当前项目基线
+
+| 项目           | 当前值                                                |
+| -------------- | ----------------------------------------------------- |
+| 产品名         | ZP Workbench                                          |
+| 包名           | `zp-workstation`                                      |
+| 稳定版本       | `0.6.1`                                               |
+| GitHub Release | `v0.6.1`，Latest                                      |
+| App ID         | `com.zp.workbench`                                    |
+| 仓库           | `https://github.com/yuxhipeng-hub/zp-workstation.git` |
+| 运行平台       | Windows 10/11 x64                                     |
+| Node.js        | `24.18.0`，见 `.node-version`                         |
+| 技术栈         | Electron + Vite + 原生 JS/CSS                         |
+| 主进程         | CommonJS，`src/main/`                                 |
+| 渲染层         | ES Modules，`src/renderer/main.js`                    |
+| 测试           | Node test runner + Playwright Electron                |
+| 发布           | GitHub Actions `windows-latest`                       |
+
+用户数据目录为了兼容历史安装，仍然是：
 
 ```text
 %APPDATA%\deepseek-harness-launcher\
 ```
 
-这个目录名是历史兼容项，不代表应用仍托管 DSH。
+目录名里有 `deepseek-harness-launcher`，但应用已经不再托管 DSH。
 
-### 当前发布状态
-
-- `0.6.1` 已合并到 `main` 并发布为 Latest
-- 该版本包含日志恢复、安装器身份修复、模型配置、AI 作业拆解和更新下载限流退避
-- DSH 接手手册已进入仓库和 Obsidian 镜像
-- 新任务应从最新 `main` 创建独立短生命周期分支
-
-不要根据这个快照猜测以后的状态。每次任务开始时重新运行：
+### 开始任务前重新检查
 
 ```powershell
 git status --short --branch
@@ -85,11 +99,14 @@ git log --oneline --decorate -12
 git branch -vv
 ```
 
-工作区里如果有未跟踪文件，先判断来源和用途，不要擅自删除。
+不要根据文档里的版本号判断本机安装版本。已安装应用可能在升级前仍是旧版，必要时读取：
 
-## 4. 在 DSH 中建立开发环境
+```powershell
+(Get-Item 'D:\软件\zp的工作站\ZP Workbench\ZP Workbench.exe').VersionInfo |
+  Select-Object FileVersion,ProductVersion
+```
 
-标准步骤：
+## 3. 建立开发环境
 
 ```powershell
 git clone https://github.com/yuxhipeng-hub/zp-workstation.git
@@ -101,117 +118,127 @@ npm test
 npm run dev
 ```
 
-如果要继续一个远端开发分支，先 `git fetch origin` 并确认分支和提交都已存在。不要在 DSH
-里从零重建已有提交。
+以上是全新机器的流程。工作区已经存在时不要直接 `git switch main`：本机 `main` 可能落后于
+远端。先 `git fetch origin`，确认 `origin/main` 指向已发布版本，再 `git merge --ff-only
+origin/main`。不要基于旧提交开新分支。
 
 环境要求：
 
-- Windows 10/11 x64
-- Node.js `24.x`，优先使用 `.node-version` 中的 `24.18.0`
-- npm 11.x 或 12.x
-- 可访问 GitHub 和 npm 依赖源
-- Electron E2E 需要可启动桌面窗口的 Windows 会话
+- Windows 10/11 x64。
+- Node.js `24.x`，优先使用 `.node-version`。
+- npm 11.x 或 12.x。
+- 可以访问 GitHub、npm 依赖源和更新镜像。
+- Electron E2E 需要能打开桌面窗口的 Windows 会话。
 
-常用启动方式：
+### 镜像原则
 
-| 目的                   | 命令                 |
-| ---------------------- | -------------------- |
-| 完整 Electron 开发环境 | `npm run dev`        |
-| 只预览渲染层           | `npm run preview:ui` |
-| 运行单元测试           | `npm test`           |
-| 构建渲染层             | `npm run build`      |
-| 运行 Electron E2E      | `npm run test:e2e`   |
-| 完整门禁               | `npm run verify`     |
+- 源码通过 Git 同步，GitHub 是唯一源码来源。
+- DSH 和原开发机各自执行 `npm ci`。
+- 不要复制 `node_modules/`、`dist/`、`release/`、`test-results/` 或应用日志。
+- 不要用共享文件夹同时打开同一工作区。
+- `workspace.json` 和 `ai-secrets.bin` 是用户状态，不属于源码。
 
-`npm run preview:ui` 使用 `src/renderer/preview-api.js` 的模拟数据，只适合看界面。文件选择、
-系统通知、真实数据持久化、加密密钥和更新下载等能力必须在 Electron 中验证。
+### 常用命令
 
-DSH 和原开发机必须各自执行 `npm ci`。依赖安装结果依赖平台，不要把 `node_modules/` 镜像过去。
+| 目的                   | 命令                       |
+| ---------------------- | -------------------------- |
+| 完整 Electron 开发环境 | `npm run dev`              |
+| 只预览渲染层           | `npm run preview:ui`       |
+| 单元测试               | `npm test`                 |
+| 构建渲染层             | `npm run build`            |
+| Electron E2E           | `npm run test:e2e`         |
+| 完整门禁               | `npm run verify`           |
+| 同步 Obsidian          | `npm run sync:vault`       |
+| 检查 Obsidian          | `npm run sync:vault:check` |
 
-## 5. 架构地图
+`npm run preview:ui` 使用模拟数据，只适合看界面。文件选择、通知、真实持久化、密钥和更新下载
+必须在 Electron 中验证。
+
+## 4. 架构
 
 ### 进程边界
 
 ```text
 src/renderer/
-  原生 DOM 界面与交互状态
+  原生 DOM、页面状态和交互
         |
-        | window.launcher 暴露的有限 API
+        | window.launcher 的有限 API
         v
 src/preload/index.cjs
-  IPC 白名单与事件白名单
+  IPC API 与事件白名单
         |
         v
 src/main/ipc.cjs
-  参数检查、处理器注册、事件广播
+  输入校验、处理器注册、事件广播
         |
         v
 src/main/* Manager / Store
-  文件系统、网络、系统通知、窗口和进程生命周期
+  文件系统、网络、通知、窗口和进程生命周期
 ```
 
 硬边界：
 
-- 只有主进程可以直接读写文件、调用网络和接触 Node.js。
+- 只有主进程可以接触 Node.js、文件系统、网络和本地进程。
 - BrowserWindow 必须保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
-- `src/preload/index.cjs` 只能暴露明确列出的 API，不能暴露 `ipcRenderer` 或 Node 原生模块。
-- 渲染层不能直接调用任意 IPC 通道。
-- 新增加 IPC 时，主进程处理器、preload 白名单、渲染层调用和测试必须一起完成。
+- Preload 只能暴露最小白名单 API，不能暴露 `ipcRenderer`、`fs` 或 `child_process`。
+- 渲染层不能调用任意 IPC 通道。
+- 新 IPC 必须同时修改主进程、preload、渲染层和测试。
 
 ### 主进程模块
 
-| 文件                                   | 职责                                             |
-| -------------------------------------- | ------------------------------------------------ |
-| `src/main/index.cjs`                   | 应用启动、窗口、托盘、单实例、生命周期和模块组装 |
-| `src/main/ipc.cjs`                     | IPC 注册、输入校验和事件转发                     |
-| `src/main/settings-store.cjs`          | `settings.json` 读写与默认值合并                 |
-| `src/main/workspace-store.cjs`         | `workspace.json`、课程关联、快照和本地备份       |
-| `src/main/schedule-manager.cjs`        | 课表导入、课程编辑、节次和颜色                   |
-| `src/main/schedule-parser.cjs`         | Excel、CSV、ICS、PDF、Word、PPT 等课表解析       |
-| `src/main/experiment-library.cjs`      | 资料库分组、文件复制、改名、删除和根目录迁移     |
-| `src/main/document-text-extractor.cjs` | 文档文本提取，只服务课表解析链路                 |
-| `src/main/backup-manager.cjs`          | 完整备份、恢复、可选加密和远端同步               |
-| `src/main/ai-service.cjs`              | OpenAI Compatible 模型档案、连接测试和作业拆解   |
-| `src/main/ai-secret-store.cjs`         | 用 Electron `safeStorage` 加密保存 API Key       |
-| `src/main/ai-plan.cjs`                 | AI 执行计划的数据清洗和长度限制                  |
-| `src/main/aihot-client.cjs`            | AIHOT 资讯请求、缓存、ETag 和退避                |
-| `src/main/logger.cjs`                  | 内存与文件日志，启动时回读最近日志               |
-| `src/main/reminder-manager.cjs`        | 课前、作业和日报提醒                             |
-| `src/main/launcher-updater.cjs`        | 应用更新检查、下载和校验                         |
-| `src/main/constants.cjs`               | 应用身份、主题值和设置默认值                     |
+| 文件                                   | 职责                                       |
+| -------------------------------------- | ------------------------------------------ |
+| `src/main/index.cjs`                   | 启动、窗口、托盘、单实例和模块组装         |
+| `src/main/ipc.cjs`                     | IPC 注册、校验和事件转发                   |
+| `src/main/settings-store.cjs`          | `settings.json`                            |
+| `src/main/workspace-store.cjs`         | `workspace.json`、课程关联、快照和本地备份 |
+| `src/main/schedule-manager.cjs`        | 课表导入、课程编辑、节次和颜色             |
+| `src/main/schedule-parser.cjs`         | Excel、CSV、ICS、PDF、Word、PPT 等课表解析 |
+| `src/main/experiment-library.cjs`      | 资料库、文件复制、移动、删除和根目录迁移   |
+| `src/main/document-text-extractor.cjs` | 文本提取，只服务课表解析                   |
+| `src/main/backup-manager.cjs`          | 完整备份、恢复、加密和远端同步             |
+| `src/main/ai-service.cjs`              | OpenAI Compatible 模型档案和作业拆解       |
+| `src/main/ai-secret-store.cjs`         | `safeStorage` 加密 API Key                 |
+| `src/main/ai-plan.cjs`                 | AI 计划清洗和长度限制                      |
+| `src/main/aihot-client.cjs`            | AIHOT 请求、缓存、ETag 和退避              |
+| `src/main/logger.cjs`                  | 日志写入和启动时回读                       |
+| `src/main/reminder-manager.cjs`        | 课程、作业和日报提醒                       |
+| `src/main/launcher-updater.cjs`        | 应用更新检查、下载和校验                   |
+| `src/main/download-accelerator.cjs`    | 多线路测速、分片下载、限流退避和断点续传   |
+| `src/main/constants.cjs`               | 应用身份、主题值和默认设置                 |
 
 ### 渲染层
 
-`src/renderer/main.js` 是目前较大的单体模块，负责：
+`src/renderer/main.js` 是当前较大的单体模块：
 
-- 全局状态和页面路由
-- `renderX()` 页面渲染函数
-- `handleAction()` 事件分发
-- 表单自动保存、对话框、拖放和任务提示
-- 调用 `window.launcher`
+- 页面路由和全局状态。
+- `renderX()` 页面渲染。
+- `handleAction()` 事件分发。
+- 自动保存、对话框、拖放和任务提示。
+- 调用 `window.launcher`。
 
-样式分为：
+样式：
 
 - `styles.css`：主要布局和组件。
 - `design-system.css`：设计变量、主题和基础控件。
-- `ui-refresh.css`：工作台视觉统一与近期打磨。
+- `ui-refresh.css`：工作台视觉统一和近期细节。
 
-页面入口在 `src/renderer/index.html`。不要引入 React、Vue 或其他 UI 框架。
+不要引入 React、Vue 或其他 UI 框架。
 
-## 6. 数据与持久化
+## 5. 数据与持久化
 
-| 路径或对象                    | 内容                                 | 处理规则                             |
-| ----------------------------- | ------------------------------------ | ------------------------------------ |
-| `<userData>/settings.json`    | 偏好、模型档案元数据、引导和更新状态 | 通过 `SettingsStore` 写入            |
-| `<userData>/workspace.json`   | 课程、作业、资料索引、课表和兼容字段 | 必须通过 `WorkspaceStore` 写入       |
-| `<userData>/backups/`         | 工作区自动和手动备份                 | 由 `WorkspaceStore` 管理             |
-| `<userData>/ai-secrets.bin`   | `safeStorage` 加密的 API Key         | 不进日志、快照、备份或仓库           |
-| `<userData>/aihot-cache.json` | AIHOT 只读缓存                       | 可删除，不是用户核心数据             |
-| `<userData>/workbench.log`    | 应用日志                             | 可能包含路径和错误，不应提交         |
-| `<experimentDir>/<资料库>/`   | 资料库实际文件                       | 由 `ExperimentLibrary` 复制和管理    |
-| `settings.dshHome/skills/`    | DSH 技能目录                         | 仅完整备份时可选打包，应用不管理 DSH |
+| 路径                          | 内容                       | 规则                        |
+| ----------------------------- | -------------------------- | --------------------------- |
+| `<userData>/settings.json`    | 设置、模型元数据和更新状态 | 通过 `SettingsStore`        |
+| `<userData>/workspace.json`   | 课程、作业、资料、课表等   | 必须通过 `WorkspaceStore`   |
+| `<userData>/backups/`         | 工作区自动和手动备份       | 由 `WorkspaceStore` 管理    |
+| `<userData>/ai-secrets.bin`   | 加密 API Key               | 不进日志、快照、备份或仓库  |
+| `<userData>/aihot-cache.json` | AI 资讯缓存                | 可删除                      |
+| `<userData>/workbench.log`    | 应用日志                   | 不提交                      |
+| `<experimentDir>/<资料库>/`   | 资料库真实文件             | 由 `ExperimentLibrary` 管理 |
+| `settings.dshHome/skills/`    | DSH 技能目录               | 仅完整备份时可选打包        |
 
-`workspace.json` 当前结构版本为 `2`，主要字段：
+`workspace.json` 结构版本为 `2`：
 
 ```text
 version
@@ -223,220 +250,113 @@ experimentGroups[]
 schedule
 ```
 
-关键规则：
+必须遵守：
 
-- 不要直接用脚本或编辑器修改用户目录里的 `workspace.json`。
-- 需要写入时，在 Node 中加载 `WorkspaceStore` 和对应 Manager，走正式代码路径。
-- 用户数据结构变化必须修改 `workspace-store.cjs` 的 `normalizeData` / `clean*` 逻辑。
-- 数据结构变化必须补 `tests/workspace-store.test.cjs`，并考虑旧快照和旧备份导入。
-- 写入采用临时文件加原子替换，保留现有备份机制。
-- `knowledge` 是旧数据兼容字段，不要未经迁移方案直接删除。
-- 课程不是简单文本。作业、课表、资料和旧知识点通过 `courseId` 关联，名称规范化由
-  `courseKey()`、别名和 `linkCourses()` 维护。
+- 不要直接编辑用户目录里的 `workspace.json`。
+- 测试或迁移时在 Node 中加载 `WorkspaceStore` 和对应 Manager。
+- 数据结构变化必须改 `normalizeData` / `clean*`。
+- 数据结构变化必须补 `tests/workspace-store.test.cjs`。
+- 保留旧快照和旧备份的导入路径。
+- 写入继续使用临时文件和原子替换。
+- `knowledge` 是兼容字段，未经迁移方案不要删除。
+- 课程通过 `courseId`、别名和 `courseKey()` 关联，不能只存一段课程名称。
 
-## 7. 当前产品边界
+## 6. AI 接入
 
-当前应继续建设：
+当前只支持 OpenAI Compatible 协议：
 
-- 课表导入与展示
-- 作业收件箱和结构化提示词
-- 用户主动配置的 AI 作业拆解
-- 资料库归档、分组、迁移和文件校验
-- AI 资讯只读展示
-- 本地备份、快照、恢复和可选同步
-- 更新、提醒、日志和应用设置
-
-当前不应恢复或扩张：
-
-- DSH 安装、启动、更新、插件、Skills 和版本通道管理
-- 通用桌面 Agent、应用托管、窗口捕获和 Computer Driver
-- 复习板块
-- 知识点页面和新知识点生成链路
-- 把 AI 资讯写入资料库
-- 抽取资料库正文并自动送给模型
-- 无用户确认的工具调用、命令执行或文件修改
-
-AI 相关注意：
-
-- 协议目前只支持 Chat Completions 和 Responses。
-- 支持多个 OpenAI Compatible 档案。
-- 远程接口必须使用 HTTPS；只有 localhost 允许 HTTP。
-- 模型能力标记 `supportsTools` / `supportsVision` 只是配置元数据，当前没有工具调用和视觉请求。
+- Chat Completions。
+- Responses。
+- 多模型档案和当前模型。
+- 远程地址必须 HTTPS；localhost 允许 HTTP。
+- API Key 通过 `safeStorage` 独立加密。
+- 连接测试不发用户数据。
 - 作业拆解只发送用户确认后的标题、课程、截止日期、优先级和说明。
-- 资料库正文不会进入 AI 请求。
-- API Key 不进入 `workspace.json`、快照、完整备份或远端同步。
-- 不要把 Key 写进日志或测试快照。
+- 资料库正文不会进入模型请求。
+- 不执行模型返回的命令或工具。
+- `supportsTools` / `supportsVision` 只是配置元数据，当前没有对应执行链路。
 
-## 8. IPC 与安全规则
+不支持：
 
-新增一个 IPC 的完整改动面：
+- Anthropic Messages。
+- Gemini 原生协议。
+- DSH Headless。
+- 自动工具调用。
+- 自动操作文件系统。
 
-1. 在 `src/main/ipc.cjs` 注册 `ipcMain.handle()`。
-2. 做类型、长度、路径、URL 或枚举校验。
-3. 交给现有 Manager/Store，不在处理器中堆积业务逻辑。
-4. 在 `src/preload/index.cjs` 增加最小 API。
-5. 在 `src/renderer/main.js` 通过 `api.*` 调用。
-6. 需要事件时同步 `allowedEvents`。
-7. 补单元测试或 Electron E2E。
+## 7. 更新与下载
 
-安全要求：
+更新器当前策略是可靠性优先：
 
-- 外部 URL 只允许 `http:` / `https:`，使用现有 `isSafeExternalUrl()`。
-- 打开本地路径前确认它属于允许目录。
-- 资料库路径必须使用 `isPathInside()` 一类检查，防止目录穿越。
-- 拖入文件先落临时目录，单个文件上限为 200 MB。
-- 不要在渲染层拼接任意文件路径。
-- 不要把任意 IPC 通道、`fs`、`child_process` 或 `shell` 暴露给渲染层。
-- 索引 HTML 的 CSP 不应被随意放宽。
+- 4 路并发。
+- 16 个初始分片。
+- 每线路 1 路测速。
+- 单连接慢速阈值 64 KB/s。
+- HTTP 429 后进入冷却，不再把新分片分配给该线路。
+- 保留 GitHub 直连、`gh-proxy.com`、`ghfast.top`。
+- 已移除无法解析的 `gh.xxooo.cf`。
 
-## 9. 常见改动配方
+不要为了追求峰值速度直接恢复 8 路并发和 64 分片。免费镜像会限流，实际结果会更慢。
 
-### 修改界面
+排查更新慢时，先检查：
 
-1. 在 `main.js` 找到对应 `renderX()` 和 `handleAction()`。
-2. 复用已有 `.button`、`.panel`、`.segmented`、图标按钮和对话框模式。
-3. 图标优先使用已有 lucide，不手画重复图标。
-4. 中文文案，保持桌面生产力工具风格，不做营销页或卡片套卡片。
-5. 检查深浅主题、窄窗口、键盘焦点、悬停和长文本。
-6. 运行 `npm run build` 和 `npm run test:e2e`。
+```powershell
+$log = Join-Path $env:APPDATA 'deepseek-harness-launcher\logs\workbench.log'
+Get-Content -LiteralPath $log -Encoding UTF8 -Tail 200 |
+  Select-String 'launcher-update|HTTP 429|下载线路|分片'
 
-视觉规范见 `docs/DESIGN_SYSTEM.md`。普通面板圆角使用 8px，弹窗最多 10px；现有页面一级
-模块保持方形连接，列表内部才使用圆角表面。
+Get-ChildItem (Join-Path $env:TEMP 'ZP-Workbench-Launcher-Updates') -Force
+```
 
-### 增加设置字段
+`<userData>/logs/workbench.log` 是默认日志位置，用户可在设置里更换日志目录；换过之后以
+`<userData>/settings.json` 的 `logDir` 为准，不要继续按默认路径找。
 
-1. 在 `src/main/constants.cjs` 增加默认值。
-2. 如果允许渲染层修改，在 `ipc.cjs` 的 `settings:patch` 白名单中增加键和校验。
-3. 在 `main.js` 增加读取和自动保存。
-4. 考虑备份、导入和旧数据默认值。
-5. 补测试。
+判断标准：
 
-### 增加工作区字段
+- 日志仍在增长，表示还在下载。
+- 日志和分片时间都停止，表示下载已经失败或卡死，不是“慢”。
+- 本机安装版本和仓库版本是两回事。
+- 应用主进程使用 Node `fetch`，系统代理不保证覆盖；必要时使用 Clash TUN 或手动安装包。
 
-1. 修改 `workspace-store.cjs` 的默认结构、`normalizeData` 和对应 `clean*`。
-2. 决定旧数据缺字段、非法字段和超长字段如何处理。
-3. 确保快照导出、快照导入和完整备份恢复仍可用。
-4. 修改 `tests/workspace-store.test.cjs`。
-5. 如影响 UI，再补 E2E。
+## 8. 开发流程
 
-### 增加 AI Provider 能力
+### 8.1 一个任务一条分支
 
-1. 优先扩展 `ai-service.cjs`，保持模型无关。
-2. 先写请求转换、响应提取、错误映射和清洗测试。
-3. 用 `fetchImpl` 注入，不要在测试中访问真实模型服务。
-4. 不记录请求体、Key 或完整响应。
-5. 任何自动执行能力都需要单独的产品决策和安全边界。
+- 分支从最新 `main` 创建。
+- 分支前缀使用 `codex/`。
+- 一个分支只解决一个明确目的。
+- 不要直接向 `main` 提交。
 
-### 修改资料库目录
+### 8.2 先理解再修改
 
-1. 使用 `ExperimentLibrary.changeRoot()` 的迁移流程。
-2. 处理重名文件、非法文件类型、目标路径重叠和部分失败。
-3. 迁移完成后更新每个实验记录的绝对 `filePath`。
-4. 补单元测试和真实目录迁移 E2E。
-5. 不要只是改设置值而不迁移现有文件。
+- 用 `rg` 找代码。
+- 用行区间读代码，不一次展开整份大文件。
+- 修 bug 先写能复现的测试，再改实现。
+- 涉及 UI 时先复用现有结构和 CSS token。
+- 涉及 IPC 时同时检查白名单和参数校验。
 
-### 更新文档
+### 8.3 提交前门禁
 
-1. 改 `docs/HANDOFF.md` 的当前状态或“上次改动”。
-2. 如果改了会被 Obsidian 镜像的文档，运行 `npm run sync:vault`。
-3. 运行 `npm run sync:vault:check`。
-4. 不要在 Obsidian vault 中手改生成笔记，下一次同步会覆盖。
+| 改动                   | 最低验证                                                                 |
+| ---------------------- | ------------------------------------------------------------------------ |
+| 任意代码或文档         | `npm test`                                                               |
+| 渲染层、样式或页面结构 | `npm test` + `npm run build` + 相关 E2E                                  |
+| 主进程、preload、IPC   | `npm test` + 相关 E2E                                                    |
+| 数据结构或迁移         | 旧数据测试 + `tests/workspace-store.test.cjs`                            |
+| 模型请求               | `tests/ai-service.test.cjs`，只用 mock                                   |
+| 更新下载               | `tests/download-accelerator.test.cjs`、`tests/launcher-updater.test.cjs` |
+| 发版前                 | `npm run verify`                                                         |
 
-## 10. 测试矩阵
+### 8.4 文档收尾
 
-| 改动类型               | 最低验证                                                   |
-| ---------------------- | ---------------------------------------------------------- |
-| 任意代码或文档改动     | `npm test`                                                 |
-| 渲染层、样式或页面结构 | `npm test` + `npm run build` + 相关 `npm run test:e2e`     |
-| 主进程、preload 或 IPC | `npm test` + 相关单元测试 + Electron E2E                   |
-| 数据结构或迁移         | `tests/workspace-store.test.cjs` + 旧数据用例 + `npm test` |
-| 模型请求               | `tests/ai-service.test.cjs` + 无真实网络的 mock 请求       |
-| 背景或异步行为         | 增加时序、失败路径和重启恢复测试                           |
-| 发版前                 | `npm run verify`                                           |
+如果改了 `AGENTS.md`、`README.md`、`RELEASE.md`、`DESIGN.md` 或 `docs/`：
 
-常用测试与源码对应：
+```powershell
+npm run sync:vault
+npm run sync:vault:check
+```
 
-| 功能                     | 测试文件                                                                 |
-| ------------------------ | ------------------------------------------------------------------------ |
-| 工作区、课程关联、快照   | `tests/workspace-store.test.cjs`                                         |
-| 课表解析                 | `tests/schedule-parser.test.cjs`                                         |
-| 资料库                   | `tests/experiment-library.test.cjs`                                      |
-| 备份和同步               | `tests/backup-manager.test.cjs`                                          |
-| 模型档案和作业拆解       | `tests/ai-service.test.cjs`                                              |
-| AIHOT                    | `tests/aihot-client.test.cjs`                                            |
-| 日志恢复                 | `tests/logger.test.cjs`                                                  |
-| 安装器身份               | `tests/installer-config.test.cjs`                                        |
-| 更新器与下载             | `tests/launcher-updater.test.cjs`、`tests/download-accelerator.test.cjs` |
-| 页面和真实 Electron 链路 | `tests/e2e/app.spec.mjs`                                                 |
-
-E2E 每个用例使用隔离的临时 `userData`，通过 `ZP_WORKBENCH_USER_DATA` 注入。不要用真实用户
-目录跑自动化测试。
-
-`npm run verify` 依次执行 lint、格式检查、类型检查、单元测试、构建、Electron E2E 和知识库
-同步检查。GitHub CI 还会额外执行运行时依赖审计。
-
-## 11. 发布规则
-
-当前发布链路：
-
-1. 从 `main` 创建短生命周期分支。
-2. 完成改动和测试，提交 PR。
-3. `Verify ZP Workbench` 在 `windows-latest` 通过。
-4. 合并到受保护的 `main`。
-5. 手动触发 `Release ZP Workbench`，输入版本号，或推送对应 `v*` 标签。
-6. Actions 构建 Windows x64 NSIS 安装包，生成校验和与 `latest.json`，上传 GitHub Release。
-
-发布注意：
-
-- 版本号同步修改 `package.json`、`package-lock.json`、`README.md` 和交接文档。
-- 不提交 `dist/`、`release/`、安装包、日志和测试产物。
-- 已发布标签不得移动、删除或覆盖。
-- 安装器必须保持每用户模式、稳定 App ID、GUID 和快捷方式名称。
-- AI Key、GitHub Token 和任何签名凭据不能进入仓库。
-- 当前本机访问 `github.com:443` 可能需要手动开启 Clash Verge 代理。不要为此改全局 Git
-  配置，也不要修改仓库发布流程。
-- 如果推送或 `ls-remote` 超时，先检查代理，不要贸然重建历史或强推。
-
-## 12. 当前待办与已知风险
-
-接手时以 `docs/HANDOFF.md` 为准，以下是创建本文件时的重点风险：
-
-1. 当前稳定版本是 `0.6.0`。下一项功能开发应从最新 `main` 创建新的短生命周期分支。
-2. AI 只支持 OpenAI Compatible 协议，不支持 Anthropic Messages、Gemini 原生协议或 DSH
-   Headless。
-3. `knowledge` 字段仍作为兼容数据存在。删除前必须处理旧快照和旧备份。
-4. `dshHome` 没有设置页入口，但仍用于可选备份 `skills/`。不要误以为应用仍在管理 DSH。
-5. Windows 旧版本可能留下当前用户和所有用户两套安装记录。应用代码不应自动删除注册表、
-   快捷方式或用户文件。
-6. `vendor/` 仍在本地但已被 Git 忽略，打包不包含，可以保持不动。
-7. `docs/DEVELOPMENT_FRAMEWORK.md` 有部分历史内容已过期，任务相关事实应以代码和最新
-   `docs/HANDOFF.md` 为准。
-8. `AGENTS.md` 仍保留一项历史待办：把 `sync:vault` 命令补进常用命令表。当前线程不要中途
-   修改 `AGENTS.md`，否则会让上下文缓存失效；需要时另开线程完成。
-
-## 13. 首次接手检查表
-
-开始改动前：
-
-- [ ] 已读 `AGENTS.md`、`docs/HANDOFF.md` 和本文件。
-- [ ] 已用一句话说明当前进度和下一步。
-- [ ] `git status --short --branch` 已检查。
-- [ ] 已确认当前任务只对应一个分支和一个目的。
-- [ ] 已确认是否需要改用户数据结构、IPC、网络或安装器身份。
-- [ ] 已确认哪些验证必须跑。
-
-提交前：
-
-- [ ] 没有覆盖或回滚用户已有改动。
-- [ ] 新功能有对应测试，修 bug 有复现测试。
-- [ ] `npm test` 通过。
-- [ ] 界面改动已跑 `npm run build` 和相关 E2E。
-- [ ] 主进程改动已验证 preload 白名单和 IPC 校验。
-- [ ] 数据结构改动已验证旧数据和恢复路径。
-- [ ] 文档改动已同步 Obsidian。
-- [ ] `docs/HANDOFF.md` 已写清已完成、未完成、关键文件、验证方式、下一步。
-
-任务结束时的交接格式：
+然后更新 `docs/HANDOFF.md`：
 
 ```text
 任务：
@@ -447,25 +367,157 @@ E2E 每个用例使用隔离的临时 `userData`，通过 `ZP_WORKBENCH_USER_DAT
 下一步：
 ```
 
-## 14. 需要优先打开的文件
+## 9. 常见任务
 
-开始陌生任务时，按问题选择文件，不要一次读完整个仓库：
+### 增加 IPC
 
-| 问题                             | 首先打开                                                               |
-| -------------------------------- | ---------------------------------------------------------------------- |
-| 应用如何启动、窗口和模块如何组装 | `src/main/index.cjs`                                                   |
-| 有哪个 IPC、参数如何校验         | `src/main/ipc.cjs`、`src/preload/index.cjs`                            |
-| 数据结构和旧数据兼容             | `src/main/workspace-store.cjs`、`tests/workspace-store.test.cjs`       |
-| 课表导入                         | `src/main/schedule-manager.cjs`、`src/main/schedule-parser.cjs`        |
-| 资料库和目录迁移                 | `src/main/experiment-library.cjs`、`tests/experiment-library.test.cjs` |
-| AI 模型与作业拆解                | `src/main/ai-service.cjs`、`tests/ai-service.test.cjs`                 |
-| 备份、恢复和远端同步             | `src/main/backup-manager.cjs`、`tests/backup-manager.test.cjs`         |
-| 页面、交互和状态                 | `src/renderer/main.js`                                                 |
-| 视觉规则                         | `docs/DESIGN_SYSTEM.md`、`src/renderer/ui-refresh.css`                 |
-| 真实 Electron 行为               | `tests/e2e/app.spec.mjs`                                               |
-| 发布                             | `RELEASE.md`、`.github/workflows/release.yml`                          |
-| 最近决策                         | `docs/DECISIONS.md`                                                    |
-| 最新任务状态                     | `docs/HANDOFF.md`                                                      |
+1. `src/main/ipc.cjs` 注册和校验。
+2. 调用现有 Manager/Store。
+3. `src/preload/index.cjs` 增加最小 API。
+4. `src/renderer/main.js` 调用。
+5. 需要事件时同步 `allowedEvents`。
+6. 补单元测试或 E2E。
 
-目标不是把整个仓库背下来，而是在每次改动时找到正确边界、留下可验证的结果，并让下一条线程
-仅靠文件和 Git 状态就能继续。
+### 增加工作区字段
+
+1. 修改默认结构和 `normalizeData`。
+2. 增加对应 `clean*`。
+3. 处理旧数据、缺失字段、非法值和长度限制。
+4. 验证快照和完整备份。
+5. 补 `workspace-store.test.cjs`。
+
+### 修改资料库目录
+
+1. 使用 `ExperimentLibrary.changeRoot()`。
+2. 处理重名文件、特殊文件、路径重叠和部分失败。
+3. 更新每个实验记录的绝对 `filePath`。
+4. 补目录迁移测试和 Electron E2E。
+
+### 修改更新下载
+
+1. 先看日志和临时分片，区分慢、429、无响应和已完成。
+2. 保持并发和分片保守。
+3. HTTP 429 必须退出该线路，不继续撞同一条镜像。
+4. 测试必须覆盖断点续传、429 冷却、校验失败和回退线路。
+5. 改动更新器前必须做一次干净 Windows 用户环境的真机升级验证：429、线路切换、断点续传、
+   安装和重启后的日志恢复。mock 测试不能替代这一步。
+
+### 修改界面
+
+1. 找对应 `renderX()` 和 `handleAction()`。
+2. 复用 `.button`、`.panel`、`.segmented`、图标按钮和对话框。
+3. 图标优先 lucide。
+4. 文案用中文。
+5. 检查深浅主题、窄窗口、键盘焦点、长文本和加载状态。
+6. 跑构建和相关 E2E。
+
+视觉规范见 `docs/DESIGN_SYSTEM.md`。
+
+## 10. 发布
+
+1. 从最新 `main` 拉分支。
+2. 修改功能、测试和文档。
+3. 同步版本：
+   - `package.json`
+   - `package-lock.json`
+   - `README.md`
+   - `docs/HANDOFF.md`
+4. 运行 `npm run verify`。
+5. 提交、推送、创建 PR。
+6. Windows CI 通过后合并。
+7. 手动触发发布：
+
+```powershell
+gh workflow run release.yml --repo yuxhipeng-hub/zp-workstation `
+  --ref main -f version=<新版本号> -f notes="更新说明"
+```
+
+`<新版本号>` 必须与 `package.json` 一致；不要直接复制上一次的版本号，否则会覆盖式发版。
+
+发布后必须核对：
+
+- Release 是 Latest。
+- 安装包、blockmap、`.sha256`、`latest.json` 均已上传。
+- `latest.json` 的版本、tag、大小、sha256 和下载线路正确。
+- `.sha256` 与 Release API 的摘要一致。
+- 已发布标签不得移动、删除或覆盖。
+
+## 11. 故障排查
+
+### GitHub 推送失败
+
+- 优先 `git fetch` / `git push`，失败先检查 Clash Verge 的 `127.0.0.1:7897` 代理。
+- `github.com:443` 可能超时或 TLS 握手失败。
+- `gh api` 往往仍可用，因为 API 和 Git Smart HTTP 是不同链路；它只用于只读核对
+  （Release、PR、CI 状态）。
+- 不要为此修改仓库历史或强推。
+- 不要擅自删除或覆盖远端分支。
+- 涉及写远端、重建提交、修改分支保护或发布规则时，先停下来征得用户确认。
+
+### CI 显示异常
+
+- 先看 `gh run view <id>` 的 run 和 job 状态。
+- 如果所有步骤成功但 Check Run 卡住，等待或重跑，不要伪造结果。
+- 合并前确认实际 workflow run 成功。
+
+### 应用更新慢
+
+- 先看进程、日志和临时分片 mtime。
+- 没有持续写入就是失败，不是慢。
+- 旧版本不会因为新版本修了下载器而立即获得修复。
+- 必要时让用户手动安装最新安装包。
+
+### Obsidian 不一致
+
+```powershell
+npm run sync:vault
+npm run sync:vault:check
+```
+
+不要在 vault 里手改生成笔记。
+
+## 12. 接手与交付检查表
+
+本文件只维护稳定规则、架构和操作方式。当前版本、动态待办和最近发布以 `docs/HANDOFF.md`
+为准，同一份动态状态不要在两处重复维护。
+
+开始前：
+
+- [ ] 已读 `AGENTS.md`、`docs/HANDOFF.md` 和本文件。
+- [ ] 已检查 Git 状态和最新提交。
+- [ ] 已确认任务边界和验收方式。
+- [ ] 已确认使用标准模式或明确切换模式。
+
+交付前：
+
+- [ ] 没有覆盖用户已有改动。
+- [ ] 修 bug 有复现测试。
+- [ ] 新功能有对应测试。
+- [ ] `npm test` 通过。
+- [ ] 界面改动已构建并跑相关 E2E。
+- [ ] IPC、preload 和渲染层保持一致。
+- [ ] 数据迁移兼容旧数据。
+- [ ] 文档已同步 Obsidian。
+- [ ] `docs/HANDOFF.md` 已更新。
+- [ ] 发布版本已核对 Release 和更新清单。
+
+## 13. 优先打开的文件
+
+| 问题               | 文件                                                        |
+| ------------------ | ----------------------------------------------------------- |
+| 启动、窗口、托盘   | `src/main/index.cjs`                                        |
+| IPC 和白名单       | `src/main/ipc.cjs`、`src/preload/index.cjs`                 |
+| 工作区和旧数据     | `src/main/workspace-store.cjs`                              |
+| 课表导入           | `src/main/schedule-manager.cjs`、`schedule-parser.cjs`      |
+| 资料库迁移         | `src/main/experiment-library.cjs`                           |
+| AI 模型            | `src/main/ai-service.cjs`                                   |
+| 更新与下载         | `src/main/launcher-updater.cjs`、`download-accelerator.cjs` |
+| 页面与交互         | `src/renderer/main.js`                                      |
+| 视觉规则           | `docs/DESIGN_SYSTEM.md`、`src/renderer/ui-refresh.css`      |
+| 真实 Electron 行为 | `tests/e2e/app.spec.mjs`                                    |
+| 发布               | `RELEASE.md`、`.github/workflows/release.yml`               |
+| 最近决策           | `docs/DECISIONS.md`                                         |
+| 最新任务状态       | `docs/HANDOFF.md`                                           |
+
+这份文档的目标不是让 DSH 背下整个仓库，而是让它在每一步知道该看哪里、能改什么、不能改什么，
+以及如何证明改动可以交付。
