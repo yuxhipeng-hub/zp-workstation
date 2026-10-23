@@ -270,6 +270,16 @@ test('launcher updater prioritizes configured download mirrors', (t) => {
   )
 })
 
+test('release config keeps updater request pressure conservative', () => {
+  const config = require('../package.json').launcherRelease
+
+  assert.ok(config.downloadConcurrency <= 4)
+  assert.ok(config.downloadSegments <= 16)
+  assert.equal(config.downloadProbeConnections, 1)
+  assert.ok(config.downloadMinChunkBytesPerSecond <= 64 * 1024)
+  assert.equal(JSON.stringify(config).includes('gh.xxooo.cf'), false)
+})
+
 test('launcher updater rejects a bad checksum and tries the next route', async (t) => {
   const expectedPayload = Buffer.from('correct-installer')
   const tamperedPayload = Buffer.from('tampered-installer')

@@ -13,6 +13,8 @@ const DEFAULT_MIN_CHUNK_SPEED = 128 * 1024
 const DEFAULT_PROBE_BYTES = 256 * 1024
 const DEFAULT_PROBE_CONNECTIONS = 8
 const DEFAULT_PROBE_TIMEOUT = 6000
+const DEFAULT_RATE_LIMIT_COOLDOWN = 15000
+const MAX_RATE_LIMIT_COOLDOWN = 60000
 const PROGRESS_INTERVAL = 120
 const DYNAMIC_PENDING_MULTIPLIER = 4
 const MIN_DYNAMIC_CHUNK_BYTES = 128 * 1024
@@ -45,6 +47,15 @@ function abortErrorMessage(error) {
     return '下载线路长时间没有返回数据'
   }
   return error?.message || '网络连接失败'
+}
+
+function parseRetryAfter(value) {
+  const text = String(value || '').trim()
+  if (!text) return 0
+  const seconds = Number(text)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000
+  const date = Date.parse(text)
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0
 }
 
 function combineSignals(...signals) {
@@ -135,6 +146,7 @@ class DownloadAccelerator {
     probeBytes = DEFAULT_PROBE_BYTES,
     probeConnections = DEFAULT_PROBE_CONNECTIONS,
     probeTimeoutMs = DEFAULT_PROBE_TIMEOUT,
+    rateLimitCooldownMs = DEFAULT_RATE_LIMIT_COOLDOWN,
   } = {}) {
     this.fetchImpl = fetchImpl
     this.logger = logger
@@ -155,6 +167,30 @@ class DownloadAccelerator {
       Math.min(8, Number(probeConnections) || DEFAULT_PROBE_CONNECTIONS),
     )
     this.probeTimeoutMs = Math.max(1000, Number(probeTimeoutMs) || DEFAULT_PROBE_TIMEOUT)
+    this.rateLimitCooldownMs = Math.max(
+      1000,
+      Math.min(MAX_RATE_LIMIT_COOLDOWN, Number(rateLimitCooldownMs) || DEFAULT_RATE_LIMIT_COOLDOWN),
+    )
+    this.rateLimitedUntil = new Map()
+  }
+
+  availableSources(sources) {
+    const now = Date.now()
+    return sources.filter((source) => (this.rateLimitedUntil.get(source.id) || 0) <= now)
+  }
+
+  pickSource(sources, attempt) {
+    const available = this.availableSources(sources)
+    return available.length ? available[attempt % available.length] : null
+  }
+
+  markSourceRateLimited(source, retryAfter) {
+    const requestedWait = parseRetryAfter(retryAfter)
+    const wait = Math.min(
+      MAX_RATE_LIMIT_COOLDOWN,
+      Math.max(this.rateLimitCooldownMs, requestedWait),
+    )
+    this.rateLimitedUntil.set(source.id, Date.now() + wait)
   }
 
   async probeSource(source) {
@@ -178,6 +214,10 @@ class DownloadAccelerator {
             },
             signal: controller.signal,
           })
+          if (response.status === 429) {
+            this.markSourceRateLimited(source, response.headers?.get?.('retry-after'))
+            throw new Error('HTTP 429')
+          }
           if (!response.ok || !response.body) {
             throw new Error(`HTTP ${response.status}`)
           }
@@ -254,9 +294,12 @@ class DownloadAccelerator {
     if (chunk.bytes === chunk.length) return
 
     let lastError = null
+    let lastSource = sources[0]
     const attempts = sources.length === 1 ? 2 : Math.min(6, sources.length * 2)
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const source = attempt === 0 ? sources[0] : sources[attempt % sources.length]
+      const source = this.pickSource(sources, attempt)
+      if (!source) break
+      lastSource = source
       const start = chunk.start + chunk.bytes
       const controller = new AbortController()
       let idleTimer = null
@@ -299,6 +342,10 @@ class DownloadAccelerator {
           },
           signal: combineSignals(runSignal, controller.signal),
         })
+        if (response.status === 429) {
+          this.markSourceRateLimited(source, response.headers?.get?.('retry-after'))
+          throw new Error('HTTP 429')
+        }
         if (!response.ok || !response.body) {
           throw new Error(`HTTP ${response.status}`)
         }
@@ -344,9 +391,7 @@ class DownloadAccelerator {
       }
     }
 
-    throw new Error(
-      `${sources[(attempts - 1) % sources.length].label}：${abortErrorMessage(lastError)}`,
-    )
+    throw new Error(`${lastSource.label}：${abortErrorMessage(lastError)}`)
   }
 
   async downloadSegmented({ name, size, sha256, sources, target, onProgress }) {
@@ -615,6 +660,10 @@ class DownloadAccelerator {
           },
           signal: controller.signal,
         })
+        if (response.status === 429) {
+          this.markSourceRateLimited(source, response.headers?.get?.('retry-after'))
+          throw new Error('HTTP 429')
+        }
         if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
         if (received > 0 && response.status !== 206) {
           removeFile(part)
@@ -718,10 +767,11 @@ class DownloadAccelerator {
       }
     }
 
+    const fallbackSources = this.availableSources(probedSources)
     return this.downloadSingle({
       size,
       sha256,
-      sources: probedSources,
+      sources: fallbackSources.length ? fallbackSources : probedSources,
       target,
       onProgress,
     })
