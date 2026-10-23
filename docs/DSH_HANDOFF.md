@@ -51,7 +51,7 @@ ZP Workbench 是一个面向学生的 Windows 桌面学习数据工作台。它�
 | -------- | ----------------------------------------------------- |
 | 产品名   | ZP Workbench                                          |
 | 包名     | `zp-workstation`                                      |
-| 稳定版本 | `0.6.0`，已发布到 GitHub Release                      |
+| 稳定版本 | `0.6.1`，已发布到 GitHub Release                      |
 | App ID   | `com.zp.workbench`                                    |
 | 仓库     | `https://github.com/yuxhipeng-hub/zp-workstation.git` |
 | 技术栈   | Electron + Vite + 原生 JS/CSS                         |
@@ -72,8 +72,8 @@ ZP Workbench 是一个面向学生的 Windows 桌面学习数据工作台。它�
 
 ### 当前发布状态
 
-- `0.6.0` 已合并到 `main` 并发布为 Latest
-- 该版本包含日志恢复、安装器身份修复、模型配置与 AI 作业拆解
+- `0.6.1` 已合并到 `main` 并发布为 Latest
+- 该版本包含日志恢复、安装器身份修复、模型配置、AI 作业拆解和更新下载限流退避
 - DSH 接手手册已进入仓库和 Obsidian 镜像
 - 新任务应从最新 `main` 创建独立短生命周期分支
 
