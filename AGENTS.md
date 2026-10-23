@@ -33,6 +33,8 @@
 | 构建渲染层     | `npm run build`                         |
 | 端到端测试     | `npm run test:e2e`                      |
 | 完整门禁       | `npm run verify`                        |
+| 同步 Obsidian  | `npm run sync:vault`                    |
+| 检查 Obsidian  | `npm run sync:vault:check`              |
 | 出安装包       | `npm run dist`                          |
 
 ## 改动要求
@@ -59,6 +61,9 @@
   改动会让整段上下文缓存失效。要改就先结束当前线程。
 - 检索、翻日志、比对大批文件这类工作交给子代理，主线程只接收结论。
 - 任务收尾时更新 `docs/HANDOFF.md`，让下一条线程靠文件而不是靠对话历史恢复状态。
+- 改过被镜像的文档（`AGENTS.md`、`README.md`、`RELEASE.md`、`DESIGN.md`、`docs/` 与
+  `docs/vault/` 下的文档）收尾前必须跑 `npm run sync:vault`，并确认 `npm run sync:vault:check`
+  通过；`npm run verify` 最后一步会检查。
 
 ## 发布
 
