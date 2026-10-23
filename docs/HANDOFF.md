@@ -8,8 +8,8 @@
 
 ## 当前状态
 
-- 版本：`0.6.1`（待发布）。当前 Latest 仍是 `v0.6.0`；本次补丁修复更新下载在镜像限流时
-  反复收到 429、慢速阈值过高和失效线路拖慢的问题。
+- 版本：`0.6.1`，`main` 已发布并同步，GitHub Release `v0.6.1` 已设为 Latest（安装包、
+  blockmap、SHA-256 与 `latest.json` 均由 `Release ZP Workbench` 流水线产出）。
 - 上一版（2026-10-22）：`0.6.0` 已发布并同步，GitHub Release `v0.6.0` 已设为 Latest
   （安装包、blockmap、SHA-256 与 `latest.json` 均由 `Release ZP Workbench` 流水线产出）。
 - 上一版（2026-10-18）：PR #17 合并到 `main`，`Release ZP Workbench` 流水线 run
@@ -43,7 +43,7 @@
   首尾行跟随容器收角，悬停使用中性面板色；模型当前项仍使用透明背景和左侧强调线。
 - 本次发布（2026-10-22）：版本推进到 `0.6.0`，补充 DSH 接手手册和 Obsidian 镜像入口；
   `Release ZP Workbench` 构建 Windows x64 安装包并发布为 Latest。
-- 更新下载修复（2026-10-23，待发布）：并发从 8 降到 4、分片从 64 降到 16、测速连接降到 1，
+- 更新下载修复（2026-10-23，0.6.1）：并发从 8 降到 4、分片从 64 降到 16、测速连接降到 1，
   单连接慢速阈值从 256 KB/s 降到 64 KB/s；新增 HTTP 429 线路冷却，移除无法解析的
   `gh.xxooo.cf`，保留 GitHub 直连、`gh-proxy.com` 和 `ghfast.top`。
 - UI 微调（2026-10-18）：导航保持既有蓝色；其余按 Apple 工作台方向统一页头节奏、次级操作、
@@ -69,6 +69,19 @@
   **遇到 push / ls-remote 超时、连接重置时，先请用户打开 Clash Verge 的代理再重试**，
   不要为此改动仓库或全局 git 配置。若代理已开启但 Git HTTPS 仍握手失败，而 `gh api`
   正常，可用 GitHub Git Data API 重建提交和分支；本次 `0.6.0` 即使用该兜底路径完成推送。
+
+## 发布记录：0.6.1（2026-10-23）
+
+- 版本：`0.6.0` → `0.6.1`，`package.json`、`package-lock.json`、`README.md` 同步更新。
+- 合并：PR #21（更新下载退避、429 冷却、失效线路移除和发布准备），本地
+  `npm run verify` 与 GitHub Actions run `39968665899` 均通过。
+- 出包：`gh workflow run release.yml --ref main -f version=0.6.1`，流水线 run
+  `39969051917`，构建和发布步骤成功。
+- 产物：`ZP-Workbench-Setup-0.6.1-x64.exe`（126,814,011 字节）、对应 blockmap、
+  `.sha256` 与 `latest.json`，Release `v0.6.1` 已设为 Latest。
+- 核对：安装包 sha256
+  `959c8cb3f9311be17177a74c04310d3efcb9dba86c590ad9712f3d0c39f7d935` 与 `.sha256`
+  和 `latest.json` 一致；更新清单只保留 `gh-proxy.com`、`ghfast.top` 与 GitHub 直连。
 
 ## 发布记录：0.6.0（2026-10-22）
 
@@ -112,6 +125,7 @@
 
 | 日期       | 内容                                                                                                                                                                                                                                                                                                                                                                                                  | 涉及文件                                                                                                                                                                                                                           |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-23 | 发布 `0.6.1`：PR #21 修复镜像 HTTP 429 导致的更新下载反复失败，降低并发和分片、增加线路冷却并移除失效镜像；本地与 CI 门禁通过，Release run `39969051917` 发布安装包并设为 Latest；回写交接、DSH 手册和 Obsidian 首页                                                                                                                                                                                  | `package.json`、`package-lock.json`、`README.md`、`src/main/download-accelerator.cjs`、`src/main/launcher-updater.cjs`、`tests/**`、`docs/HANDOFF.md`、`docs/DSH_HANDOFF.md`                                                       |
 | 2026-10-22 | 发布 `0.6.0`：PR #19 合并模型配置、AI 作业拆解、日志恢复、安装器身份修复和 DSH 交接；本地与 CI 门禁通过，Release run `39800050482` 发布安装包并设为 Latest；回写交接、DSH 手册和 Obsidian 首页                                                                                                                                                                                                        | `package.json`、`package-lock.json`、`README.md`、`docs/HANDOFF.md`、`docs/DSH_HANDOFF.md`、`docs/vault/首页.md`                                                                                                                   |
 | 2026-10-22 | 新增 DSH 接手手册，记录项目定位、DSH 镜像方式、架构边界、数据与 AI 规则、测试矩阵、常见改动配方、当前分支风险和首次接手检查表；总交接入口与 Obsidian 索引同步指向该文档，并补镜像测试                                                                                                                                                                                                                 | `docs/DSH_HANDOFF.md`、`docs/HANDOFF.md`、`scripts/sync-obsidian-vault.mjs`、`tests/vault-sync.test.cjs`、`docs/vault/首页.md`、`docs/vault/文档地图.md`                                                                           |
 | 2026-10-22 | 将模型配置页的档案列表纳入统一圆角表面，首尾档案行跟随容器收角，保留透明当前项背景与 2px 左侧强调线；补列表圆角 E2E，并将资料库提示气泡场景改为焦点触发，消除鼠标初始位置导致的偶发失败                                                                                                                                                                                                               | `src/renderer/ui-refresh.css`、`tests/e2e/app.spec.mjs`、`docs/HANDOFF.md`                                                                                                                                                         |
