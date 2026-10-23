@@ -682,6 +682,10 @@ class LauncherUpdater extends EventEmitter {
       idleTimeoutMs: this.config.downloadIdleTimeoutMs,
       slowChunkTimeoutMs: this.config.downloadSlowChunkTimeoutMs,
       minChunkBytesPerSecond: this.config.downloadMinChunkBytesPerSecond,
+      probeBytes: this.config.downloadProbeBytes,
+      probeConnections: this.config.downloadProbeConnections,
+      probeTimeoutMs: this.config.downloadProbeTimeoutMs,
+      rateLimitCooldownMs: this.config.downloadRateLimitCooldownMs,
     })
 
     try {

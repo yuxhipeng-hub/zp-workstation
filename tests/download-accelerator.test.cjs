@@ -134,6 +134,59 @@ test('download accelerator falls back when the fastest mirror stops serving data
   assert.ok(transferUrls.includes('https://backup.example/setup.exe'))
 })
 
+test('download accelerator stops reusing a mirror after HTTP 429', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-download-rate-limit-'))
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }))
+  const payload = Buffer.alloc(8 * 1024 * 1024 + 41)
+  for (let index = 0; index < payload.length; index += 1) payload[index] = index % 229
+  let limitedTransferRequests = 0
+
+  const accelerator = new DownloadAccelerator({
+    concurrency: 2,
+    segments: 8,
+    idleTimeoutMs: 10000,
+    probeBytes: 64 * 1024,
+    probeConnections: 1,
+    probeTimeoutMs: 1000,
+    rateLimitCooldownMs: 1000,
+    logger: { warn() {}, info() {} },
+    fetchImpl: async (url, options) => {
+      const range = readRequestedRange(options)
+      assert.ok(range, 'every transfer should use an HTTP range request')
+      const requestSize = range.end - range.start + 1
+      const isProbe = requestSize <= 64 * 1024
+      if (url.includes('limited') && !isProbe) {
+        limitedTransferRequests += 1
+        return new Response(null, {
+          status: 429,
+          headers: { 'retry-after': '60' },
+        })
+      }
+      return rangeResponse(payload, range, url.includes('limited') ? 1 : 20)
+    },
+  })
+
+  const target = path.join(tempDir, 'ZP-Workbench-Setup-0.6.1-x64.exe')
+  const result = await accelerator.download({
+    name: path.basename(target),
+    size: payload.length,
+    sha256: sha256(payload),
+    target,
+    sources: [
+      { id: 'limited', label: '限流线路', url: 'https://limited.example/setup.exe' },
+      { id: 'backup', label: '备用线路', url: 'https://backup.example/setup.exe' },
+    ],
+    onProgress() {},
+  })
+
+  assert.deepEqual(fs.readFileSync(target), payload)
+  assert.equal(result.sourceLabel, '备用线路')
+  assert.ok(
+    limitedTransferRequests <= 2,
+    `expected at most one rate-limit request per worker, got ${limitedTransferRequests}`,
+  )
+})
+
 test('download accelerator resumes an existing partial chunk', async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-download-resume-'))
   t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }))
