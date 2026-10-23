@@ -25,6 +25,9 @@ DSH 是开发环境，不是 ZP Workbench 的运行时依赖。
 | 极简模式     | 只复现一个问题、看日志、对比截图或做单点诊断时          |
 | 创造模式     | 只用于扩展 DSH 自身，不用于改造 ZP Workbench 的产品边界 |
 
+本节是 DSH 的产品概念，只约束"在 DSH 里怎么选模式"。换用其他开发工具时忽略本节，
+其余规则通用。
+
 ### 0.3 第一次接手必须阅读
 
 1. `AGENTS.md`：仓库硬性规则。
@@ -114,6 +117,10 @@ npm ci
 npm test
 npm run dev
 ```
+
+以上是全新机器的流程。工作区已经存在时不要直接 `git switch main`：本机 `main` 可能落后于
+远端。先 `git fetch origin`，确认 `origin/main` 指向已发布版本，再 `git merge --ff-only
+origin/main`。不要基于旧提交开新分支。
 
 环境要求：
 
@@ -301,6 +308,9 @@ Get-Content -LiteralPath $log -Encoding UTF8 -Tail 200 |
 Get-ChildItem (Join-Path $env:TEMP 'ZP-Workbench-Launcher-Updates') -Force
 ```
 
+`<userData>/logs/workbench.log` 是默认日志位置，用户可在设置里更换日志目录；换过之后以
+`<userData>/settings.json` 的 `logDir` 为准，不要继续按默认路径找。
+
 判断标准：
 
 - 日志仍在增长，表示还在下载。
@@ -389,6 +399,8 @@ npm run sync:vault:check
 2. 保持并发和分片保守。
 3. HTTP 429 必须退出该线路，不继续撞同一条镜像。
 4. 测试必须覆盖断点续传、429 冷却、校验失败和回退线路。
+5. 改动更新器前必须做一次干净 Windows 用户环境的真机升级验证：429、线路切换、断点续传、
+   安装和重启后的日志恢复。mock 测试不能替代这一步。
 
 ### 修改界面
 
@@ -417,8 +429,10 @@ npm run sync:vault:check
 
 ```powershell
 gh workflow run release.yml --repo yuxhipeng-hub/zp-workstation `
-  --ref main -f version=0.6.1 -f notes="更新说明"
+  --ref main -f version=<新版本号> -f notes="更新说明"
 ```
+
+`<新版本号>` 必须与 `package.json` 一致；不要直接复制上一次的版本号，否则会覆盖式发版。
 
 发布后必须核对：
 
@@ -432,11 +446,13 @@ gh workflow run release.yml --repo yuxhipeng-hub/zp-workstation `
 
 ### GitHub 推送失败
 
-- 本机可能通过 Clash Verge 的 `127.0.0.1:7897` 代理。
+- 优先 `git fetch` / `git push`，失败先检查 Clash Verge 的 `127.0.0.1:7897` 代理。
 - `github.com:443` 可能超时或 TLS 握手失败。
-- `gh api` 往往仍可用，因为 API 和 Git Smart HTTP 是不同链路。
+- `gh api` 往往仍可用，因为 API 和 Git Smart HTTP 是不同链路；它只用于只读核对
+  （Release、PR、CI 状态）。
 - 不要为此修改仓库历史或强推。
 - 不要擅自删除或覆盖远端分支。
+- 涉及写远端、重建提交、修改分支保护或发布规则时，先停下来征得用户确认。
 
 ### CI 显示异常
 
@@ -461,6 +477,9 @@ npm run sync:vault:check
 不要在 vault 里手改生成笔记。
 
 ## 12. 接手与交付检查表
+
+本文件只维护稳定规则、架构和操作方式。当前版本、动态待办和最近发布以 `docs/HANDOFF.md`
+为准，同一份动态状态不要在两处重复维护。
 
 开始前：
 
