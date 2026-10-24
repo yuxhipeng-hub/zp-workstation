@@ -4086,6 +4086,12 @@ async function handleAction(action, element) {
     case 'open-logs':
       await guard(() => api.openPath('logs'), '打开目录失败')
       break
+    case 'export-diagnostics': {
+      const result = await api.exportDiagnostics()
+      if (result?.canceled) break
+      toast(`诊断包已导出（${formatBytes(result.size)}）。`, 'success', 6000)
+      break
+    }
     case 'open-experiment-directory':
       await guard(() => api.openExperimentDirectory(), '打开实验资料目录失败')
       break

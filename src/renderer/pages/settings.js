@@ -132,6 +132,20 @@ export function createSettingsPage({
 
         <div class="settings-group settings-group-wide">
           <div class="settings-group-head">
+            <h2>诊断</h2>
+            <p>导出日志、脱敏设置和数据概览，方便排查问题或反馈。</p>
+          </div>
+          <div class="field field-inline-action">
+            <span>诊断包</span>
+            <button class="button secondary" type="button" data-action="export-diagnostics">
+              <i data-lucide="file-down"></i><span>导出诊断信息</span>
+            </button>
+          </div>
+          <p class="setting-hint">包含最近 256 KB 日志、脱敏设置和课程/作业数量；不含 API Key 和作业内容，文件只保存在你选择的位置。</p>
+        </div>
+
+        <div class="settings-group settings-group-wide">
+          <div class="settings-group-head">
             <h2>连接与工具</h2>
             <p>模型和备份拥有独立管理页面，这里显示当前状态并提供入口。</p>
           </div>
