@@ -465,6 +465,18 @@ gh workflow run release.yml --repo yuxhipeng-hub/zp-workstation `
 - 如果所有步骤成功但 Check Run 卡住，等待或重跑，不要伪造结果。
 - 合并前确认实际 workflow run 成功。
 
+### Electron E2E 报 Process failed to launch
+
+在 DSH 会话里运行时，环境可能带着 `ELECTRON_RUN_AS_NODE=1`。Electron 会按 Node 启动，
+主进程拿不到 `app`，Playwright 只报 `Process failed to launch`，看不出真实原因。先清掉再跑：
+
+```powershell
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+npm run test:e2e
+```
+
+CI 没有这个变量，所以同一份代码在 CI 上能通过、在 DSH 里却起不来。
+
 ### 应用更新慢
 
 - 先看进程、日志和临时分片 mtime。
