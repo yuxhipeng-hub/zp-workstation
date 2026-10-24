@@ -458,6 +458,17 @@ gh workflow run release.yml --repo yuxhipeng-hub/zp-workstation `
 - 不要为此修改仓库历史或强推。
 - 不要擅自删除或覆盖远端分支。
 - 涉及写远端、重建提交、修改分支保护或发布规则时，先停下来征得用户确认。
+- 如果 `git push` 长时间没有任何输出（几分钟），通常是 Git Credential Manager 在等
+  交互式重新登录。不要反复重试，直接用 `gh` 的 token 做 Basic 认证推送：
+
+```powershell
+$tok = (gh auth token).Trim()
+$basic = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("yuxhipeng-hub`:$tok"))
+git -c credential.helper= `
+  -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $basic" push
+```
+
+注意：`Authorization: Bearer` 对 Git Smart HTTP 无效，会返回 401，必须用 Basic。
 
 ### CI 显示异常
 
