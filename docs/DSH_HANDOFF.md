@@ -356,6 +356,11 @@ npm run sync:vault
 npm run sync:vault:check
 ```
 
+vault 在仓库之外，CI 读不到，`sync:vault:check` 在找不到 vault 时会跳过。CI 真正强制的是
+「所有仓库文档都已登记到镜像清单」：`tests/vault-sync.test.cjs` 会扫描根目录和 `docs/` 下的
+全部 `.md`，新增文档必须同时在 `scripts/sync-obsidian-vault.mjs` 的 `MIRROR_NOTES` 或
+`LOCAL_NOTES` 里登记，否则测试失败。vault 是否最新仍由本机 `npm run verify` 最后一步检查。
+
 然后更新 `docs/HANDOFF.md`：
 
 ```text
