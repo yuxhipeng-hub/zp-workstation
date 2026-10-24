@@ -10,6 +10,8 @@ import { createWelcomeOverlay } from './pages/welcome.js'
 import { createGuidePage } from './pages/guide.js'
 import { createLogsPage } from './pages/logs.js'
 import { createAboutPage } from './pages/about.js'
+import { createEditors } from './components/editors.js'
+import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { createTodayPage } from './pages/today.js'
 import { createSchedulePage } from './pages/schedule.js'
 import '@fontsource-variable/inter/wght.css'
@@ -94,23 +96,7 @@ const state = {
   courseBusy: false,
 }
 
-const pageMeta = {
-  today: ['今天', '今日', '把今天要上的课和要交的作业集中在一页。'],
-  schedule: ['学习', '课表', '导入课表文件，自动抓取上课时间并生成可自由调整的周课表。'],
-  assignments: ['学习', '作业收件箱', '收集零碎任务，按截止时间和处理状态逐项清空。'],
-  experiments: ['学习', '资料库', '按课程归纳文件，像 Windows 文件夹一样逐层展开。'],
-  news: ['资讯', 'AI 资讯', '内置阅读 AI 行业动态：精选条目、热点事件综述与每日日报。'],
-  ai: ['系统', '模型配置', '管理模型服务、API Key、调用协议和能力参数。'],
-  guide: ['帮助', '指南', '先了解工作站能做什么，再按顺序完成第一次配置。'],
-  logs: ['诊断', '日志', '查看本机启动、更新和运行过程中的事件记录。'],
-  settings: ['偏好', '设置', '调整主题、数据位置和自动检查策略。'],
-  backup: ['系统', '备份与同步', '创建完整备份，并同步到 OneDrive 文件夹或 WebDAV。'],
-  about: ['应用', '关于', '查看工作台版本与更新记录。'],
-}
-
 const systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
-const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-
 function resolveTheme(preference) {
   if (preference === 'light' || preference === 'dark') return preference
   return systemThemeQuery.matches ? 'dark' : 'light'
@@ -316,7 +302,7 @@ function getTodayPage() {
       fileTone,
       fileIconName,
       fileExtensionLabel,
-      renderAssignmentComposer,
+      renderAssignmentComposer: () => getEditors().renderAssignmentComposer(),
     })
   }
   return todayPage
@@ -339,8 +325,8 @@ function getSchedulePage() {
       fileExtensionLabel,
       formatBytes,
       formatTime,
-      renderScheduleComposer,
-      renderScheduleTimeEditor,
+      renderScheduleComposer: () => getEditors().renderScheduleComposer(),
+      renderScheduleTimeEditor: () => getEditors().renderScheduleTimeEditor(),
     })
   }
   return schedulePage
@@ -358,7 +344,7 @@ function getAssignmentsPage() {
       assignmentPriorityMeta,
       assignmentStatusMeta,
       activeAiProfile,
-      renderAssignmentComposer,
+      renderAssignmentComposer: () => getEditors().renderAssignmentComposer(),
       formatTime,
     })
   }
@@ -407,9 +393,11 @@ let guidePage = null
 function getGuidePage() {
   if (!guidePage) {
     guidePage = createGuidePage({
+      state,
       escapeHtml,
-      guideProgress,
       guideActionButton,
+      onboardingState,
+      aiProfiles,
     })
   }
   return guidePage
@@ -436,6 +424,23 @@ function getAboutPage() {
     })
   }
   return aboutPage
+}
+
+let editors = null
+
+function getEditors() {
+  if (!editors) {
+    editors = createEditors({
+      state,
+      escapeHtml,
+      WEEKDAY_LABELS,
+      SCHEDULE_COLORS,
+      scheduleWeekText,
+      scheduleCourseColor,
+      timeControlMarkup,
+    })
+  }
+  return editors
 }
 
 function scheduleWeekText(course) {
@@ -496,17 +501,6 @@ function scheduleCourseTimes(schedule, course) {
     endTime: course.endTime || periodTimes.get(course.endPeriod)?.endTime || '',
   }
 }
-
-const SCHEDULE_COLORS = [
-  '#6F89A8',
-  '#6E8E7C',
-  '#B0715B',
-  '#826F9A',
-  '#A66C78',
-  '#9A7C4F',
-  '#5D8D8A',
-  '#6D748A',
-]
 
 function normalizeHexColor(value) {
   const match = String(value || '')
@@ -591,61 +585,6 @@ async function patchOnboarding(patch) {
   state.settings = await api.patchSettings({ onboarding: next })
   state.onboarding = state.settings.onboarding || next
   return state.onboarding
-}
-
-function guideSteps() {
-  const onboarding = onboardingState()
-  const manual = new Set(onboarding.completedSteps || [])
-  const workspace = state.workspace || {}
-  return [
-    {
-      id: 'term',
-      title: '填写开学日期',
-      body: '只有填了开学日期，单双周课程和「今日」的课表才会按真实周次计算。',
-      done: Boolean(state.settings?.termStartDate),
-      action: { label: '去设置', page: 'settings' },
-    },
-    {
-      id: 'schedule',
-      title: '导入课表',
-      body: '把学校导出的 Excel、WPS 表格、CSV、ICS、PDF 或 Word 文件拖进「课表」，会自动排成周视图；也可以手动一条条添加。',
-      done: Boolean(workspace.schedule?.courses?.length),
-      action: { label: '打开课表', page: 'schedule' },
-    },
-    {
-      id: 'ai',
-      title: '配置模型',
-      body: '至少添加一个可用的模型和 API Key，才能在作业收件箱里直接生成执行计划。',
-      done: aiProfiles().some((profile) => profile.hasKey || !profile.requiresKey),
-      action: { label: '打开模型配置', page: 'ai' },
-    },
-    {
-      id: 'assignments',
-      title: '添加第一条作业',
-      body: '零碎任务先收进「作业收件箱」，可以直接用配置好的模型拆解步骤，也可以复制结构化提示词到常用 AI 工具。',
-      done: Boolean(workspace.assignments?.length),
-      action: { label: '打开作业收件箱', page: 'assignments' },
-    },
-    {
-      id: 'backup',
-      title: '确认备份与恢复',
-      body: '工作站会定期自动备份。建议现在手动创建一份，以后换电脑可以用快照导出、导入整套数据。',
-      done: manual.has('backup'),
-      action: { label: '去备份与同步', page: 'backup' },
-      manual: true,
-    },
-  ]
-}
-
-function guideProgress() {
-  const steps = guideSteps()
-  const done = steps.filter((step) => step.done).length
-  return {
-    steps,
-    done,
-    total: steps.length,
-    percent: Math.round((done / steps.length) * 100),
-  }
 }
 
 function dueDateMeta(value) {
@@ -1498,243 +1437,6 @@ function render(options = {}) {
     }
     nextView.scrollTop = previousScrollTop
   })
-}
-
-function renderAssignmentComposer() {
-  if (!state.assignmentComposerOpen) return ''
-  const editing = state.workspace.assignments.find((item) => item.id === state.editingAssignmentId)
-  return `
-    <section class="workspace-composer">
-      <div class="composer-head">
-        <div>
-          <span class="eyebrow">${editing ? 'EDIT ASSIGNMENT' : 'NEW ASSIGNMENT'}</span>
-          <h2>${editing ? '编辑作业' : '添加零碎作业'}</h2>
-        </div>
-        <button class="icon-button compact" type="button" data-action="close-assignment-composer" title="关闭">
-          <i data-lucide="x"></i>
-        </button>
-      </div>
-      <div class="composer-grid">
-        <label class="field composer-title">
-          <span>作业标题</span>
-          <input id="assignmentTitle" type="text" maxlength="120" value="${escapeHtml(editing?.title || '')}" placeholder="例如：线性代数第 3 章习题" />
-        </label>
-        <label class="field">
-          <span>课程</span>
-          <input id="assignmentCourse" type="text" maxlength="80" value="${escapeHtml(editing?.course || '')}" placeholder="例如：线性代数" />
-        </label>
-        <label class="field">
-          <span>截止日期</span>
-          <input id="assignmentDueAt" type="date" value="${escapeHtml(editing?.dueAt || '')}" />
-        </label>
-        <label class="field">
-          <span>优先级</span>
-          <select id="assignmentPriority">
-            <option value="low" ${editing?.priority === 'low' ? 'selected' : ''}>低</option>
-            <option value="medium" ${!editing || editing?.priority === 'medium' ? 'selected' : ''}>普通</option>
-            <option value="high" ${editing?.priority === 'high' ? 'selected' : ''}>高</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>处理状态</span>
-          <select id="assignmentStatus">
-            <option value="inbox" ${!editing || editing?.status === 'inbox' ? 'selected' : ''}>待处理</option>
-            <option value="doing" ${editing?.status === 'doing' ? 'selected' : ''}>进行中</option>
-            <option value="done" ${editing?.status === 'done' ? 'selected' : ''}>已完成</option>
-          </select>
-        </label>
-        <label class="field composer-notes">
-          <span>补充说明</span>
-          <textarea id="assignmentNotes" rows="3" maxlength="2000" placeholder="题目范围、提交格式、老师强调的要求……">${escapeHtml(editing?.notes || '')}</textarea>
-        </label>
-      </div>
-      <div class="composer-actions">
-        <button class="button secondary" type="button" data-action="close-assignment-composer">取消</button>
-        <button class="button primary" type="button" data-action="save-assignment">
-          <i data-lucide="check"></i><span>${editing ? '保存修改' : '添加到收件箱'}</span>
-        </button>
-      </div>
-    </section>
-  `
-}
-
-function renderScheduleComposer() {
-  if (!state.scheduleComposerOpen || !state.workspace) return ''
-  const editing = state.workspace.schedule?.courses.find(
-    (course) => course.id === state.editingScheduleCourseId,
-  )
-  const weekdayOptions = WEEKDAY_LABELS.map(
-    (label, index) =>
-      `<option value="${index + 1}" ${(editing?.weekday || 1) === index + 1 ? 'selected' : ''}>${label}</option>`,
-  ).join('')
-  const courseColor = editing ? scheduleCourseColor(editing) : SCHEDULE_COLORS[0]
-  return `
-    <div class="schedule-editor-layer" data-schedule-editor-layer>
-      <section class="workspace-composer schedule-composer schedule-editor-panel" role="dialog" aria-modal="true" aria-labelledby="scheduleComposerTitle">
-        <div class="composer-head">
-          <div>
-            <span class="eyebrow">${editing ? 'EDIT COURSE' : 'NEW COURSE'}</span>
-            <h2 id="scheduleComposerTitle">${editing ? '编辑课程' : '添加课程'}</h2>
-          </div>
-          <button class="icon-button compact" type="button" data-action="close-schedule-composer" title="关闭">
-            <i data-lucide="x"></i>
-          </button>
-        </div>
-        <div class="composer-grid schedule-composer-grid">
-          <label class="field schedule-course-name">
-            <span>课程名称</span>
-            <input id="scheduleCourseName" type="text" maxlength="100" value="${escapeHtml(editing?.name || '')}" placeholder="例如：高等数学" />
-          </label>
-          <label class="field">
-            <span>教师</span>
-            <input id="scheduleCourseTeacher" type="text" maxlength="40" value="${escapeHtml(editing?.teacher || '')}" placeholder="选填" />
-          </label>
-          <label class="field schedule-course-location">
-            <span>地点</span>
-            <input id="scheduleCourseLocation" type="text" maxlength="80" value="${escapeHtml(editing?.location || '')}" placeholder="例如：博学楼 A201" />
-          </label>
-          <label class="field">
-            <span>星期</span>
-            <select id="scheduleCourseWeekday">${weekdayOptions}</select>
-          </label>
-          <label class="field">
-            <span>开始节次</span>
-            <input id="scheduleStartPeriod" type="number" min="1" max="20" value="${editing?.startPeriod || 1}" />
-          </label>
-          <label class="field">
-            <span>结束节次</span>
-            <input id="scheduleEndPeriod" type="number" min="1" max="20" value="${editing?.endPeriod || 2}" />
-          </label>
-          <div class="field schedule-color-field">
-            <span>课程颜色</span>
-            <div class="course-color-control">
-              <input
-                id="scheduleCourseColor"
-                type="color"
-                value="${courseColor}"
-                aria-label="自定义课程颜色"
-              />
-              <div class="course-color-swatches" role="group" aria-label="常用课程颜色">
-                ${SCHEDULE_COLORS.map(
-                  (color) => `
-                    <button
-                      class="course-color-swatch ${color === courseColor ? 'selected' : ''}"
-                      type="button"
-                      data-action="choose-schedule-color"
-                      data-color="${color}"
-                      style="--swatch-color:${color}"
-                      aria-label="使用颜色 ${color}"
-                      title="${color}"
-                    >
-                      <i data-lucide="check"></i>
-                    </button>`,
-                ).join('')}
-              </div>
-              <span class="course-color-value">${courseColor}</span>
-            </div>
-          </div>
-          <div class="field">
-            <span>开始时间</span>
-            ${timeControlMarkup(editing?.startTime || '', 'id="scheduleStartTime"')}
-          </div>
-          <div class="field">
-            <span>结束时间</span>
-            ${timeControlMarkup(editing?.endTime || '', 'id="scheduleEndTime"')}
-          </div>
-          <label class="field schedule-week-field">
-            <span>上课周次</span>
-            <input id="scheduleWeekText" type="text" maxlength="80" value="${escapeHtml(scheduleWeekText(editing))}" placeholder="例如：1-16、1,3,5、1-16单周；留空表示每周" />
-          </label>
-        </div>
-        <div class="composer-actions">
-          ${
-            editing
-              ? `<button class="button danger-outline" type="button" data-action="delete-schedule-course" data-id="${escapeHtml(editing.id)}">
-                  <i data-lucide="trash-2"></i><span>删除课程</span>
-                </button>
-                <span class="composer-spacer"></span>`
-              : ''
-          }
-          <button class="button secondary" type="button" data-action="close-schedule-composer">取消</button>
-          <button class="button primary" type="button" data-action="save-schedule-course">
-            <i data-lucide="check"></i><span>${editing ? '保存修改' : '添加课程'}</span>
-          </button>
-        </div>
-      </section>
-    </div>
-  `
-}
-
-function renderScheduleTimeEditor() {
-  if (!state.scheduleTimeEditorOpen || !state.workspace?.schedule) return ''
-  const schedule = state.workspace.schedule
-  const rows =
-    state.schedulePeriodDraft ||
-    Array.from({ length: schedule.maxPeriod }, (_item, index) => {
-      const entry = schedule.periodTimes?.[index] || {}
-      return {
-        period: index + 1,
-        startTime: entry.startTime || '',
-        endTime: entry.endTime || '',
-      }
-    })
-  const minimumPeriods = Math.max(
-    1,
-    ...(schedule.courses || []).map((course) => Number(course.endPeriod) || 0),
-  )
-  return `
-    <div class="schedule-editor-layer" data-schedule-time-editor-layer>
-      <section class="workspace-composer schedule-time-editor" role="dialog" aria-modal="true" aria-labelledby="scheduleTimeEditorTitle">
-        <div class="composer-head">
-          <div>
-            <span class="eyebrow">PERIOD TIMES</span>
-            <h2 id="scheduleTimeEditorTitle">节次时间</h2>
-          </div>
-          <button class="icon-button compact" type="button" data-action="close-schedule-time-editor" title="关闭">
-            <i data-lucide="x"></i>
-          </button>
-        </div>
-        <div class="schedule-period-list">
-          ${rows
-            .map(
-              (entry, index) => `
-                <div class="schedule-period-row" data-schedule-period-row>
-                  <span>${index + 1}</span>
-                  <div class="schedule-time-field">
-                    <small>开始</small>
-                    ${timeControlMarkup(entry.startTime || '', `data-schedule-period-start aria-label="第 ${index + 1} 节开始时间"`)}
-                  </div>
-                  <div class="schedule-time-field">
-                    <small>结束</small>
-                    ${timeControlMarkup(entry.endTime || '', `data-schedule-period-end aria-label="第 ${index + 1} 节结束时间"`)}
-                  </div>
-                </div>`,
-            )
-            .join('')}
-        </div>
-        <div class="schedule-period-help">
-          <i data-lucide="sparkles"></i>
-          <span>只有课程填写了时间时，自动识别才会更新对应节次。</span>
-        </div>
-        <div class="composer-actions schedule-period-actions">
-          <button class="button secondary" type="button" data-action="infer-schedule-period-times">
-            <i data-lucide="wand-sparkles"></i><span>自动识别</span>
-          </button>
-          <button class="button secondary" type="button" data-action="add-schedule-period" ${rows.length >= 20 ? 'disabled' : ''}>
-            <i data-lucide="plus"></i><span>增加一节</span>
-          </button>
-          <button class="button secondary" type="button" data-action="remove-schedule-period" ${rows.length <= minimumPeriods ? 'disabled' : ''}>
-            <i data-lucide="minus"></i><span>减少一节</span>
-          </button>
-          <span class="composer-spacer"></span>
-          <button class="button secondary" type="button" data-action="close-schedule-time-editor">取消</button>
-          <button class="button primary" type="button" data-action="save-schedule-period-times">
-            <i data-lucide="check"></i><span>保存</span>
-          </button>
-        </div>
-      </section>
-    </div>
-  `
 }
 
 function experimentGroups(experiments, storedGroups = []) {
@@ -3492,7 +3194,8 @@ async function handleAction(action, element) {
       if (current.has(id)) current.delete(id)
       else current.add(id)
       const completedSteps = [...current]
-      const allDone = guideSteps()
+      const allDone = getGuidePage()
+        .guideSteps()
         .map((step) => (step.id === id ? completedSteps.includes(step.id) : step.done))
         .every(Boolean)
       await guard(
