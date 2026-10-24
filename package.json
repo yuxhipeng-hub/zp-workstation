@@ -1,6 +1,6 @@
 {
   "name": "zp-workstation",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "ZP Workbench：面向本地学习与知识整理的数据工作台。",
   "main": "src/main/index.cjs",
   "author": "zp",
