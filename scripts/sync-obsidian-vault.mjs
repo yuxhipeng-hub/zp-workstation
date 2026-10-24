@@ -65,6 +65,13 @@ export const MIRROR_NOTES = [
     description: '长线程的实测开销数据、根因与日常纪律',
   },
   {
+    source: 'docs/TECH_DEBT.md',
+    note: '20 工程/技术债清单.md',
+    title: '技术债清单',
+    category: '工程',
+    description: '按优先级排列的技术债、验收标准与推进规则',
+  },
+  {
     source: 'RELEASE.md',
     note: '20 工程/发布与更新.md',
     title: '发布与更新',
