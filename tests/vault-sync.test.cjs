@@ -125,6 +125,29 @@ test('every mirrored source file still exists', async () => {
   }
 })
 
+test('every repository document is mirrored or registered as a local note', async () => {
+  const { MIRROR_NOTES, LOCAL_NOTES } = await loadModule()
+  const registered = new Set([...MIRROR_NOTES, ...LOCAL_NOTES].map((entry) => entry.source))
+
+  const collect = (directory) =>
+    fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const absolute = path.join(directory, entry.name)
+      if (entry.isDirectory()) return collect(absolute)
+      if (!entry.name.endsWith('.md')) return []
+      return [path.relative(rootDir, absolute).split(path.sep).join('/')]
+    })
+
+  const rootDocuments = fs.readdirSync(rootDir).filter((name) => name.endsWith('.md'))
+  const documents = [...rootDocuments, ...collect(path.join(rootDir, 'docs'))].sort()
+  const unregistered = documents.filter((document) => !registered.has(document))
+
+  assert.deepEqual(
+    unregistered,
+    [],
+    `以下文档还没登记到 scripts/sync-obsidian-vault.mjs，Obsidian 会漏掉它们：\n${unregistered.join('\n')}`,
+  )
+})
+
 test('mirrors the DSH handoff into the engineering folder', async () => {
   const { MIRROR_NOTES } = await loadModule()
   const note = MIRROR_NOTES.find((entry) => entry.source === 'docs/DSH_HANDOFF.md')
