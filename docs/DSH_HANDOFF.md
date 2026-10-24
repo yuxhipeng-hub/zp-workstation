@@ -1,8 +1,8 @@
 # DSH 接手 ZP Workbench 操作手册
 
-> 更新时间：2026-10-23
+> 更新时间：2026-10-24
 >
-> 当前稳定版：`0.6.1`
+> 当前稳定版：`0.7.0`
 >
 > 适用对象：在 DeepSeek Harness（DSH）中继续开发 ZP Workbench 的编码代理。
 
@@ -71,8 +71,8 @@ ZP Workbench 是一个面向学生的 Windows 本地学习数据工作台，主�
 | -------------- | ----------------------------------------------------- |
 | 产品名         | ZP Workbench                                          |
 | 包名           | `zp-workstation`                                      |
-| 稳定版本       | `0.6.1`                                               |
-| GitHub Release | `v0.6.1`，Latest                                      |
+| 稳定版本       | `0.7.0`                                               |
+| GitHub Release | `v0.7.0`，Latest                                      |
 | App ID         | `com.zp.workbench`                                    |
 | 仓库           | `https://github.com/yuxhipeng-hub/zp-workstation.git` |
 | 运行平台       | Windows 10/11 x64                                     |
