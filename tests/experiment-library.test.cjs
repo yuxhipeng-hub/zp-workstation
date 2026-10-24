@@ -229,3 +229,68 @@ test('creates, renames, and removes an empty custom library', async (t) => {
   assert.equal(workspace.get().experimentGroups.length, 0)
   assert.equal(fs.existsSync(path.join(libraryDirectory, '学期资料')), false)
 })
+
+test('rejects a library root nested inside the current one', async (t) => {
+  const { directory, libraryDirectory, settings, library } = createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  fs.mkdirSync(libraryDirectory, { recursive: true })
+
+  await assert.rejects(
+    () => library.changeRoot(path.join(libraryDirectory, 'nested')),
+    /互相包含|不能与当前目录/,
+  )
+  assert.equal(settings.get().experimentDir, libraryDirectory)
+})
+
+test('keeps settings and workspace when copying fails midway', async (t) => {
+  const { directory, sourceDirectory, libraryDirectory, settings, workspace, library } =
+    createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const source = path.join(sourceDirectory, '数据结构实验报告.pdf')
+  fs.writeFileSync(source, '%PDF data structures', 'utf8')
+  await library.importEntries([source])
+  const group = workspace.get().experiments[0].group
+  const libraryFile = path.join(libraryDirectory, group, '数据结构实验报告.pdf')
+
+  const nextRoot = path.join(directory, 'blocked-root')
+  fs.mkdirSync(nextRoot, { recursive: true })
+  fs.writeFileSync(path.join(nextRoot, group), 'blocking file')
+
+  const beforeSettings = JSON.stringify(settings.get())
+  const beforeWorkspace = JSON.stringify(workspace.get())
+  await assert.rejects(() => library.changeRoot(nextRoot), /EEXIST|ENOTDIR|EPERM/)
+
+  assert.equal(JSON.stringify(settings.get()), beforeSettings)
+  assert.equal(JSON.stringify(workspace.get()), beforeWorkspace)
+  assert.equal(fs.existsSync(libraryFile), true)
+  assert.equal(fs.existsSync(source), true)
+})
+
+test('keeps the old library when a special file cannot be migrated', async (t) => {
+  const { directory, sourceDirectory, libraryDirectory, settings, library } = createLibrary()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const source = path.join(sourceDirectory, '数据结构实验报告.pdf')
+  fs.writeFileSync(source, '%PDF data structures', 'utf8')
+  await library.importEntries([source])
+
+  const external = path.join(directory, 'external')
+  fs.mkdirSync(external, { recursive: true })
+  fs.writeFileSync(path.join(external, 'note.txt'), 'outside', 'utf8')
+  try {
+    fs.symlinkSync(external, path.join(libraryDirectory, '外部链接'), 'junction')
+  } catch {
+    t.skip('当前环境不支持创建 junction')
+    return
+  }
+
+  const nextRoot = path.join(directory, 'moved-library')
+  const result = await library.changeRoot(nextRoot)
+
+  assert.equal(result.skipped.length, 1)
+  assert.match(result.cleanupError, /特殊文件/)
+  assert.equal(fs.existsSync(libraryDirectory), true)
+  assert.equal(fs.existsSync(path.join(nextRoot, '数据结构')), true)
+  assert.equal(settings.get().experimentDir, nextRoot)
+})
