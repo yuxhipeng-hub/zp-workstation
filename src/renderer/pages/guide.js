@@ -4,7 +4,68 @@
  * 渲染层拆分阶段三。只迁教程、常见问题和 Ruka 说明段落。
  */
 
-export function createGuidePage({ escapeHtml, guideProgress, guideActionButton }) {
+export function createGuidePage({
+  state,
+  escapeHtml,
+  guideActionButton,
+  onboardingState,
+  aiProfiles,
+}) {
+  function guideSteps() {
+    const onboarding = onboardingState()
+    const manual = new Set(onboarding.completedSteps || [])
+    const workspace = state.workspace || {}
+    return [
+      {
+        id: 'term',
+        title: '填写开学日期',
+        body: '只有填了开学日期，单双周课程和「今日」的课表才会按真实周次计算。',
+        done: Boolean(state.settings?.termStartDate),
+        action: { label: '去设置', page: 'settings' },
+      },
+      {
+        id: 'schedule',
+        title: '导入课表',
+        body: '把学校导出的 Excel、WPS 表格、CSV、ICS、PDF 或 Word 文件拖进「课表」，会自动排成周视图；也可以手动一条条添加。',
+        done: Boolean(workspace.schedule?.courses?.length),
+        action: { label: '打开课表', page: 'schedule' },
+      },
+      {
+        id: 'ai',
+        title: '配置模型',
+        body: '至少添加一个可用的模型和 API Key，才能在作业收件箱里直接生成执行计划。',
+        done: aiProfiles().some((profile) => profile.hasKey || !profile.requiresKey),
+        action: { label: '打开模型配置', page: 'ai' },
+      },
+      {
+        id: 'assignments',
+        title: '添加第一条作业',
+        body: '零碎任务先收进「作业收件箱」，可以直接用配置好的模型拆解步骤，也可以复制结构化提示词到常用 AI 工具。',
+        done: Boolean(workspace.assignments?.length),
+        action: { label: '打开作业收件箱', page: 'assignments' },
+      },
+      {
+        id: 'backup',
+        title: '确认备份与恢复',
+        body: '工作站会定期自动备份。建议现在手动创建一份，以后换电脑可以用快照导出、导入整套数据。',
+        done: manual.has('backup'),
+        action: { label: '去备份与同步', page: 'backup' },
+        manual: true,
+      },
+    ]
+  }
+
+  function guideProgress() {
+    const steps = guideSteps()
+    const done = steps.filter((step) => step.done).length
+    return {
+      steps,
+      done,
+      total: steps.length,
+      percent: Math.round((done / steps.length) * 100),
+    }
+  }
+
   function renderRukaGuide() {
     return `
     <section class="guide-section ruka-guide">
@@ -285,5 +346,5 @@ codex plugin list</code></div>
   `
   }
 
-  return { renderPage }
+  return { renderPage, guideSteps }
 }
