@@ -18,7 +18,7 @@
 | P1     | 文档与规格治理               | done                     |
 | P2     | 安装包代码签名               | todo                     |
 | P2     | `xlsx` 供应链                | todo                     |
-| P2     | 可访问性与键盘 E2E           | todo                     |
+| P2     | 可访问性与键盘 E2E           | 键盘完成，对比度待做     |
 | P2     | CSS 收敛                     | todo                     |
 | P2     | 分支与检查点治理             | todo                     |
 | done   | Obsidian 镜像清单 CI 覆盖    | #25                      |
@@ -242,8 +242,14 @@ E2E 以正常路径为主（19 条）；0.6.1 的下载器事故说明失败路�
 
 **验收标准**
 
-- [ ] 对话框焦点陷阱、Esc 关闭、Tab 顺序至少各一条 E2E。
+- [x] 对话框焦点陷阱、Esc 关闭、Tab 顺序至少各一条 E2E。
 - [ ] 深浅主题下关键文字对比度有检查或人工清单。
+
+**已做**
+
+- `openTextDialog`、`openChoiceDialog`、资料分类确认三个弹窗统一用 `keepFocusInDialog()` 把
+  Tab / Shift+Tab 循环在弹窗内部，Esc 关闭逻辑保持不变。
+- E2E 覆盖：打开弹窗后焦点落在输入框、连续 Tab 不跑出弹窗、Shift+Tab 回绕、Esc 关闭。
 
 ## P2-4 CSS 收敛
 

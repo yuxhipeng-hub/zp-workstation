@@ -1205,3 +1205,45 @@ test('renders a 1000-assignment workload within the baseline budget', async () =
     await closeWorkstation(app, userDataDir)
   }
 })
+
+test('traps keyboard focus inside dialogs and closes them with Escape', async () => {
+  const userDataDir = createUserDataDir()
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await dismissWelcome(window)
+    await window.locator('.nav').getByRole('button', { name: '资料库', exact: true }).click()
+    await window.getByRole('button', { name: '新建资料库', exact: true }).click()
+
+    const dialog = window.getByRole('dialog', { name: '新建资料库' })
+    await expect(dialog).toBeVisible()
+    const nameInput = dialog.getByLabel('资料库名称')
+    await expect(nameInput).toBeFocused()
+
+    for (let index = 0; index < 5; index += 1) await window.keyboard.press('Tab')
+    expect(
+      await window.evaluate(() =>
+        Boolean(globalThis.document.activeElement?.closest('[role="dialog"]')),
+      ),
+    ).toBe(true)
+
+    await nameInput.focus()
+    await window.keyboard.press('Shift+Tab')
+    expect(
+      await window.evaluate(() =>
+        Boolean(globalThis.document.activeElement?.closest('[role="dialog"]')),
+      ),
+    ).toBe(true)
+
+    await window.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
