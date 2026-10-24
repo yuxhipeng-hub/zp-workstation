@@ -1840,6 +1840,9 @@ export function createPreviewLauncherApi() {
     async exportDiagnostics() {
       return { canceled: true }
     },
+    async reportStartup() {
+      return { ok: true, totalMs: 0, slow: false, rendererMs: 0 }
+    },
     async checkLauncherUpdate() {
       return clone(state.launcherUpdate)
     },

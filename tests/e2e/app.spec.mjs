@@ -85,6 +85,12 @@ test('launches the workstation on today and keeps the topbar actions available',
     await expect(window.locator('#topLaunchButton')).toHaveCount(0)
     await expect(window.getByRole('heading', { name: 'AI 资讯', exact: true })).toBeVisible()
 
+    // 首屏渲染完成后，主进程应把启动耗时写进日志，便于做性能基线。
+    const logFile = path.join(userDataDir, 'logs', 'workbench.log')
+    await expect
+      .poll(() => (fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : ''))
+      .toContain('启动耗时')
+
     const [brandBox, topbarBox] = await Promise.all([
       window.locator('.brand').boundingBox(),
       window.locator('.topbar').boundingBox(),

@@ -19,7 +19,10 @@ const { AiService } = require('./ai-service.cjs')
 const { LauncherUpdater } = require('./launcher-updater.cjs')
 const { BackupManager } = require('./backup-manager.cjs')
 const { ReminderManager } = require('./reminder-manager.cjs')
+const { createStartupTimer } = require('./startup-timer.cjs')
 const { registerIpc } = require('./ipc.cjs')
+
+const startupTimer = createStartupTimer()
 
 const userDataOverride = process.env.ZP_WORKBENCH_USER_DATA
 if (userDataOverride) app.setPath('userData', path.resolve(userDataOverride))
@@ -128,6 +131,7 @@ function createMainWindow() {
   })
   applyWindowIdentity(mainWindow)
   mainWindow.setMenuBarVisibility(false)
+  startupTimer.mark('window-created')
   mainWindow.webContents.on('page-favicon-updated', () => {
     applyWindowIdentity(mainWindow)
   })
@@ -138,6 +142,7 @@ function createMainWindow() {
   } else {
     mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'renderer', 'index.html'))
   }
+  mainWindow.webContents.once('did-finish-load', () => startupTimer.mark('window-loaded'))
 
   mainWindow.once('ready-to-show', () => {
     applyWindowIdentity(mainWindow)
@@ -178,6 +183,7 @@ function createTray() {
 }
 
 async function bootstrap() {
+  startupTimer.mark('app-ready')
   const userData = app.getPath('userData')
   settings = new SettingsStore(userData)
   workspace = new WorkspaceStore(userData)
@@ -228,6 +234,7 @@ async function bootstrap() {
     launcherUpdater,
     backupManager,
     reminderManager,
+    startupTimer,
     getMainWindow: () => mainWindow,
   })
   createMainWindow()

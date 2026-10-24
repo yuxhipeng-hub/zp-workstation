@@ -86,6 +86,7 @@ contextBridge.exposeInMainWorld('launcher', {
   clearLogs: () => ipcRenderer.invoke('logs:clear'),
   changeLogDirectory: (path) => ipcRenderer.invoke('logs:change-directory', path),
   exportDiagnostics: () => ipcRenderer.invoke('diagnostics:export'),
+  reportStartup: (payload) => ipcRenderer.invoke('perf:report-startup', payload),
   checkLauncherUpdate: () => ipcRenderer.invoke('launcher:check-update'),
   downloadLauncherUpdate: (asset) => ipcRenderer.invoke('launcher:download-update', asset),
   on: (channel, callback) => {

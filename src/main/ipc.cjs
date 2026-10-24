@@ -44,6 +44,7 @@ function registerIpc({
   launcherUpdater,
   backupManager,
   reminderManager,
+  startupTimer,
   getMainWindow,
 }) {
   const send = (channel, payload) => {
@@ -483,6 +484,19 @@ function registerIpc({
     if (!isSafeExternalUrl(url)) throw new Error('不允许打开该链接。')
     await shell.openExternal(url)
     return true
+  })
+
+  ipcMain.handle('perf:report-startup', (_event, payload = {}) => {
+    if (!startupTimer) return { ok: false }
+    startupTimer.mark('first-render')
+    const summary = startupTimer.summary()
+    logger.info('perf', startupTimer.describe())
+    return {
+      ok: true,
+      totalMs: summary.totalMs,
+      slow: summary.slow,
+      rendererMs: Number(payload?.firstRenderMs) || 0,
+    }
   })
 
   ipcMain.handle('logs:clear', () => {

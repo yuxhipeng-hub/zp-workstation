@@ -5607,6 +5607,9 @@ async function start() {
     render()
     if (state.page === 'news') await openNewsPage()
     completeUiTask(startupTaskId, 'ZP Workbench 已就绪', '本地工作区已加载。')
+    requestAnimationFrame(() => {
+      void api.reportStartup?.({ firstRenderMs: Math.round(performance.now()) })?.catch(() => {})
+    })
     if (showWelcome) {
       patchOnboarding({
         welcomeSeen: true,
