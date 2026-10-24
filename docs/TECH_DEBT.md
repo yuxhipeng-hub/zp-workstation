@@ -11,7 +11,7 @@
 | ------ | ---------------------------- | ------------------ |
 | P0     | 拆分渲染层                   | 阶段一达标（三页） |
 | P0     | 失败路径测试包               | todo               |
-| P0     | 渲染层纳入类型检查           | todo               |
+| P0     | 渲染层纳入类型检查           | 完成（宽松 DOM）   |
 | P1     | 失败诊断包导出               | todo               |
 | P1     | 启动耗时与性能基线           | todo               |
 | P1     | 覆盖率门槛                   | todo               |
@@ -102,11 +102,19 @@
 `tsconfig.json` 只 include `src/main`、`src/preload`、`scripts`，且 `strict: false`。
 最常改动、体量最大的渲染层完全不在类型检查范围内。
 
-**验收标准**
+**已做**
 
-- [ ] `src/renderer/main.js` 纳入 `allowJs` + `checkJs`。
-- [ ] 先清零新增报错，再逐步打开 `strict`（可分 PR）。
-- [ ] CI 的 `typecheck` 覆盖渲染层。
+- 新增 `tsconfig.renderer.json`（DOM lib、ESNext module、`vite/client` 类型），只覆盖
+  `src/renderer/**`，不和主进程的 Node 类型混在一起。
+- `npm run typecheck` 改为依次跑两份配置，CI 的 `typecheck` 因此覆盖渲染层。
+- 初次接入时报错 169 条，已清零。主要靠 `src/renderer/globals.d.ts` 提供过渡期的宽松
+  DOM 类型（`querySelector` 与事件目标），以及 `preview-api.js` 两处真实修正
+  （`Number(minutesAgo)`、补齐 `requiresKey` 初始值）。
+
+**后续**
+
+- [ ] 逐步把 `globals.d.ts` 的宽松 DOM 类型收紧到具体元素类型，再打开 `strict`。
+- [ ] 新增页面模块直接写具体元素类型，不再依赖宽松声明。
 
 ## P1-1 失败诊断包导出
 

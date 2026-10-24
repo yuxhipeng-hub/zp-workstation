@@ -22,7 +22,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.renderer.json",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
     "verify": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run test:e2e && npm run sync:vault:check",
     "manifest": "node scripts/generate-update-manifest.mjs",

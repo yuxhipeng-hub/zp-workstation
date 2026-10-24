@@ -109,6 +109,10 @@ function syncPreviewCourseTime(schedule, course) {
   }
 }
 
+/**
+ * @param {Record<string, any>} [input]
+ * @param {Record<string, any>} [existing]
+ */
 function normalizePreviewCourse(input = {}, existing = {}) {
   const merged = { ...existing, ...input }
   const weeks = Array.isArray(input.weeks)
@@ -467,7 +471,7 @@ function createPreviewAihotItems() {
         aihot: `https://aihot.news/items/preview-${index + 1}`,
         original,
       },
-      publishedAt: new Date(now - minutesAgo * 60 * 1000).toISOString(),
+      publishedAt: new Date(now - Number(minutesAgo) * 60 * 1000).toISOString(),
       category,
     }),
   )
@@ -1190,6 +1194,7 @@ export function createPreviewLauncherApi() {
           .replace(/\/+$/, ''),
         model: String(profile?.model || '').trim(),
         hasKey: Boolean(apiKey) || (existing?.hasKey && !clearKey),
+        requiresKey: false,
         protocol: profile?.protocol === 'responses' ? 'responses' : 'chat-completions',
         timeoutMs: Number(profile?.timeoutMs) || 90000,
         contextWindow: Number(profile?.contextWindow) || 0,

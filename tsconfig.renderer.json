@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "strict": false,
+    "resolveJsonModule": true
+  },
+  "include": ["src/renderer/**/*.js", "src/renderer/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "release"]
+}
