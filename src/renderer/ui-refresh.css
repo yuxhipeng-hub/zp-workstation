@@ -1856,6 +1856,7 @@ label.input-shell:not(.field):not(.toggle-row):has(input:focus-visible),
 .schedule-editor-layer {
   width: auto;
   max-width: none;
+  /* 课表编辑器贴顶，覆盖通用 editor-layer margin */
   margin: 0 !important;
   padding: 18px 24px 24px;
 }
@@ -2610,6 +2611,7 @@ label.input-shell:not(.field):not(.toggle-row):has(input:focus-visible),
   }
 }
 
+/* 减少动态效果：必须压过组件内 animation 声明 */
 @media (prefers-reduced-motion: reduce) {
   .view > * {
     animation: none !important;
