@@ -12,6 +12,7 @@ import { createLogsPage } from './pages/logs.js'
 import { createAboutPage } from './pages/about.js'
 import { createEditors } from './components/editors.js'
 import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
+import { keepFocusInDialog } from './lib/focus.js'
 import { createTodayPage } from './pages/today.js'
 import { createSchedulePage } from './pages/schedule.js'
 import '@fontsource-variable/inter/wght.css'
@@ -662,32 +663,6 @@ function syncOnboardingOverlay() {
   const hasOverlay = Boolean(root.firstElementChild)
   if (shouldShow && !hasOverlay) root.innerHTML = getWelcomePage().renderOverlay()
   else if (!shouldShow && hasOverlay) root.innerHTML = ''
-}
-
-function dialogFocusables(root) {
-  return [
-    ...root.querySelectorAll(
-      'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])',
-    ),
-  ].filter((element) => !element.disabled && element.offsetParent !== null)
-}
-
-/** 让 Tab / Shift+Tab 在弹窗内部循环，避免焦点跑到背景页面。 */
-function keepFocusInDialog(root, event) {
-  if (event.key !== 'Tab') return
-  const items = dialogFocusables(root)
-  if (!items.length) return
-  const first = items[0]
-  const last = items[items.length - 1]
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault()
-    last.focus()
-    return
-  }
-  if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault()
-    first.focus()
-  }
 }
 
 function openTextDialog({
