@@ -177,6 +177,10 @@ test('keeps one assignment entry on today and opens the composer', async () => {
     await expect(
       window.locator('.today-grid-primary').getByRole('heading', { name: '最近资料' }),
     ).toBeVisible()
+    // 打开作业编辑器会触发一次重渲染，等布局稳定后再量位置，避免拿到 null 或过渡中的坐标。
+    await expect(window.locator('.today-hero-copy')).toBeVisible()
+    await expect(window.locator('.today-grid > .today-grid-column:last-child')).toBeVisible()
+    await window.waitForTimeout(120)
     const [heroCopy, heroSide, primaryColumn, rightColumn] = await Promise.all([
       window.locator('.today-hero-copy').boundingBox(),
       window.locator('.today-hero-side').boundingBox(),
