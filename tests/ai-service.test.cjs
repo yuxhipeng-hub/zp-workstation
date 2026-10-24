@@ -207,3 +207,60 @@ test('rejects malformed plans and insecure remote HTTP endpoints', () => {
   )
   assert.equal(chatEndpoint('http://[::1]:11434/v1'), 'http://[::1]:11434/v1/chat/completions')
 })
+
+function seedProfile(service) {
+  const config = service.saveProfile(
+    { label: '测试模型', baseUrl: 'https://api.example.com/v1', model: 'test-model' },
+    'sk-test',
+  )
+  return config.activeProfileId
+}
+
+test('maps model HTTP failures to readable messages', async (t) => {
+  const cases = [
+    [401, { error: { message: 'bad key' } }, /拒绝了这个 API Key/],
+    [403, {}, /拒绝了这个 API Key/],
+    [404, {}, /模型接口、协议或模型 ID 不存在/],
+    [429, {}, /请求过于频繁/],
+    [500, {}, /模型服务暂时不可用（500）/],
+    [418, { message: 'teapot' }, /teapot/],
+  ]
+  for (const [status, payload, pattern] of cases) {
+    const { directory, service } = createHarness(async () => jsonResponse(payload, status))
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+    const profileId = seedProfile(service)
+    await assert.rejects(() => service.testProfile(profileId), pattern)
+  }
+})
+
+test('reports a truncated or non-JSON model response', async (t) => {
+  const { directory, service } = createHarness(async () => ({
+    ok: true,
+    status: 200,
+    text: async () => '{"choices":[{"message":{"content":"半截',
+  }))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  await assert.rejects(() => service.testProfile(seedProfile(service)), /没有返回可用内容/)
+})
+
+test('reports model timeouts and connection failures', async (t) => {
+  const timeout = Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' })
+  const timeoutHarness = createHarness(async () => {
+    throw timeout
+  })
+  t.after(() => fs.rmSync(timeoutHarness.directory, { recursive: true, force: true }))
+  await assert.rejects(
+    () => timeoutHarness.service.testProfile(seedProfile(timeoutHarness.service)),
+    /模型请求超时/,
+  )
+
+  const offlineHarness = createHarness(async () => {
+    throw new Error('ECONNREFUSED')
+  })
+  t.after(() => fs.rmSync(offlineHarness.directory, { recursive: true, force: true }))
+  await assert.rejects(
+    () => offlineHarness.service.testProfile(seedProfile(offlineHarness.service)),
+    /无法连接模型服务：ECONNREFUSED/,
+  )
+})
