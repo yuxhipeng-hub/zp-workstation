@@ -441,6 +441,8 @@ test('auto-saves settings fields without a floating save bar', async () => {
     await dismissWelcome(window)
     await window.locator('.nav').getByRole('button', { name: '设置', exact: true }).click()
 
+    await expect(window.getByRole('button', { name: '导出诊断信息' })).toBeVisible()
+
     const minimizeToTray = window.locator('input[data-setting="minimizeToTray"]')
     await expect(minimizeToTray).toBeChecked()
     await minimizeToTray.focus()

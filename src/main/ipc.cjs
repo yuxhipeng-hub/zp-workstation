@@ -3,6 +3,7 @@ const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = require('electron')
 const { THEME_VALUES } = require('./constants.cjs')
+const { collectDiagnostics } = require('./diagnostics.cjs')
 const { resolveDropReferences } = require('./drop-reference.cjs')
 
 function isSafeExternalUrl(value) {
@@ -20,6 +21,14 @@ async function pathExists(target) {
     return true
   } catch {
     return false
+  }
+}
+
+function defaultDownloadDir(app) {
+  try {
+    return app.getPath('downloads')
+  } catch {
+    return app.getPath('temp')
   }
 }
 
@@ -480,6 +489,34 @@ function registerIpc({
     logger.clear()
     send('logs:cleared')
     return true
+  })
+
+  ipcMain.handle('diagnostics:export', async () => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const options = {
+      title: '导出诊断信息',
+      defaultPath: path.join(defaultDownloadDir(app), `ZP-Workbench-diagnostics-${stamp}.zip`),
+      filters: [{ name: 'ZIP 压缩包', extensions: ['zip'] }],
+    }
+    const parent = getMainWindow()
+    const result = parent
+      ? await dialog.showSaveDialog(parent, options)
+      : await dialog.showSaveDialog(options)
+    if (result.canceled || !result.filePath) return { canceled: true }
+    const { buffer } = await collectDiagnostics({
+      appInfo: {
+        appVersion: app.getVersion(),
+        electronVersion: process.versions.electron,
+        chromeVersion: process.versions.chrome,
+        locale: app.getLocale(),
+      },
+      settings: settings.get(),
+      workspace: workspace.get(),
+      logFile: logger.logFile,
+    })
+    await fsp.writeFile(result.filePath, buffer)
+    logger.info('diagnostics', '诊断包已导出。')
+    return { canceled: false, filePath: result.filePath, size: buffer.length }
   })
 
   ipcMain.handle('logs:change-directory', async (_event, nextDir) => {

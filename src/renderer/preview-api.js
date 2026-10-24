@@ -1837,6 +1837,9 @@ export function createPreviewLauncherApi() {
       emit('settings:changed', state.settings)
       return { oldDir, newDir: nextDir, movedFiles: 1, settings: clone(state.settings) }
     },
+    async exportDiagnostics() {
+      return { canceled: true }
+    },
     async checkLauncherUpdate() {
       return clone(state.launcherUpdate)
     },
