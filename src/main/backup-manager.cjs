@@ -120,6 +120,14 @@ function encryptBuffer(buffer, password, metadata) {
   return Buffer.concat([MAGIC, header, encrypted])
 }
 
+function parseBackupJson(text, message) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error(message)
+  }
+}
+
 function decryptBuffer(buffer, password) {
   if (!buffer.subarray(0, MAGIC.length).equals(MAGIC)) return buffer
   const newline = buffer.indexOf(0x0a, MAGIC.length)
@@ -403,14 +411,25 @@ class BackupManager {
     const source = path.resolve(sourcePath)
     if (!(await pathExists(source))) throw new Error('没有找到要恢复的备份。')
     const buffer = decryptBuffer(await fsp.readFile(source), password)
-    const zip = await JSZip.loadAsync(buffer)
+    let zip
+    try {
+      zip = await JSZip.loadAsync(buffer)
+    } catch {
+      throw new Error('备份文件已损坏，或不是有效的 ZP Workbench 备份。')
+    }
     const manifestFile = zip.file('manifest.json')
     const workspaceFile = zip.file('workspace.json')
     if (!manifestFile || !workspaceFile) throw new Error('这个文件不是有效的 ZP Workbench 备份。')
-    const manifest = JSON.parse(await manifestFile.async('string'))
+    const manifest = parseBackupJson(
+      await manifestFile.async('string'),
+      '备份清单已损坏，无法恢复。',
+    )
     if (manifest.format !== 'zp-workbench-backup') throw new Error('备份格式不受支持。')
 
-    const workspace = JSON.parse(await workspaceFile.async('string'))
+    const workspace = parseBackupJson(
+      await workspaceFile.async('string'),
+      '备份中的工作站数据已损坏。',
+    )
     if (!workspace || typeof workspace !== 'object' || !Array.isArray(workspace.assignments)) {
       throw new Error('备份中的工作站数据无效。')
     }
@@ -418,7 +437,7 @@ class BackupManager {
     const settingsFile = zip.file('settings.json')
     let restoredSettings = null
     if (settingsFile) {
-      const parsed = JSON.parse(await settingsFile.async('string'))
+      const parsed = parseBackupJson(await settingsFile.async('string'), '备份中的设置数据已损坏。')
       restoredSettings = Object.fromEntries(
         Object.entries(parsed).filter(
           ([key]) => Object.hasOwn(DEFAULT_SETTINGS, key) && !MACHINE_SETTING_KEYS.has(key),

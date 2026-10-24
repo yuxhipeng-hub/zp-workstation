@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const JSZip = require('jszip')
 const { BackupManager } = require('../src/main/backup-manager.cjs')
 const { SettingsStore } = require('../src/main/settings-store.cjs')
 const { WorkspaceStore } = require('../src/main/workspace-store.cjs')
@@ -155,4 +156,95 @@ test('restores an encrypted sync archive on a second machine with the same sync 
   assert.equal(restored.workspace.assignments[0].title, '跨电脑恢复')
   assert.equal(restored.settings.experimentDir, secondExperimentDir)
   assert.equal(restored.settings.dshHome, secondDshHome)
+})
+
+async function writeZip(filePath, files) {
+  const zip = new JSZip()
+  for (const [name, content] of Object.entries(files)) {
+    zip.file(name, typeof content === 'string' ? content : JSON.stringify(content))
+  }
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.writeFileSync(filePath, await zip.generateAsync({ type: 'nodebuffer' }))
+}
+
+const VALID_MANIFEST = { format: 'zp-workbench-backup', version: 1 }
+const VALID_WORKSPACE = { version: 2, assignments: [] }
+
+test('reports a corrupted archive and keeps the current workspace', async (t) => {
+  const harness = createHarness()
+  t.after(() => fs.rmSync(harness.root, { recursive: true, force: true }))
+
+  harness.workspace.createAssignment({ title: '恢复前作业', course: '数据结构' })
+  const archive = await harness.backups.createArchive({ label: 'manual' })
+  fs.writeFileSync(path.join(harness.backups.backupRoot, archive.fileName), 'not a zip archive')
+  harness.workspace.createAssignment({ title: '恢复后作业', course: '大学英语' })
+
+  await assert.rejects(
+    () => harness.backups.restoreArchive(archive.fileName),
+    /已损坏|不是有效的 ZP Workbench 备份/,
+  )
+  const current = harness.workspace.get()
+  assert.equal(current.assignments.length, 2)
+  assert.equal(
+    current.assignments.some((item) => item.title === '恢复后作业'),
+    true,
+  )
+})
+
+test('reports a corrupted encrypted archive', async (t) => {
+  const harness = createHarness()
+  t.after(() => fs.rmSync(harness.root, { recursive: true, force: true }))
+
+  const archive = await harness.backups.createArchive({ label: 'manual', password: 'secret-pass' })
+  fs.writeFileSync(path.join(harness.backups.backupRoot, archive.fileName), 'broken encrypted blob')
+
+  await assert.rejects(
+    () => harness.backups.restoreArchive(archive.fileName, 'secret-pass'),
+    /密码错误|已损坏/,
+  )
+})
+
+test('rejects an archive with an unsupported manifest format', async (t) => {
+  const harness = createHarness()
+  t.after(() => fs.rmSync(harness.root, { recursive: true, force: true }))
+  const fileName = 'workstation-20260101-000000-manual.zip'
+  await writeZip(path.join(harness.backups.backupRoot, fileName), {
+    'manifest.json': { format: 'some-other-tool' },
+    'workspace.json': VALID_WORKSPACE,
+  })
+
+  await assert.rejects(() => harness.backups.restoreArchive(fileName), /备份格式不受支持/)
+})
+
+test('rejects an archive whose workspace data is invalid', async (t) => {
+  const harness = createHarness()
+  t.after(() => fs.rmSync(harness.root, { recursive: true, force: true }))
+  const fileName = 'workstation-20260101-000001-manual.zip'
+  await writeZip(path.join(harness.backups.backupRoot, fileName), {
+    'manifest.json': VALID_MANIFEST,
+    'workspace.json': { assignments: 'not-an-array' },
+  })
+
+  await assert.rejects(() => harness.backups.restoreArchive(fileName), /工作站数据无效/)
+})
+
+test('reports a damaged manifest and a missing manifest', async (t) => {
+  const harness = createHarness()
+  t.after(() => fs.rmSync(harness.root, { recursive: true, force: true }))
+  const damaged = 'workstation-20260101-000002-manual.zip'
+  const missing = 'workstation-20260101-000003-manual.zip'
+
+  await writeZip(path.join(harness.backups.backupRoot, damaged), {
+    'manifest.json': '{ not valid json',
+    'workspace.json': VALID_WORKSPACE,
+  })
+  await writeZip(path.join(harness.backups.backupRoot, missing), {
+    'workspace.json': VALID_WORKSPACE,
+  })
+
+  await assert.rejects(() => harness.backups.restoreArchive(damaged), /备份清单已损坏/)
+  await assert.rejects(
+    () => harness.backups.restoreArchive(missing),
+    /不是有效的 ZP Workbench 备份/,
+  )
 })
