@@ -9,7 +9,7 @@
 
 | 优先级 | 项                           | 状态              |
 | ------ | ---------------------------- | ----------------- |
-| P0     | 拆分渲染层                   | 进行中（第 1 步） |
+| P0     | 拆分渲染层                   | 进行中（第 2 步） |
 | P0     | 失败路径测试包               | todo              |
 | P0     | 渲染层纳入类型检查           | todo              |
 | P1     | 失败诊断包导出               | todo              |
@@ -41,6 +41,9 @@
 
 - [x] 第 1 步：模型配置页已迁到 `src/renderer/pages/model-settings.js`，`main.js` 只保留
       路由映射、共享 helper 和动作转发（`getModelSettingsPage()`）。
+- [x] 第 2 步：设置页渲染已迁到 `src/renderer/pages/settings.js`；`reset-settings`、
+      `choose-experiment-dir` 等页面动作仍在 `main.js`，等共享 UI helper（任务条、主题、
+      workspace 应用）抽出来后随下一步一起迁。
 
 **验收标准**
 
