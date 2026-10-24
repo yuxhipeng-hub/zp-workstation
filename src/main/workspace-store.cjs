@@ -244,9 +244,24 @@ class WorkspaceStore {
       return this.normalizeData(stored)
     } catch (error) {
       if (error.code !== 'ENOENT') {
+        this.quarantineCorruptFile()
         console.warn('Failed to read workspace data, using defaults:', error)
       }
       return this.normalizeData(structuredClone(DEFAULT_WORKSPACE))
+    }
+  }
+
+  /** 读取失败时先留一份原始文件，避免下一次保存把用户数据直接覆盖。 */
+  quarantineCorruptFile() {
+    try {
+      if (!fs.existsSync(this.filePath)) return ''
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const target = path.join(path.dirname(this.filePath), `workspace.corrupt-${stamp}.json`)
+      fs.copyFileSync(this.filePath, target)
+      return target
+    } catch (error) {
+      console.warn('Failed to keep a copy of the corrupt workspace file:', error.message)
+      return ''
     }
   }
 
