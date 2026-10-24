@@ -43,6 +43,9 @@ model_auto_compact_token_limit = 800000
 ## 日常规则
 
 - 一个任务一条线程。功能、bug、UI 截图调整分开开线程，做完写 `docs/HANDOFF.md`。
+- 交接入口分层：先读短版 `docs/HANDOFF.md`；进入代码目录后只加载该目录的 `AGENTS.md`；
+  `docs/DSH_HANDOFF.md` 按架构、数据或验收问题取段；历史发布和旧变更只在追溯时读
+  `docs/HANDOFF_ARCHIVE.md`。
 - 不要在线程中途改 `AGENTS.md`、Codex 配置、MCP 服务器列表；要改先开新线程。
 - 改过被镜像的仓库文档（`AGENTS.md`、`README.md`、`RELEASE.md`、`DESIGN.md`、`docs/` 下的
   文档、`docs/vault/` 下的手写笔记）就**必须**在收尾前跑 `npm run sync:vault`，见下节。

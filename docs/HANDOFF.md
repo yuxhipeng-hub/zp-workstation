@@ -1,275 +1,78 @@
 # 交接说明
 
-写给人看，也写给下一条 Codex 线程看。每次任务收尾更新本文件，让新线程不必读完整段
-历史就能接手。
+写给人看，也写给下一条编码线程看。这里只保留当前事实、当前待办和最近任务；新线程读完
+本页即可知道做到哪、下一步是什么，不必展开历史。
 
-> DSH 接手项目时，除本文件外还要读 [`DSH_HANDOFF.md`](DSH_HANDOFF.md)。那里包含 DSH
-> 开发环境搭建、架构边界、数据红线、常见改动配方和首次接手检查表。
+> 历史发布记录与完整变更表见 [`HANDOFF_ARCHIVE.md`](HANDOFF_ARCHIVE.md)。稳定架构、数据
+> 红线、测试路由和 DSH 操作方式见 [`DSH_HANDOFF.md`](DSH_HANDOFF.md)，按任务需要查对应
+> 章节，不要把它当第二份动态交接页。
 
 ## 当前状态
 
-- 版本：`0.7.0`，`main` 已发布并同步，GitHub Release `v0.7.0` 已设为 Latest（安装包、
-  blockmap、SHA-256 与 `latest.json` 均由 `Release ZP Workbench` 流水线产出）。
-  本版包含渲染层拆分（`main.js` 6594 → 3997 行）、诊断包导出、启动耗时日志、失败路径测试、
-  覆盖率门槛、渲染层类型检查、可访问性和文档治理；单元测试 93 → 117，E2E 18 → 20。
-- 上一版：`0.6.1`（2026-10-23），GitHub Release `v0.6.1`。
-- 上一版（2026-10-22）：`0.6.0` 已发布并同步，GitHub Release `v0.6.0` 已设为 Latest
-  （安装包、blockmap、SHA-256 与 `latest.json` 均由 `Release ZP Workbench` 流水线产出）。
-- 上一版（2026-10-18）：PR #17 合并到 `main`，`Release ZP Workbench` 流水线 run
-  `39137041261` 构建与发布成功。本版包含课表课程颜色、资料库管理、资料库与日志目录迁移、
-  资料库滚动位置修复、指南简化以及工作台 UI 统一。
-- 结构：Electron 桌面应用，主进程 `src/main/`、渲染层 `src/renderer/`（原生 JS + CSS）。
-- 用户数据：`%APPDATA%\deepseek-harness-launcher\workspace.json`，由 `WorkspaceStore` 维护，
-  自动备份在 `backups/` 目录。
-- 方向：2026-10-14 起转型为课程与学习数据工作台。官方 DSH 桌面端负责安装、更新、模型和
-  插件；工作台不再托管 DSH 运行时，也不再做 Skills、插件和版本通道管理。工具台、本机应用
-  托管和 Computer Driver 已移除。
-- 收尾（2026-10-15）：Jev 分类后端与 DshManager 已整体删除，复习板块确定不做，AI 资讯
-  确定不写入资料库，资料库正文也确定不抽成提示词。工作台与 DSH 之间现在只靠"复制提示词"
-  这一条人工通道，且只有作业收件箱在产出提示词。
-- 本次更新（2026-10-18）：课表课程支持自定义颜色，并以中性玻璃卡面、细色条和颜色点呈现；
-  资料库支持新建/改名/删除空资料库、拖入指定资料库，以及更换根目录时自动迁移全部文件；
-  日志目录可独立更换并迁移。
-  「关于」页已移除 DeepSeek Harness 官方资料入口和启动器措辞。
-- 修复（2026-10-21，0.6.0）：日志页启动时回读 `workbench.log` 尾部 1 MB，恢复最近 800 条
-  历史记录；Windows 安装器改为强制每用户模式，保留自定义安装目录，稳定 `appId`、安装 GUID
-  与快捷方式名称，避免再次产生当前用户/所有用户双安装身份。
-- AI 接入（2026-10-21，0.6.0）：系统分组新增独立「模型配置」页，支持多个 OpenAI Compatible
-  模型档案，Base URL、模型 ID 与 Key 均由用户配置；Key 通过 `safeStorage` 独立加密，不进入
-  工作区、日志或备份。作业收件箱新增「AI 拆解」，发送前展示将提交的字段，结果以结构化步骤、
-  前置条件、风险和检查清单保存到作业。模型档案支持 Chat Completions / Responses 协议、上下文
-  窗口、输出上限、温度、推理强度、超时、工具/视觉能力标记和附加请求头。localhost 模型允许
-  免 Key，DSH Headless 暂未进入基础链路。
-- 模型配置 UI（2026-10-22，0.6.0）：高级模型设置改为完整折叠控件，包含图标、用途说明、
-  可选标记、展开箭头和调用参数/能力声明分组；不再使用单行弱提示。补 Electron E2E 防止回退。
-- 列表圆角（2026-10-22，0.6.0）：路径、链接与模型档案列表统一使用 `--radius` 圆角表面，
-  首尾行跟随容器收角，悬停使用中性面板色；模型当前项仍使用透明背景和左侧强调线。
-- 本次发布（2026-10-22）：版本推进到 `0.6.0`，补充 DSH 接手手册和 Obsidian 镜像入口；
-  `Release ZP Workbench` 构建 Windows x64 安装包并发布为 Latest。
-- 更新下载修复（2026-10-23，0.6.1）：并发从 8 降到 4、分片从 64 降到 16、测速连接降到 1，
-  单连接慢速阈值从 256 KB/s 降到 64 KB/s；新增 HTTP 429 线路冷却，移除无法解析的
-  `gh.xxooo.cf`，保留 GitHub 直连、`gh-proxy.com` 和 `ghfast.top`。
-- UI 微调（2026-10-18）：导航保持既有蓝色；其余按 Apple 工作台方向统一页头节奏、次级操作、
-  筛选、开关、卡片悬停和空状态；次级与危险操作改为弱填充按钮，避免深色低对比描边；
-  浅色主题单独使用浅蓝/浅红填充，避免继承深色面板；所有连续分段操作统一为资讯页那种
-  39px 紧凑纯文字控件，作业筛选、主题切换和同步方式共用同一套几何与选中态；列表与卡片
-  悬停统一为标题变蓝，不再铺蓝色背景；小型文字操作默认中性，悬停只变蓝；指南步骤操作
-  也使用同一套纯文字悬停规则。
-  改动集中在 `ui-refresh.css` 末尾的 `Apple workbench polish` 区块，可直接整段撤回；
-  紧凑分段控件统一前的检查点为 `codex/segmented-compact-base`。
-- 修复（2026-10-18）：在资料库左侧列表切换到下方资料库时，保留列表和主页面原有滚动位置，
-  不再因重新渲染跳回顶部；补 Electron E2E 覆盖 12 个资料库的独立滚动场景。
-- 指南（2026-10-18）：移除「第一次使用」中的 DeepSeek Harness 安装步骤，并将相关引导文案
-  改成复制给常用 AI 工具；指南步骤由 5 条调整为 4 条。
-- 转型收尾（2026-10-16）：`codex/remove-toolbench` 上的工具台清理（2026-10-06）与运行时
-  分组移除（2026-10-14）已提交、经 PR #14 合并回 `main`，版本推进到 `0.5.0`；发布结果与
-  本次操作记录见下。
-- 发布：优先走 GitHub Actions `Release ZP Workbench` 手动触发，缓存运行时与构建工具；
-  本地不再作为安装包上传节点。
-- 本机发布网络：推送与触发流水线都要访问 `github.com:443`，本机 git 已配置代理
-  `http://127.0.0.1:7897`（Clash Verge 的混合端口）。这个端口不常开，直连 `github.com:443`
-  会间歇性超时或连接重置（同时 `api.github.com` 往往仍然可用，`gh` 命令不受影响）。
-  **遇到 push / ls-remote 超时、连接重置时，先请用户打开 Clash Verge 的代理再重试**，
-  不要为此改动仓库或全局 git 配置。若代理已开启但 Git HTTPS 仍握手失败、而 `gh api` 正常，
-  `gh api` 只用于只读核对。本次 `0.6.0` 曾用 GitHub Git Data API 兜底完成推送，但那是一次性
-  例外，不是常规发布路径：涉及写远端、重建提交或修改分支保护前，必须先征得用户确认。
+- 发布基线：`package.json` 当前版本为 `0.7.0`；`main` 已发布并同步，GitHub Release
+  `v0.7.0` 为 Latest，安装包、blockmap、SHA-256 与 `latest.json` 由
+  `Release ZP Workbench` 流水线生成。2026-10-24 的真机应用内升级已验证。
+- 当前任务：`codex/dsh-context-router` 上完成 DSH 开发流程第一阶段的文档与上下文拆分；
+  自动检查与 DSH 实测均通过，根目录及三个代码目录的局部规则能在对应文件被读取时自动加载，
+  项目 skill 已发现并注册，正文保持按需加载。
+- 产品方向：面向学生的 Windows 本地学习数据工作台，核心是课表、作业、资料库、今日页、
+  AI 资讯、日志、备份和更新。2026-10-14 起不再托管 DSH 运行时。
+- 技术结构：Electron 主进程 `src/main/`、白名单桥接 `src/preload/`、原生 JS/CSS 渲染层
+  `src/renderer/`。渲染层已拆为 `pages/`、`components/`、`lib/`，`main.js` 负责启动、
+  状态、路由、动作分发和共享 UI，不再承载页面渲染。
+- 用户数据：`%APPDATA%\deepseek-harness-launcher\workspace.json` 由 `WorkspaceStore`
+  维护，自动备份在 `backups/`。目录名保留 `deepseek-harness-launcher` 只为兼容历史安装。
+- AI 接入：只支持 OpenAI Compatible 的 Chat Completions / Responses；API Key 用
+  `safeStorage` 加密，不进入工作区、日志、快照、完整备份或远端同步。资料库正文不会进入
+  模型请求，模型输出不会自动执行。
+- 更新下载：4 路并发、16 个初始分片、每线路 1 路测速；HTTP 429 进入线路冷却。保留
+  GitHub 直连、`gh-proxy.com` 和 `ghfast.top`。
+- DSH 协作：根 `AGENTS.md` 只做总路由，`src/main/`、`src/renderer/`、`tests/` 各有局部
+  `AGENTS.md`；项目级 `.dsh/skills/zp-workbench/SKILL.md` 提供按需开发配方。DSH 仍是开发
+  工具，不是产品运行时依赖。
+- 文档入口：当前状态只维护本页；发布记录和大表只进归档；角色稳定的工程规则进
+  `DSH_HANDOFF.md`、`docs/DEVELOPMENT_FRAMEWORK.md` 和 `docs/DESIGN_SYSTEM.md`。
 
-## 发布记录：0.7.0（2026-10-24）
+## 当前待办
 
-- 版本：`0.6.1` → `0.7.0`，`package.json`、`package-lock.json`、`README.md` 同步更新。
-- 合并：PR #55（发布准备），CI `Verify ZP Workbench` 通过。
-- 出包：`gh workflow run release.yml --ref main -f version=0.7.0`，流水线 run `40073048781` 成功。
-- 产物：`ZP-Workbench-Setup-0.7.0-x64.exe`（126,818,097 字节）、对应 blockmap、`.sha256` 与
-  `latest.json`，Release `v0.7.0` 已设为 Latest。
-- 核对：sha256 `3f115e3fbfcace9984e2139014ca94950508c28661789de4d9f6fa31a769ccee` 与 `.sha256`
-  和 `latest.json` 一致；`latest.json` 的 version/tag/notes 与发布说明一致。
-- 真机升级（2026-10-24 已验证）：从 `0.6.1` 用应用内更新升到 `0.7.0`。使用「国内 GitHub 下载加速」
-  单线路、4 路连接，保存前 SHA-256 `3f115e3f…ccee` 校验通过；安装重启后版本为 `0.7.0`，
-  启动耗时 0.49s，日志历史保留。本次没有再出现 0.6.1 当时的大量 HTTP 429 和慢速分片失败。
-  仍停留在 `0.6.0` 的用户需要手动安装，这一点已写入 README。
+- 长期技术债按 [`TECH_DEBT.md`](TECH_DEBT.md) 的 P0/P1/P2 清单推进；完成一项时更新状态
+  总览，并只在本页“最近任务”留一行。
+- 知识点功能已下线，但 `workspace.json` 的 `knowledge` 仍是兼容字段。删除前必须先处理
+  旧快照和旧备份导入路径，并补 `workspace-store.test.cjs`。
+- `dshHome` 已没有界面入口，但完整备份仍按 `settings.dshHome/skills/` 可选打包。改目录
+  目前只能改 `settings.json`，若要恢复入口需单独设计。
+- 资料库不做提示词，`document-text-extractor.cjs` 只服务课表解析。课表 11-13 节的起止
+  时间仍待用户在节次时间设置里补齐。
+- 旧版 Windows 安装可能留下当前用户与所有用户两套记录；应用不得自动删除注册表、快捷
+  方式或用户数据，只能提示用户按备份后的手工流程处理。
+- `app-host.json` 等旧用户数据不再读取，也不自动清理。`vendor/` 已在 `.gitignore` 中，
+  打包不再包含，可手动删除。
+- 残留 CSS 中仍有少量选择器混用死类名与活类名；`@keyframes`、`:root` 变量和纯元素选择器
+  保留。下次改到附近时顺手处理，不做全量重写。
+- 代码签名、供应链审计和长期分支检查点策略的取舍见 [`TECH_DEBT.md`](TECH_DEBT.md)；
+  涉及证书、费用或删除远端分支时必须先得到用户确认。
+- 发版前仍必须用干净 Windows 用户环境验证真机升级；DSH 无法完成的真机或人工检查只能
+  标为“待用户验收”，不能写成已通过。
 
-## 发布记录：0.6.1（2026-10-23）
+## 最近任务
 
-- 版本：`0.6.0` → `0.6.1`，`package.json`、`package-lock.json`、`README.md` 同步更新。
-- 合并：PR #21（更新下载退避、429 冷却、失效线路移除和发布准备），本地
-  `npm run verify` 与 GitHub Actions run `39968665899` 均通过。
-- 出包：`gh workflow run release.yml --ref main -f version=0.6.1`，流水线 run
-  `39969051917`，构建和发布步骤成功。
-- 产物：`ZP-Workbench-Setup-0.6.1-x64.exe`（126,814,011 字节）、对应 blockmap、
-  `.sha256` 与 `latest.json`，Release `v0.6.1` 已设为 Latest。
-- 核对：安装包 sha256
-  `959c8cb3f9311be17177a74c04310d3efcb9dba86c590ad9712f3d0c39f7d935` 与 `.sha256`
-  和 `latest.json` 一致；更新清单只保留 `gh-proxy.com`、`ghfast.top` 与 GitHub 直连。
+| 日期       | 状态 | 任务                                                                                                 | 验证 / 后续                                                |
+| ---------- | ---- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 2026-10-24 | 完成 | DSH 开发流程第一阶段：拆分交接收敛入口、增加目录级 AGENTS 与项目 skill、修正 DSH 导航和 Git/验收协议 | DSH 实测四份 AGENTS 自动加载；skill 按需注册；自动检查通过 |
+| 2026-10-24 | 完成 | 真机从 `0.6.1` 应用内升级到 `0.7.0`，单线路 4 路连接，SHA-256 校验通过，日志历史保留                 | 启动耗时 0.49s；未再出现大量 429 或慢速分片失败            |
+| 2026-10-24 | 完成 | 发布 `0.7.0`：PR #55 合并，Release run `40073048781` 出包并设为 Latest                               | 安装包、blockmap、`.sha256`、`latest.json` 已核对          |
+| 2026-10-24 | 完成 | 渲染层拆分收尾：页面渲染进入 `pages/`，编辑器进入 `components/`，常量与焦点工具进入 `lib/`           | `main.js` 6594 → 3997 行；类型检查、构建和 E2E 通过        |
+| 2026-10-24 | 完成 | 补充诊断包、启动耗时日志、失败路径测试、覆盖率门槛、可访问性焦点陷阱和 1000 条作业性能基线           | 单元测试 117、E2E 20；具体指标见 `TECH_DEBT.md`            |
+| 2026-10-24 | 完成 | 文档治理：新增技术债清单，标记历史规格废弃，Obsidian 镜像新增“全部 Markdown 必须登记”测试            | `npm run verify` 通过                                      |
+| 2026-10-23 | 完成 | 发布 `0.6.1`：更新下载改为保守并发与分片，增加 429 线路冷却，移除失效镜像                            | Release run `39969051917`；`npm run verify` 与 CI 通过     |
+| 2026-10-22 | 完成 | 发布 `0.6.0`：模型配置、AI 作业拆解、日志恢复、安装器身份修复和 DSH 接手手册进入主线                 | Release run `39800050482`；本地与 CI 门禁通过              |
+| 2026-10-18 | 完成 | 发布 `0.5.1`：课表颜色、资料库管理、资料库与日志目录迁移、滚动位置修复、指南简化和 UI 统一           | Release run `39137041261`；安装包与更新清单已核对          |
+| 2026-10-16 | 完成 | 发布 `0.5.0`：移除 DSH 运行时、工具台、应用托管和 Computer Driver，完成向学习数据工作台转型          | PR #14 / #15；Release run `38911913074`                    |
 
-## 发布记录：0.6.0（2026-10-22）
+## 收尾约定
 
-- 版本：`0.5.1` → `0.6.0`，`package.json`、`package-lock.json`、`README.md` 同步更新。
-- 合并：PR #19（模型配置、AI 作业拆解、日志恢复、安装器身份修复、DSH 交接和发布准备），
-  本地 `npm run verify` 与 GitHub Actions run `39798279951` 均通过。
-- 出包：`gh workflow run release.yml --ref main -f version=0.6.0`，流水线 run
-  `39800050482`，构建和发布步骤成功。
-- 产物：`ZP-Workbench-Setup-0.6.0-x64.exe`（126,813,767 字节）、对应 blockmap、
-  `.sha256` 与 `latest.json`，Release `v0.6.0` 已设为 Latest。
-- 核对：安装包 sha256
-  `d7f54ca9828d4312a5617197a165742223dd62dfaad867224a6fc85038320f7c` 与 `.sha256`
-  和 `latest.json` 一致；四条下载线路均指向 `v0.6.0`。
-
-## 发布记录：0.5.1（2026-10-18）
-
-- 版本：`0.5.0` → `0.5.1`，`package.json`、`package-lock.json`、`README.md` 同步更新。
-- 合并：PR #17（课表颜色、资料库与日志目录迁移、UI 统一和发布准备），CI 的 `verify`
-  检查通过后合并。
-- 出包：`gh workflow run release.yml --ref main -f version=0.5.1`，流水线 run
-  `39137041261`，构建、校验、生成清单、发布全部成功。
-- 产物：`ZP-Workbench-Setup-0.5.1-x64.exe`（126,804,338 字节）、对应 blockmap、
-  `.sha256` 与 `latest.json`，Release `v0.5.1` 已设为 Latest。
-- 核对：`latest.json` 的 `version`/`tag`/`notes`、安装包 sha256
-  `79e6306a3321aa73b7a4b35fac2d877893d02361e726bfe1cf6d839449b9cf54` 与四条下载线路
-  （gh-proxy / gh-xxooo / ghfast / 直连）已逐项比对。
-
-## 发布记录：0.5.0（2026-10-16）
-
-- 版本：`0.4.5` → `0.5.0`，`package.json`、`package-lock.json`、`README.md` 同步更新。
-- 合并：PR #14（转型收尾，60 个文件 +5849/-20580）、PR #15（交接说明标记已发布），
-  两次 CI 的 `verify` 检查均通过后才合并。
-- 出包：`gh workflow run release.yml --ref main -f version=0.5.0`，流水线 run
-  `38911913074`，构建、校验、生成清单、发布全部成功。
-- 产物：`ZP-Workbench-Setup-0.5.0-x64.exe`（126.8 MB）、对应 blockmap、`.sha256` 与
-  `latest.json`，Release `v0.5.0` 已设为 Latest。
-- 核对：`latest.json` 的 `version`/`tag`/`notes`、安装包 sha256 与四条下载线路
-  （gh-proxy / gh-xxooo / ghfast / 直连）已逐项比对。
-
-## 上次改动
-
-| 日期       | 内容                                                                                                                                                                                                                                                                                                                                                                                                  | 涉及文件                                                                                                                                                                                                                                                         |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-10-24 | 调整渲染层拆分的验收标准：改为分阶段目标（阶段一 `<6000` 行、阶段二 `<4000` 行、最终只留启动与路由），不再要求一步降到 3000 行                                                                                                                                                                                                                                                                        | `docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                                                                           |
-| 2026-10-24 | 真机升级验证完成：从 `0.6.1` 应用内升级到 `0.7.0`，单线路 4 路连接，SHA-256 校验通过，重启后版本 0.7.0、启动耗时 0.49s、日志历史保留；未出现 429 或慢速分片失败                                                                                                                                                                                                                                       | `docs/HANDOFF.md`、`docs/TECH_DEBT.md`                                                                                                                                                                                                                           |
-| 2026-10-24 | 发布 `0.7.0`：PR #55 合并，Release run `40073048781` 出包并设为 Latest；产物 126,818,097 字节，sha256 `3f115e3f…69ccee` 与 `.sha256`、`latest.json` 核对一致；真机从 0.6.1 升级待验证                                                                                                                                                                                                                 | `package.json`、`package-lock.json`、`README.md`、`docs/HANDOFF.md`、`docs/DSH_HANDOFF.md`、`docs/DECISIONS.md`                                                                                                                                                  |
-| 2026-10-24 | 把弹窗焦点工具抽到 `src/renderer/lib/focus.js`，`main.js` 3997 行；同步修正文档里的行数与 PR 范围                                                                                                                                                                                                                                                                                                     | `src/renderer/lib/focus.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                      |
-| 2026-10-24 | CSS 收敛：19 个 `!important` 全部就地注释原因（忙碌态、遮罩、减少动态效果、通用隐藏类）；6 处内联样式确认都是运行时值，保留并说明；样式文件按页拆分暂缓                                                                                                                                                                                                                                               | `src/renderer/styles.css`、`src/renderer/design-system.css`、`src/renderer/ui-refresh.css`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                               |
-| 2026-10-24 | 技术债收尾记录：`xlsx` 决定保留 SheetJS 官方 CDN（lockfile 有 integrity，不换旧版 npm 包）；分支检查点定策略（保留 `*-base`，删除前先打 tag）；对比度检查改为设计系统里的人工清单；代码签名等待用户决定                                                                                                                                                                                               | `docs/TECH_DEBT.md`、`docs/DESIGN_SYSTEM.md`、`docs/HANDOFF.md`                                                                                                                                                                                                  |
-| 2026-10-24 | 可访问性第一批：三个弹窗统一加焦点陷阱（`keepFocusInDialog`），Tab/Shift+Tab 在弹窗内循环，Esc 关闭保持；新增 E2E 覆盖初始焦点、Tab 不逃逸、Shift+Tab 回绕与 Esc 关闭                                                                                                                                                                                                                                 | `src/renderer/main.js`、`tests/e2e/app.spec.mjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                         |
-| 2026-10-24 | 渲染层拆分收尾：作业/课程/节次时间编辑器抽到 `components/editors.js`，导航元信息与色板抽到 `lib/constants.js`；`main.js` 4291 → 3993 行，页面渲染全部离开 `main.js`，拆分目标完成                                                                                                                                                                                                                     | `src/renderer/components/editors.js`、`src/renderer/lib/constants.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                            |
-| 2026-10-24 | 拆分渲染层阶段三第一批：欢迎层、指南、日志、关于分别迁到 `pages/welcome.js`、`pages/guide.js`、`pages/logs.js`、`pages/about.js`；共享的对话框与 `guideActionButton` 留在 `main.js` 注入；`main.js` 4686 → 4291 行                                                                                                                                                                                    | `src/renderer/pages/welcome.js`、`src/renderer/pages/guide.js`、`src/renderer/pages/logs.js`、`src/renderer/pages/about.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                      |
-| 2026-10-24 | 拆分渲染层阶段二收尾：备份与同步页迁到 `src/renderer/pages/backup.js`（快照、完整备份、远端同步与工作区校验），`main.js` 5020 → 4686 行；阶段二五页完成，TECH_DEBT 增加阶段三（帮助/日志/关于/欢迎层）与 <4000 行目标                                                                                                                                                                                 | `src/renderer/pages/backup.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                   |
-| 2026-10-24 | 拆分渲染层阶段二第 4 页：AI 资讯页迁到 `src/renderer/pages/news.js`（列表、热点、日报、条目详情与时间线），`main.js` 5297 → 5020 行，阶段二 4/5                                                                                                                                                                                                                                                       | `src/renderer/pages/news.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                     |
-| 2026-10-24 | 拆分渲染层阶段二第 3 页：作业收件箱迁到 `src/renderer/pages/assignments.js`（筛选、统计、卡片与 AI 计划展示），`main.js` 5410 → 5297 行，阶段二 3/5                                                                                                                                                                                                                                                   | `src/renderer/pages/assignments.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                              |
-| 2026-10-24 | 拆分渲染层阶段二第 2 页：课表页迁到 `src/renderer/pages/schedule.js`（周视图、节次时间、周次筛选与空状态），`main.js` 5644 → 5410 行，阶段二 2/5                                                                                                                                                                                                                                                      | `src/renderer/pages/schedule.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                 |
-| 2026-10-24 | 补 1000 条作业的渲染基线：新增 E2E，把 1000 条作业写入临时工作区后测量从点击导航到 1000 张卡片就绪的耗时，本机 678ms，阈值 5s；TECH_DEBT 标记 P1-2 完成                                                                                                                                                                                                                                               | `tests/e2e/app.spec.mjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                                                 |
-| 2026-10-24 | 文档与规格治理：`specs/001` 标注为历史废弃规格，`specs/README` 增加状态约定与「不要照 001 恢复工具台」提示，`DEVELOPMENT_FRAMEWORK.md` 顶部注明部分过期并指向 DSH 手册                                                                                                                                                                                                                                | `docs/specs/001-local-app-hosting-and-desktop-agents.md`、`docs/specs/README.md`、`docs/DEVELOPMENT_FRAMEWORK.md`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                        |
-| 2026-10-24 | 加覆盖率门槛：`npm run test:coverage` 统计 `src/main/**`，基线行 84.11% / 分支 65.50% / 函数 83.48%，门槛设为 82/63/81；CI 测试步骤与 `npm run verify` 改用覆盖率版本                                                                                                                                                                                                                                 | `package.json`、`.github/workflows/ci.yml`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                               |
-| 2026-10-24 | 新增启动耗时打点：`startup-timer.cjs` 记录就绪/窗口/页面/首屏四个时间点，渲染层首帧后上报，主进程写入 `启动耗时：…` 日志并标记超过 5s 的慢启动；E2E 轮询日志确认记录存在                                                                                                                                                                                                                              | `src/main/startup-timer.cjs`、`src/main/index.cjs`、`src/main/ipc.cjs`、`src/preload/index.cjs`、`src/renderer/main.js`、`src/renderer/preview-api.js`、`tests/startup-timer.test.cjs`、`tests/e2e/app.spec.mjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`         |
-| 2026-10-24 | 新增诊断包导出：`diagnostics:export` IPC 打开保存对话框，写出 manifest、脱敏设置、工作区计数摘要和最近 256 KB 日志；设置页新增「诊断」分组；补脱敏、日志截断、zip 内容与缺失日志的单元测试                                                                                                                                                                                                            | `src/main/diagnostics.cjs`、`src/main/ipc.cjs`、`src/preload/index.cjs`、`src/renderer/preview-api.js`、`src/renderer/pages/settings.js`、`src/renderer/main.js`、`tests/diagnostics.test.cjs`、`tests/e2e/app.spec.mjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md` |
-| 2026-10-24 | 拆分渲染层阶段二第 1 页：今日页迁到 `src/renderer/pages/today.js`（今日课表、待交作业、最近资料、AI 资讯面板），`main.js` 5993 → 5644 行；DSH 手册补“push 长时间无输出时用 gh token 做 Basic 认证”的排查方法                                                                                                                                                                                          | `src/renderer/pages/today.js`、`src/renderer/main.js`、`docs/DSH_HANDOFF.md`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                             |
-| 2026-10-24 | P0-3 渲染层纳入类型检查：新增 `tsconfig.renderer.json` 与 `src/renderer/globals.d.ts`，`typecheck` 改为跑主进程与渲染层两份配置；初次接入 169 条报错清零（宽松 DOM 类型 + 两处 `preview-api` 修正）                                                                                                                                                                                                   | `tsconfig.json`、`tsconfig.renderer.json`、`package.json`、`src/renderer/globals.d.ts`、`src/renderer/preview-api.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                    |
-| 2026-10-24 | 再次加固 E2E 布局断言：新增 `stableBoxes()`，反复测量到所有元素都有盒子且坐标连续两次一致；`today` 用例改用它，本地重复 5 次通过                                                                                                                                                                                                                                                                      | `tests/e2e/app.spec.mjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                                                 |
-| 2026-10-24 | 失败路径测试第 4 批（模型接口）：补 401/403/404/429/5xx 映射、超时、连接失败、截断或非 JSON 响应五类用例，全部用注入的 `fetchImpl`，不访问真实模型                                                                                                                                                                                                                                                    | `tests/ai-service.test.cjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                                              |
-| 2026-10-24 | 修复一次 E2E 偶发失败：`today` 布局断言在打开作业编辑器后立刻量 `boundingBox()` 会拿到 `null`，改为先等元素可见并等两帧；TECH_DEBT 增加 P2-6 E2E 稳定性                                                                                                                                                                                                                                               | `tests/e2e/app.spec.mjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                                                 |
-| 2026-10-24 | 失败路径测试第 3 批（资料库迁移）：补目标嵌套拒绝、复制中途失败（设置与工作区不变、原文件保留）、含 junction 时保留旧目录并报告原因三条用例                                                                                                                                                                                                                                                           | `tests/experiment-library.test.cjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                                      |
-| 2026-10-24 | 失败路径测试第 2 批（工作区写入）：补保存失败保留旧文件、陈旧 `.tmp` 被忽略并在下次保存清掉、50 次连续保存后文件仍可解析、损坏文件先留 `workspace.corrupt-*.json` 再回退默认值的用例                                                                                                                                                                                                                  | `src/main/workspace-store.cjs`、`tests/workspace-store.test.cjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                         |
-| 2026-10-24 | 失败路径测试第 1 批（备份）：补损坏普通/加密包、清单损坏、缺清单、格式不支持、无效工作区数据的用例；`restoreArchiveSource` 把 JSZip 与 JSON 原始错误换成中文提示，失败时不改动当前工作区                                                                                                                                                                                                              | `src/main/backup-manager.cjs`、`tests/backup-manager.test.cjs`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                           |
-| 2026-10-24 | 拆分渲染层第 3 步（阶段一完成）：资料库页渲染迁到 `src/renderer/pages/experiments.js`，`main.js` 6594 → 5993 行；TECH_DEBT 标记阶段一达标                                                                                                                                                                                                                                                             | `src/renderer/pages/experiments.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                              |
-| 2026-10-24 | 拆分渲染层第 2 步：设置页渲染迁到 `src/renderer/pages/settings.js`，`main.js` 只留路由映射与动作处理；只搬渲染和 `toggleRow`，恢复默认、目录迁移等动作暂时留在 `main.js`                                                                                                                                                                                                                              | `src/renderer/pages/settings.js`、`src/renderer/main.js`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                                                 |
-| 2026-10-24 | 拆分渲染层第 1 步：模型配置页整页迁到 `src/renderer/pages/model-settings.js`，`main.js` 只留路由映射、共享 helper 与动作转发；行为、DOM 和类名不变。同时记录 DSH 会话里 `ELECTRON_RUN_AS_NODE=1` 导致 E2E 起不来的排查方法                                                                                                                                                                            | `src/renderer/pages/model-settings.js`、`src/renderer/main.js`、`docs/DSH_HANDOFF.md`、`docs/TECH_DEBT.md`、`docs/HANDOFF.md`                                                                                                                                    |
-| 2026-10-24 | 新增 `docs/TECH_DEBT.md`：把技术债按 P0/P1/P2 排成可验收清单（渲染层拆分、失败路径测试、渲染层类型检查、诊断包、性能基线、覆盖率、签名、供应链、a11y、CSS、分支治理），并登记到 Obsidian 镜像                                                                                                                                                                                                         | `docs/TECH_DEBT.md`、`scripts/sync-obsidian-vault.mjs`、`docs/HANDOFF.md`                                                                                                                                                                                        |
-| 2026-10-24 | 补 Obsidian 镜像的 CI 覆盖：新增测试扫描根目录与 `docs/` 下全部 `.md`，要求都登记在 `MIRROR_NOTES` / `LOCAL_NOTES` 里，防止新增文档漏同步；说明 vault 检查只能本机跑、CI 检查的是清单完整性                                                                                                                                                                                                           | `tests/vault-sync.test.cjs`、`docs/DSH_HANDOFF.md`、`docs/HANDOFF.md`                                                                                                                                                                                            |
-| 2026-10-23 | 把 Obsidian 文档同步规则写进 `AGENTS.md`：常用命令表补 `sync:vault` / `sync:vault:check`，「上下文与成本纪律」补"被镜像文档收尾必须同步、`verify` 最后一步会检查"；删除 `docs/HANDOFF.md` 里重复的待办和过期说明，并跑同步                                                                                                                                                                            | `AGENTS.md`、`docs/HANDOFF.md`                                                                                                                                                                                                                                   |
-| 2026-10-23 | 修正 DSH 手册：模式表标注仅适用 DSH、补充已有工作区的 fetch/`--ff-only` 流程、日志默认路径可更换、发布命令改为版本占位符、推送失败时只做只读核对且写远端需确认、更新器改动需真机升级验证、检查表职责划分                                                                                                                                                                                              | `docs/DSH_HANDOFF.md`、`docs/HANDOFF.md`                                                                                                                                                                                                                         |
-| 2026-10-23 | 重写 DSH 接手手册：以 `0.6.1` 为基线，补充标准模式建议、环境镜像、进程边界、数据结构、AI 与更新下载规则、测试发布流程、故障排查和交付检查表，压缩历史说明并明确当前不可恢复的旧能力                                                                                                                                                                                                                   | `docs/DSH_HANDOFF.md`、`docs/HANDOFF.md`                                                                                                                                                                                                                         |
-| 2026-10-23 | 发布 `0.6.1`：PR #21 修复镜像 HTTP 429 导致的更新下载反复失败，降低并发和分片、增加线路冷却并移除失效镜像；本地与 CI 门禁通过，Release run `39969051917` 发布安装包并设为 Latest；回写交接、DSH 手册和 Obsidian 首页                                                                                                                                                                                  | `package.json`、`package-lock.json`、`README.md`、`src/main/download-accelerator.cjs`、`src/main/launcher-updater.cjs`、`tests/**`、`docs/HANDOFF.md`、`docs/DSH_HANDOFF.md`                                                                                     |
-| 2026-10-22 | 发布 `0.6.0`：PR #19 合并模型配置、AI 作业拆解、日志恢复、安装器身份修复和 DSH 交接；本地与 CI 门禁通过，Release run `39800050482` 发布安装包并设为 Latest；回写交接、DSH 手册和 Obsidian 首页                                                                                                                                                                                                        | `package.json`、`package-lock.json`、`README.md`、`docs/HANDOFF.md`、`docs/DSH_HANDOFF.md`、`docs/vault/首页.md`                                                                                                                                                 |
-| 2026-10-22 | 新增 DSH 接手手册，记录项目定位、DSH 镜像方式、架构边界、数据与 AI 规则、测试矩阵、常见改动配方、当前分支风险和首次接手检查表；总交接入口与 Obsidian 索引同步指向该文档，并补镜像测试                                                                                                                                                                                                                 | `docs/DSH_HANDOFF.md`、`docs/HANDOFF.md`、`scripts/sync-obsidian-vault.mjs`、`tests/vault-sync.test.cjs`、`docs/vault/首页.md`、`docs/vault/文档地图.md`                                                                                                         |
-| 2026-10-22 | 将模型配置页的档案列表纳入统一圆角表面，首尾档案行跟随容器收角，保留透明当前项背景与 2px 左侧强调线；补列表圆角 E2E，并将资料库提示气泡场景改为焦点触发，消除鼠标初始位置导致的偶发失败                                                                                                                                                                                                               | `src/renderer/ui-refresh.css`、`tests/e2e/app.spec.mjs`、`docs/HANDOFF.md`                                                                                                                                                                                       |
-| 2026-10-22 | 统一路径与链接列表的圆角表面：外框使用 `--radius`，首尾行同步收角，悬停改为中性面板色；补设置页圆角 E2E                                                                                                                                                                                                                                                                                               | `src/renderer/ui-refresh.css`、`tests/e2e/app.spec.mjs`、`docs/HANDOFF.md`                                                                                                                                                                                       |
-| 2026-10-22 | 优化高级模型设置入口：改为带图标、说明、可选标记和展开箭头的折叠控件；展开后分为调用参数与能力声明两组，补 UI 可见性和展开状态 E2E                                                                                                                                                                                                                                                                    | `src/renderer/main.js`、`src/renderer/ui-refresh.css`、`tests/e2e/app.spec.mjs`、`docs/HANDOFF.md`                                                                                                                                                               |
-| 2026-10-21 | 将模型配置从设置拆为独立页面：新增系统导航「模型配置」、当前模型/协议/连接状态概览和完整档案管理；设置页合并数据存储、保留模型与备份入口；工作区快照、导入导出和文件校验迁入备份页；学习指南新增模型配置步骤                                                                                                                                                                                          | `src/renderer/index.html`、`src/renderer/main.js`、`src/renderer/ui-refresh.css`、`tests/e2e/app.spec.mjs`、`README.md`、`docs/DECISIONS.md`、`docs/HANDOFF.md`                                                                                                  |
-| 2026-10-21 | 新增模型无关 AI 接入：多模型档案、OpenAI Compatible 调用、`safeStorage` Key 存储、连接测试、localhost 免 Key；作业收件箱新增 AI 拆解并将结构化计划保存到安全清洗后的 `assignment.aiPlan`；补服务层、数据持久化和 Electron E2E 覆盖                                                                                                                                                                    | `src/main/ai-service.cjs`、`ai-secret-store.cjs`、`ai-plan.cjs`、`src/main/index.cjs`、`ipc.cjs`、`workspace-store.cjs`、`src/renderer/main.js`、`preview-api.js`、`tests/**`、`README.md`、`docs/DECISIONS.md`、`docs/HANDOFF.md`                               |
-| 2026-10-21 | 修复重启或更新后日志页清空：Logger 从文件尾部回读最近 1 MB，解析最近 800 条并保留多行消息；新增重启回读测试。Windows 安装器禁止所有用户模式，保留自定义目录，稳定 AppUserModelID/GUID/快捷方式名称；新增安装身份回归测试；本地 NSIS 构建成功，图标重生成哈希不变                                                                                                                                      | `src/main/logger.cjs`、`tests/logger.test.cjs`、`tests/installer-config.test.cjs`、`package.json`、`docs/DECISIONS.md`、`docs/HANDOFF.md`                                                                                                                        |
-| 2026-10-18 | 发布 `0.5.1`：合并课表课程颜色、资料库管理、资料库与日志目录迁移、资料库滚动位置修复、指南简化和工作台 UI 统一；PR #17 的 CI 通过，Release 流水线 run `39137041261` 出包并把 `v0.5.1` 设为 Latest；核对安装包 sha256 与四条下载线路                                                                                                                                                                   | `package.json`、`package-lock.json`、`README.md`、`docs/HANDOFF.md`                                                                                                                                                                                              |
-| 2026-10-18 | 移除指南「第一次使用」中的 DSH 安装步骤，剩余步骤自动重排为 4 条；指南首段与作业步骤改为通用 AI 工具表达；补 E2E 校验步骤数量与旧文案不存在                                                                                                                                                                                                                                                           | `src/renderer/main.js`、`tests/e2e/app.spec.mjs`、`docs/HANDOFF.md`                                                                                                                                                                                              |
-| 2026-10-18 | 修复资料库切换分组后滚动位置重置：渲染前收集带 `data-scroll-preserve` 的嵌套滚动容器位置，渲染后恢复；资料库列表标记为该类容器；补 12 组资料库的 Electron E2E                                                                                                                                                                                                                                         | `src/renderer/main.js`、`tests/e2e/app.spec.mjs`、`docs/HANDOFF.md`                                                                                                                                                                                              |
-| 2026-10-18 | Apple 工作台 UI 微调：保留导航蓝色，统一页面信息栏、蓝色次级操作与选中态、开关、中性卡片；次级与危险操作改为弱填充按钮，移除深色低对比描边；浅色主题使用独立浅蓝/浅红填充；连续分段操作统一为 39px 紧凑纯文字控件；列表与卡片悬停统一为标题变蓝，不再铺蓝色背景；小型文字操作和指南步骤操作默认中性、悬停只变蓝；收窄任务状态条并统一空状态；全部样式集中在可独立移除的 `Apple workbench polish` 区块 | `src/renderer/ui-refresh.css`、`src/renderer/main.js`、`docs/HANDOFF.md`                                                                                                                                                                                         |
-| 2026-10-18 | 课表课程新增持久化自定义颜色，并按中性玻璃卡面、细色条和颜色点重构课程块，编辑器提供快捷色板与自由取色；资料库新增自定义资料库 CRUD（空资料库可删除）、直接拖入指定资料库，设置页更换根目录时迁移全部文件并更新索引；日志目录可更换并迁移旧日志，活动日志文件改为 `workbench.log`；「关于」页移除 DSH 官方资料入口与启动器措辞；补单元与 Electron E2E 覆盖                                            | `src/main/experiment-library.cjs`、`workspace-store.cjs`、`logger.cjs`、`schedule-manager.cjs`、`src/renderer/main.js`、`ui-refresh.css`、`tests/**`、`docs/HANDOFF.md`                                                                                          |
-| 2026-10-16 | 收尾转型并发布 `0.5.0`：工具台清理、运行时分组移除、Jev/DshManager 删除与文档同步改动合并回 `main`（PR #14），版本 `0.4.5` → `0.5.0`，`Release ZP Workbench` 流水线出包，Release `v0.5.0` 设为 Latest 并核对 `latest.json`（PR #15）；记录本机发布网络：`github.com:443` 超时时先请用户开 Clash Verge 代理                                                                                            | `package.json`、`package-lock.json`、`README.md`、`RELEASE.md`、`docs/HANDOFF.md`                                                                                                                                                                                |
-| 2026-10-15 | 清理残留 CSS：按「类名还有没有引用」删掉 481 条死规则、约 63 KB（styles.css 142.7 → 95 KB），涵盖工具台、运行时分组、知识点页面和 Codex 教程块留下的样式；删除失去调用方的 `process-runner.cjs` 及其测试；README 按当前定位重写                                                                                                                                                                       | `src/renderer/styles.css`、`src/renderer/ui-refresh.css`、`src/renderer/design-system.css`、`src/main/process-runner.cjs`、`README.md`、`docs/HANDOFF.md`                                                                                                        |
-| 2026-10-15 | 文档同步变成门禁：脚本新增 `--check`（只读比对 vault 与仓库，列出过期/缺失/多余笔记，对不上退 1；vault 不存在时跳过）、`npm run sync:vault:check`，并接到 `npm run verify` 最后一步；路径解析改成问系统要"文档"目录，中文用户名不再被代码页弄坏；补 3 条测试                                                                                                                                          | `scripts/sync-obsidian-vault.mjs`、`tests/vault-sync.test.cjs`、`package.json`、`docs/CONTEXT-AND-COST.md`                                                                                                                                                       |
-| 2026-10-15 | 删除 Jev 后端与 DshManager：`jev:*` IPC/preload、`jev*` 设置键、导入对话框 Jev 文案、`dialog:choose-dsh-home`、顶栏状态里的 DSH 路径、`.jev-*` 样式全部清掉；复习板块确定不做，`reviewReminder*` 设置键、`到期复习` 文案与 `.today-review-*` 样式一并删除；AI 资讯确定不写入资料库                                                                                                                    | `src/main/jev-manager.cjs`、`src/main/dsh-manager.cjs`、`src/main/index.cjs`、`src/main/ipc.cjs`、`src/renderer/main.js`、`src/preload/index.cjs` 等                                                                                                             |
-| 2026-10-15 | 新建 Obsidian 知识库：`scripts/sync-obsidian-vault.mjs` 把仓库文档生成成 vault 笔记（含 Bases 汇总视图与资料关系画布），手写笔记正文放在 `docs/vault/`，新增 `npm run sync:vault` 与 `tests/vault-sync.test.cjs`                                                                                                                                                                                      | `scripts/sync-obsidian-vault.mjs`、`tests/vault-sync.test.cjs`、`docs/vault/`、`package.json`                                                                                                                                                                    |
-| 2026-10-15 | 指南页与侧边栏调整：「帮助」分组移到「系统」下方；指南页把 ZP Workbench 教程提到最前，AI 概念与网络说明下移；删除「Codex 入门」「DeepSeek 接入 Codex」两块、残留的 CODEX + DEEPSEEK GUIDES 标题块（含微软商店/官方文档按钮）及配套的路由状态与动作                                                                                                                                                    | `src/renderer/index.html`、`src/renderer/main.js`、`tests/e2e/app.spec.mjs`                                                                                                                                                                                      |
-| 2026-10-15 | 设置页移除「DeepSeek Harness 数据」与「Jev 智能分类」两块：数据目录输入、Jev 模式开关、Key 管理、高级选项与对应动作全部删除，指南 FAQ 里的 Jev 说法同步改写                                                                                                                                                                                                                                           | `src/renderer/main.js`、`tests/e2e/app.spec.mjs`                                                                                                                                                                                                                 |
-| 2026-10-15 | 清掉知识点后端与内置运行时：删除 `knowledge-manager`、knowledge IPC/preload、workspace-store 知识点方法（保留 `knowledge` 字段兼容），移除 `runHeadlessTask`、`vendor/` 打包与 `@pnpm/exe.win32-x64` 依赖，安装包 158.9 MB → 120.9 MB                                                                                                                                                                 | `src/main/workspace-store.cjs`、`src/main/dsh-manager.cjs`、`package.json`、`.github/workflows/release.yml`                                                                                                                                                      |
-| 2026-10-15 | 移除「学习 → 知识点」板块：导航页、今日到期复习、资料库生成按钮、作业沉淀入口、指南条目与设置里的复习提醒一并去掉；`workspace.knowledge` 数据保留                                                                                                                                                                                                                                                     | `src/renderer/main.js`、`src/renderer/index.html`、`src/main/reminder-manager.cjs`、`tests/e2e/app.spec.mjs`                                                                                                                                                     |
-| 2026-10-14 | 今日页接入 AIHOT：新增 AihotClient（ETag、30 分钟缓存、单飞、429 退避）与「AI 资讯」面板（最新精选 + 当日日报）                                                                                                                                                                                                                                                                                       | `src/main/aihot-client.cjs`、`src/main/ipc.cjs`、`src/renderer/main.js`、`src/renderer/ui-refresh.css`                                                                                                                                                           |
-| 2026-10-14 | 新增「AI 资讯」独立页：精选分类/时间窗/搜索、热点事件综述与报道时间线、日报全文都在应用内阅读，今日页只留摘要入口                                                                                                                                                                                                                                                                                     | `src/renderer/main.js`、`src/renderer/ui-refresh.css`、`src/main/aihot-client.cjs`                                                                                                                                                                               |
-| 2026-10-14 | 转型学习数据工作台：删除运行时分组（版本与更新/插件/Skills/模型连接）、全量 DSH 运行时管理与顶栏版本提示，备份改为直接打包技能目录                                                                                                                                                                                                                                                                    | `src/renderer/main.js`、`src/main/ipc.cjs`、`src/main/dsh-manager.cjs`、`src/main/backup-manager.cjs`                                                                                                                                                            |
-| 2026-10-06 | 停止通用 DSH 桌面壳方向并清理旧开发分支，移除工具台、应用托管、Computer Driver 与动作日志                                                                                                                                                                                                                                                                                                             | `src/main/app-host-manager.cjs`、`src/main/computer-driver.cjs`、`src/renderer/main.js`                                                                                                                                                                          |
-| 2026-09-25 | 发布 0.4.5，安装包、blockmap、SHA-256 与 `latest.json` 已上传并由 Release Actions 校验                                                                                                                                                                                                                                                                                                                | `package.json`、`.github/workflows/release.yml`                                                                                                                                                                                                                  |
-| 2026-09-25 | 发布改为 Actions 缓存构建、artifact 中转和独立上传，精简语言包与运行时依赖，安装包缩小约 14 MB                                                                                                                                                                                                                                                                                                        | `.github/workflows/release.yml`、`RELEASE.md`、`package.json`、`vite.config.mjs`                                                                                                                                                                                 |
-| 2026-09-25 | 工具台按工程、办公、其他、娱乐分组，工程软件优先展示且搜索支持类别筛选                                                                                                                                                                                                                                                                                                                                | `src/main/app-host-manager.cjs`、`src/renderer/main.js`、`src/renderer/ui-refresh.css`                                                                                                                                                                           |
-| 2026-09-25 | 工具台产品化：手动添加/移除应用、适配等级标识、简化首页状态和运行会话入口                                                                                                                                                                                                                                                                                                                             | `src/main/app-host-manager.cjs`、`src/renderer/main.js`、`src/renderer/ui-refresh.css`                                                                                                                                                                           |
-| 2026-09-25 | 新增常驻 Computer Driver，复用单个 PowerShell 服务处理 UIA 检测、动作和窗口解析                                                                                                                                                                                                                                                                                                                       | `src/main/persistent-computer-service.cjs`、`src/main/computer-driver.cjs`                                                                                                                                                                                       |
-| 2026-09-25 | 任务验证改为执行前后证据对比；动作日志增加脱敏、30 天保留和手动清空                                                                                                                                                                                                                                                                                                                                   | `src/main/app-action-log.cjs`、`src/main/app-host-manager.cjs`、`src/renderer/main.js`                                                                                                                                                                           |
-| 2026-09-25 | VS Code 输出升级为带来源/行/退出码的证据，打开路径和命令执行增加任务级验证状态                                                                                                                                                                                                                                                                                                                        | `src/main/app-host-manager.cjs`、`src/renderer/main.js`                                                                                                                                                                                                          |
-| 2026-09-25 | 工具台增加持久化动作审计、多软件运行会话和基于 PID/HWND 的精确窗口映射                                                                                                                                                                                                                                                                                                                                | `src/main/app-action-log.cjs`、`src/main/window-process-resolver.cjs`、`src/renderer/main.js`                                                                                                                                                                    |
-| 2026-09-25 | 加固工具台：前台窗口校验、危险命令确认、命令歧义选择、路径一次性授权令牌                                                                                                                                                                                                                                                                                                                              | `src/main/computer-driver.cjs`、`src/main/app-host-manager.cjs`、`src/main/ipc.cjs`                                                                                                                                                                              |
-| 2026-09-25 | 完成 VS Code 垂直切片：打开路径、命令面板执行、快捷命令和输出读取                                                                                                                                                                                                                                                                                                                                     | `src/main/app-host-manager.cjs`、`src/renderer/main.js`、`src/main/ipc.cjs`                                                                                                                                                                                      |
-| 2026-09-25 | UI Automation 增加受控动作层：聚焦、调用、选择、展开/折叠、设值和结果回读                                                                                                                                                                                                                                                                                                                             | `src/main/computer-driver.cjs`、`src/renderer/main.js`                                                                                                                                                                                                           |
-| 2026-09-25 | 工具台支持自由分栏缩放和右侧画面全屏；全屏时隐藏左侧工具列表与工作站导航                                                                                                                                                                                                                                                                                                                              | `src/renderer/main.js`、`src/renderer/ui-refresh.css`、`src/main/ipc.cjs`                                                                                                                                                                                        |
-| 2026-09-24 | VS Code 启动启用 accessibility，并可在工具台读取、查看 UI Automation 元素结构                                                                                                                                                                                                                                                                                                                         | `src/main/computer-driver.cjs`、`src/renderer/main.js`                                                                                                                                                                                                           |
-| 2026-09-24 | 确认首批控制目标为 VS Code 与 IntelliJ IDEA；CAD 当前未安装，暂不纳入首批                                                                                                                                                                                                                                                                                                                             | 无代码改动                                                                                                                                                                                                                                                       |
-| 2026-09-24 | 工具台按需读取并缓存 Windows 官方软件图标                                                                                                                                                                                                                                                                                                                                                             | `src/main/app-host-manager.cjs`、`src/renderer/main.js`                                                                                                                                                                                                          |
-| 2026-09-24 | 工具台左右分栏支持拖动缩放、键盘微调和宽度持久化                                                                                                                                                                                                                                                                                                                                                      | `src/renderer/main.js`、`src/renderer/ui-refresh.css`、`tests/e2e/app.spec.mjs`                                                                                                                                                                                  |
-| 2026-09-24 | 新增“工具台”：扫描开始菜单和 App Paths、启动本机软件、右侧实时窗口画面                                                                                                                                                                                                                                                                                                                                | `src/main/app-host-manager.cjs`、`src/renderer/main.js`、`src/main/ipc.cjs`                                                                                                                                                                                      |
-| 2026-09-24 | 完成本机应用托管、桌面智能体与多模型分工的 GitHub 调研和分阶段规格                                                                                                                                                                                                                                                                                                                                    | `docs/specs/001-local-app-hosting-and-desktop-agents.md`                                                                                                                                                                                                         |
-| 2026-09-23 | 导入 25 大数据 1 班蓝色课程到课表（走 `ScheduleManager.createCourse`，非手改 JSON）                                                                                                                                                                                                                                                                                                                   | 用户数据，无代码改动                                                                                                                                                                                                                                             |
-| 2026-09-23 | 修正 Codex 侧 DeepSeek 上下文窗口配置（272K → 1M）                                                                                                                                                                                                                                                                                                                                                    | `~/.codex/config.toml`、`~/.codex/model-catalogs/relay-mu5jr1y0.json`                                                                                                                                                                                            |
-
-## 待办 / 已知问题
-
-- 知识库（2026-10-15 新增）：Obsidian vault 在 `D:\Users\小zp\Documents\Obsidian Vault\ZP Workbench`，
-  由 `npm run sync:vault` 从仓库生成，不要手改里面的生成笔记。
-  路径解析顺序是 `--vault` → `ZP_WORKBENCH_VAULT` → 系统"文档"目录 → `~/Documents`，
-  本机能自动找到 D: 上的 vault，一般不用手动指定。
-- Obsidian 官方 skill（`kepano/obsidian-skills`，MIT）已装到 `~/.codex/skills`：`obsidian-markdown`、
-  `obsidian-bases`、`json-canvas`、`obsidian-cli` 都能用（命令行界面已启用，`obsidian` 解析到
-  `D:\软件\Obsidian\Obsidian.com`，新开终端直接可用；老会话的 PATH 可能是旧的，用完整路径调）；
-  `defuddle` / `knap` 需要全局 npm 包，目前用不到。
-- AIHOT 相关数据缓存在 `<userData>/aihot-cache.json`（最多 24 条，30 分钟内不重复请求）。
-  热点榜、事件综述和日报都已在「AI 资讯」页。2026-10-15 决定不做「存入资料库」：AIHOT 不提供
-  单篇正文接口，也没有原文全文授权，存进去的只能是二手摘要，不值得为它增加一条数据链路。
-- 资料库不做提示词（2026-10-15 决定）：不抽取文件正文，也不把资料拼进模型上下文，理由是隐私
-  边界和一堆抽不出文字、超长截断的麻烦。提示词只由作业收件箱按作业字段生成，
-  `document-text-extractor.cjs` 继续只服务课表解析。
-- 知识点功能已整体下线（2026-10-15）。`workspace.json` 里的 `knowledge` 字段按兼容数据保留：
-  `workspace-store.cjs` 的 `normalizeData` 继续透传该字段，`linkCourses`／`renameCourse`／
-  `listCourses` 仍会维护它的 `courseId` 与计数，`workspace-store.test.cjs` 有专门的兼容用例。
-  以后要彻底删掉这个字段，必须先处理老备份的导入路径。
-- `vendor/` 目录仍留在本地磁盘（已在 `.gitignore` 中，约 100 MB），打包不再包含它，可手动删除。
-- `dshHome` 设置没有任何界面入口（`dialog:choose-dsh-home` 已随 DshManager 删除），但
-  `backup-manager.cjs` 仍按 `settings.dshHome`（默认 `~/.dsh`）打包 `skills/` 目录。
-  要换目录只能改 `settings.json`，或重新做一个入口。
-- 残留 CSS 已在 2026-10-15 按"类名还有没有引用"整批清掉（481 条规则、约 63 KB）。还剩两类
-  没动：选择器里既有死类名又有活类名的（例如 `label:not(.model-key-field):has(...)`），以及
-  `@keyframes`、`:root` 变量和纯元素选择器——它们不在删除范围内，下次改到附近时顺手处理。
-- ZP Workbench 的"今日/总览"与其他板块的 Apple 风格统一仍在进行，只完成了部分页面。
-- 课表 11-13 节的起止时间未填，用户可在课表页的节次时间设置里补。
-- `app-host.json` 保留在旧用户目录中但不再读取或清理，避免未经确认删除用户数据。
-- Windows 旧版本可能留下同 GUID 的当前用户与所有用户两套安装记录。本机已于 2026-10-21 备份
-  并清理机器级记录，再用修复版原位更新为仅存 `HKCU 0.5.1`，桌面快捷方式已恢复；其他仍在旧版
-  的电脑需要做同样的一次性清理，然后重新固定任务栏。不要在应用代码里自动删除注册表或用户的
-  快捷方式。
-- AI 接入目前只覆盖 OpenAI Compatible 协议；Anthropic Messages、Gemini 原生协议和 DSH
-  Headless 尚未接入。AI 只处理用户确认后的作业字段，不读取资料库正文，也不执行命令或工具。
-- AI API Key 有意不进入快照、完整备份或远端同步；恢复备份到新电脑后需要重新填写 Key。
-
-## 线程交接模板
-
-```
-任务：
-已完成：
-未完成：
-关键文件：
-验证方式：
-下一步：
-```
+1. 当前事实变化时更新本页，不让“当前状态”和“当前待办”堆成长历史。
+2. 已完成的详细记录只追加到 [`HANDOFF_ARCHIVE.md`](HANDOFF_ARCHIVE.md)；最近任务表保留
+   最近 8-12 条，超出的移入归档。
+3. 改过被镜像的文档后运行 `npm run sync:vault`，再用
+   `npm run sync:vault:check` 确认无漂移。

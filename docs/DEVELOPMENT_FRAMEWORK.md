@@ -423,8 +423,9 @@ npm run sync:vault:check    # 只读检查，verify 的最后一步
   （能处理 Windows 的重定向）→ `~/Documents/Obsidian Vault`。加 `--dry-run` 只列出将要写入的文件。
 - `--check` 逐份比对 vault 与仓库，报「内容过期／笔记缺失／多余笔记」，对不上退 1；
   vault 目录不存在时跳过并通过，所以 CI 和没装 Obsidian 的机器不受影响。
-- 生成物落在 vault 的 `ZP Workbench/` 目录：仓库文档逐份镜像成笔记；`变更时间线` 与
-  `待办与已知问题` 从 `docs/HANDOFF.md` 的两段抽出来；另有 `00 索引/全部文档.base`
+- 生成物落在 vault 的 `ZP Workbench/` 目录：仓库文档逐份镜像成笔记；`最近任务` 与
+  `待办与已知问题` 从 `docs/HANDOFF.md` 的两段抽出来；完整历史见单独镜像的
+  `docs/HANDOFF_ARCHIVE.md`；另有 `00 索引/全部文档.base`
   汇总视图和 `00 索引/资料关系.canvas` 画布。
 - 手写笔记的正文放在 `docs/vault/`，同步时一起搬进去并补 frontmatter。新增手写笔记要在
   `scripts/sync-obsidian-vault.mjs` 的 `LOCAL_NOTES` 里登记来源和目标路径。
