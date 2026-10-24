@@ -246,6 +246,7 @@ body[data-theme='light'] .nav-item.active {
 .button.is-busy,
 .icon-button.is-busy {
   position: relative;
+  /* 忙碌态隐藏文字，需盖过按钮自身的 color */
   color: transparent !important;
   cursor: progress;
   opacity: 0.78;
@@ -442,6 +443,7 @@ body[data-theme='light'] .nav-item.active {
 }
 
 .time-picker-done {
+  /* 完成态强制墨色，覆盖输入框现有配色 */
   border-color: var(--ink) !important;
   background: var(--ink) !important;
   color: var(--ink-inverse) !important;
@@ -1760,6 +1762,7 @@ body[data-theme='light'] .welcome-card {
   .toast,
   .status-dot.running,
   .brand-wordmark {
+    /* 减少动态效果：必须压过组件内 animation 声明 */
     animation: none !important;
   }
 

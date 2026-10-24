@@ -2001,10 +2001,12 @@ code {
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
+  /* 全屏遮罩贴边，覆盖通用层 margin */
   margin: 0 !important;
   padding: 22px 28px 28px;
   overflow: hidden;
   background: color-mix(in srgb, var(--bg) 78%, transparent);
+  /* 遮罩入场动画覆盖通用重置 */
   animation: scrim-in var(--motion-fast) var(--ease-out) both !important;
 }
 
@@ -3314,6 +3316,7 @@ input::placeholder {
 }
 
 .hidden {
+  /* 通用隐藏工具类，必须压过组件的 display */
   display: none !important;
 }
 
@@ -5233,6 +5236,7 @@ input::placeholder {
   }
 }
 
+/* 减少动态效果：必须压过组件内 animation 声明 */
 @media (prefers-reduced-motion: reduce) {
   .view > *,
   .toast,
