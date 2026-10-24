@@ -42,6 +42,30 @@ async function closeWorkstation(app, userDataDir) {
   fs.rmSync(userDataDir, { recursive: true, force: true })
 }
 
+/**
+ * 反复测量直到所有元素都有盒子且坐标连续两次一致。
+ * 打开弹层或自动刷新会触发重渲染，直接量一次 `boundingBox()` 在 CI 上会偶发拿到 null。
+ */
+async function stableBoxes(window, selectors, attempts = 40) {
+  let previous = null
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const boxes = await Promise.all(
+      selectors.map((selector) => window.locator(selector).boundingBox()),
+    )
+    if (boxes.every(Boolean)) {
+      const signature = JSON.stringify(
+        boxes.map((box) => [box.x, box.y, box.width, box.height].map((value) => Math.round(value))),
+      )
+      if (signature === previous) return boxes
+      previous = signature
+    } else {
+      previous = null
+    }
+    await window.waitForTimeout(50)
+  }
+  throw new Error('布局元素没有在预期时间内稳定')
+}
+
 test('launches the workstation on today and keeps the topbar actions available', async () => {
   const userDataDir = createUserDataDir()
   const app = await launchWorkstation(userDataDir)
@@ -177,15 +201,12 @@ test('keeps one assignment entry on today and opens the composer', async () => {
     await expect(
       window.locator('.today-grid-primary').getByRole('heading', { name: '最近资料' }),
     ).toBeVisible()
-    // 打开作业编辑器会触发一次重渲染，等布局稳定后再量位置，避免拿到 null 或过渡中的坐标。
-    await expect(window.locator('.today-hero-copy')).toBeVisible()
-    await expect(window.locator('.today-grid > .today-grid-column:last-child')).toBeVisible()
-    await window.waitForTimeout(120)
-    const [heroCopy, heroSide, primaryColumn, rightColumn] = await Promise.all([
-      window.locator('.today-hero-copy').boundingBox(),
-      window.locator('.today-hero-side').boundingBox(),
-      window.locator('.today-grid-primary').boundingBox(),
-      window.locator('.today-grid > .today-grid-column:last-child').boundingBox(),
+    // 打开作业编辑器会触发重渲染；反复测量到所有元素都有盒子且坐标稳定，避免 CI 上拿到 null。
+    const [heroCopy, heroSide, primaryColumn, rightColumn] = await stableBoxes(window, [
+      '.today-hero-copy',
+      '.today-hero-side',
+      '.today-grid-primary',
+      '.today-grid > .today-grid-column:last-child',
     ])
     expect(Math.abs(heroCopy.x - primaryColumn.x)).toBeLessThan(1)
     expect(
