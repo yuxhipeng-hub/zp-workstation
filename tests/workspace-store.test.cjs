@@ -246,3 +246,68 @@ test('exports and imports a portable snapshot', (t) => {
     true,
   )
 })
+
+test('keeps a recoverable copy when the workspace file is corrupt', (t) => {
+  const { directory } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const filePath = path.join(directory, 'workspace.json')
+  fs.writeFileSync(filePath, '{ broken json')
+
+  const store = new WorkspaceStore(directory)
+  assert.equal(store.get().assignments.length, 0)
+
+  const copies = fs
+    .readdirSync(directory)
+    .filter((name) => name.startsWith('workspace.corrupt-') && name.endsWith('.json'))
+  assert.equal(copies.length, 1)
+  assert.equal(fs.readFileSync(path.join(directory, copies[0]), 'utf8'), '{ broken json')
+})
+
+test('ignores a stale temporary file and clears it on the next save', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  store.createAssignment({ title: '正式数据', course: '离散数学' })
+
+  const filePath = path.join(directory, 'workspace.json')
+  const temporary = `${filePath}.tmp`
+  fs.writeFileSync(temporary, '{ stale write')
+
+  const reloaded = new WorkspaceStore(directory)
+  assert.equal(reloaded.get().assignments[0].title, '正式数据')
+  reloaded.save()
+
+  assert.equal(fs.existsSync(temporary), false)
+  assert.doesNotThrow(() => JSON.parse(fs.readFileSync(filePath, 'utf8')))
+})
+
+test('keeps the previous file when a save fails', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  store.createAssignment({ title: '保存失败前的作业', course: '概率论' })
+
+  const temporary = path.join(directory, 'workspace.json.tmp')
+  fs.mkdirSync(temporary)
+  try {
+    assert.throws(() => store.save(), /EISDIR|EPERM|EACCES|EEXIST/)
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true })
+  }
+
+  const reloaded = new WorkspaceStore(directory).get()
+  assert.equal(reloaded.assignments.length, 1)
+  assert.equal(reloaded.assignments[0].title, '保存失败前的作业')
+})
+
+test('keeps the workspace file valid across many rapid saves', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  for (let index = 0; index < 50; index += 1) {
+    store.createAssignment({ title: `作业 ${index}`, course: '算法设计与分析' })
+  }
+
+  const filePath = path.join(directory, 'workspace.json')
+  const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'))
+  assert.equal(parsed.assignments.length, 50)
+  assert.equal(parsed.assignments[0].title, '作业 49')
+  assert.equal(fs.existsSync(`${filePath}.tmp`), false)
+})
