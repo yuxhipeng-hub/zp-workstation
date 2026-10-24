@@ -10,6 +10,11 @@
 
 - 版本：`0.6.1`，`main` 已发布并同步，GitHub Release `v0.6.1` 已设为 Latest（安装包、
   blockmap、SHA-256 与 `latest.json` 均由 `Release ZP Workbench` 流水线产出）。
+- 技术债阶段（2026-10-24，**未发版**）：`main` 已合并 PR #23–#52，包括渲染层拆分
+  （`main.js` 6594 → 3993 行）、失败路径测试、诊断包导出、启动耗时基线、覆盖率门槛、
+  渲染层类型检查、E2E 稳定性和文档治理。单元测试 93 → 117，E2E 18 → 19。
+  下一次发布前需要：决定版本号、跑 `npm run verify`、更新发布说明；升级下载器后仍建议做一次
+  真机升级验证。
 - 上一版（2026-10-22）：`0.6.0` 已发布并同步，GitHub Release `v0.6.0` 已设为 Latest
   （安装包、blockmap、SHA-256 与 `latest.json` 均由 `Release ZP Workbench` 流水线产出）。
 - 上一版（2026-10-18）：PR #17 合并到 `main`，`Release ZP Workbench` 流水线 run
