@@ -1153,3 +1153,55 @@ test('migrates the library root and log directory through the desktop bridge', a
     await closeWorkstation(app, userDataDir)
   }
 })
+
+test('renders a 1000-assignment workload within the baseline budget', async () => {
+  const userDataDir = createUserDataDir()
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  const stamp = new Date().toISOString()
+  const assignments = Array.from({ length: 1000 }, (_, index) => ({
+    id: `perf-assignment-${index}`,
+    title: `压力测试作业 ${index + 1}`,
+    course: '性能基线',
+    dueAt: '2026-12-31',
+    priority: 'medium',
+    status: 'inbox',
+    notes: '',
+    createdAt: stamp,
+    updatedAt: stamp,
+  }))
+  fs.writeFileSync(
+    path.join(userDataDir, 'workspace.json'),
+    JSON.stringify(
+      {
+        version: 2,
+        courses: [],
+        assignments,
+        knowledge: [],
+        experiments: [],
+        experimentGroups: [],
+        schedule: null,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await dismissWelcome(window)
+    const startedAt = Date.now()
+    await window.locator('.nav button[data-page="assignments"]').click()
+    await expect(window.locator('.assignment-card')).toHaveCount(1000)
+    const elapsedMs = Date.now() - startedAt
+    console.log(`[perf] 1000 条作业渲染耗时：${elapsedMs}ms`)
+    expect(elapsedMs).toBeLessThan(5000)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
