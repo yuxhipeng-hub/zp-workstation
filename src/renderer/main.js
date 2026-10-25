@@ -13,6 +13,7 @@ import { createAboutPage } from './pages/about.js'
 import { createEditors } from './components/editors.js'
 import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { keepFocusInDialog } from './lib/focus.js'
+import { buildAssignmentMergePatch, findDuplicateAssignment } from './lib/assignment-duplicates.js'
 import { createTodayPage } from './pages/today.js'
 import { createSchedulePage } from './pages/schedule.js'
 import '@fontsource-variable/inter/wght.css'
@@ -68,6 +69,16 @@ const state = {
   assignmentFilter: 'open',
   assignmentComposerOpen: false,
   editingAssignmentId: null,
+  smartEntryOpen: false,
+  smartEntryBusy: false,
+  smartEntryText: '',
+  smartEntryDrafts: [],
+  smartEntryMatches: [],
+  smartEntryDecisions: [],
+  smartEntryNotice: '',
+  smartEntryImages: [],
+  smartEntryImageBusy: false,
+  smartEntryError: '',
   highlightAssignmentId: null,
   experimentDropActive: false,
   experimentImporting: false,
@@ -228,6 +239,139 @@ function aiProfiles() {
 function activeAiProfile() {
   const activeId = state.aiConfig?.activeProfileId || ''
   return aiProfiles().find((profile) => profile.id === activeId) || null
+}
+
+function readableAiError(error) {
+  const message = String(error?.message || '').trim()
+  return (
+    message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') ||
+    '操作失败，请稍后重试。'
+  )
+}
+
+const SMART_ENTRY_MAX_IMAGES = 2
+const SMART_ENTRY_MAX_SOURCE_BYTES = 15 * 1024 * 1024
+const SMART_ENTRY_IMAGE_MAX_SIDE = 2000
+
+function syncSmartEntryTextFromDom() {
+  const input = document.querySelector('#smartEntryText')
+  if (input) state.smartEntryText = input.value
+}
+
+async function prepareSmartEntryImage(file) {
+  if (!file || typeof file.arrayBuffer !== 'function') {
+    throw new Error('没有读到这张图片，请重新选择。')
+  }
+  if (!/^image\/(png|jpe?g|webp)$/i.test(file.type || '')) {
+    throw new Error('只支持 PNG、JPEG 或 WebP 截图。')
+  }
+  if (Number(file.size) > SMART_ENTRY_MAX_SOURCE_BYTES) {
+    throw new Error('这张图片超过 15 MB，请压缩后再试。')
+  }
+
+  let sourceUrl
+  try {
+    sourceUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('读取失败'))
+      reader.readAsDataURL(file)
+    })
+  } catch {
+    throw new Error('这张图片无法读取，请换一张截图。')
+  }
+
+  const image = new Image()
+  try {
+    await new Promise((resolve, reject) => {
+      image.onload = resolve
+      image.onerror = () => reject(new Error('decode failed'))
+      image.src = sourceUrl
+    })
+  } catch {
+    throw new Error('这张图片无法读取，请换一张截图。')
+  }
+
+  const naturalWidth = image.naturalWidth || image.width || 1
+  const naturalHeight = image.naturalHeight || image.height || 1
+  const scale = Math.min(1, SMART_ENTRY_IMAGE_MAX_SIDE / Math.max(naturalWidth, naturalHeight))
+  const width = Math.max(1, Math.round(naturalWidth * scale))
+  const height = Math.max(1, Math.round(naturalHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('当前环境无法处理图片，请稍后重试。')
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, width, height)
+  context.drawImage(image, 0, 0, width, height)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.86)
+  if (!dataUrl.startsWith('data:image/jpeg;base64,')) {
+    throw new Error('图片转换失败，请换一张截图。')
+  }
+  return {
+    name: String(file.name || '通知截图').slice(0, 80),
+    dataUrl,
+  }
+}
+
+async function addSmartEntryImages(files) {
+  if (!state.smartEntryOpen) return
+  const sourceFiles = [...(files || [])].filter((file) =>
+    String(file?.type || '').startsWith('image/'),
+  )
+  if (!sourceFiles.length) return
+  syncSmartEntryTextFromDom()
+
+  const room = SMART_ENTRY_MAX_IMAGES - (state.smartEntryImages || []).length
+  if (room <= 0) {
+    state.smartEntryError = `最多添加 ${SMART_ENTRY_MAX_IMAGES} 张截图。`
+    render({ anchor: '.smart-entry-panel' })
+    return
+  }
+
+  state.smartEntryImageBusy = true
+  state.smartEntryError = ''
+  render({ anchor: '.smart-entry-panel' })
+  try {
+    for (const file of sourceFiles.slice(0, room)) {
+      try {
+        const image = await prepareSmartEntryImage(file)
+        state.smartEntryImages.push(image)
+      } catch (error) {
+        state.smartEntryError = error.message
+      }
+    }
+    if (sourceFiles.length > room) {
+      state.smartEntryError = `最多添加 ${SMART_ENTRY_MAX_IMAGES} 张截图，已保留前 ${room} 张。`
+    }
+  } finally {
+    state.smartEntryImageBusy = false
+    render({ anchor: '.smart-entry-panel' })
+  }
+}
+
+function prepareSmartEntryDrafts(drafts) {
+  const assignments = state.workspace?.assignments || []
+  state.smartEntryDrafts = drafts
+  state.smartEntryMatches = drafts.map((draft) => findDuplicateAssignment(draft, assignments))
+  state.smartEntryDecisions = state.smartEntryMatches.map((match) => (match ? 'skip' : 'create'))
+  const duplicates = state.smartEntryMatches.filter(Boolean).length
+  state.smartEntryNotice = duplicates
+    ? `有 ${duplicates} 条可能已存在，默认跳过；可改成合并或仍要新建。`
+    : ''
+}
+
+function smartEntryDragHasFiles(event) {
+  const types = [...(event.dataTransfer?.types || [])].map(String)
+  return (
+    types.includes('Files') ||
+    [...(event.dataTransfer?.items || [])].some((item) => item.kind === 'file')
+  )
+}
+
+function smartEntryPanelFromEvent(event) {
+  return state.smartEntryOpen ? event.target?.closest?.('.smart-entry-panel') || null : null
 }
 
 function aiProtocolLabel(protocol) {
@@ -638,18 +782,39 @@ async function copyPromptToClipboard(prompt, successMessage) {
   toast(`${successMessage}，提示词已复制到剪贴板。`, 'success', 7600)
 }
 
-function toast(message, tone = 'info', duration = 4200) {
+function toast(message, tone = 'info', duration = 4200, action = null) {
   const container = document.querySelector('#toasts')
   const node = document.createElement('div')
   node.className = `toast ${tone}`
   const icon = tone === 'error' ? 'circle-alert' : tone === 'success' ? 'circle-check' : 'info'
   node.innerHTML = `<i data-lucide="${icon}"></i><span>${escapeHtml(message)}</span>`
-  container.append(node)
-  refreshIcons()
-  setTimeout(() => {
+  let dismissed = false
+  let timer = null
+  const dismiss = () => {
+    if (dismissed) return
+    dismissed = true
+    clearTimeout(timer)
     node.classList.add('leaving')
     setTimeout(() => node.remove(), 220)
-  }, duration)
+  }
+  if (action?.label && typeof action.onClick === 'function') {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'toast-action'
+    button.textContent = action.label
+    button.addEventListener('click', () => {
+      dismiss()
+      Promise.resolve()
+        .then(() => action.onClick())
+        .catch((error) => {
+          toast(`操作失败：${error?.message || '请稍后重试'}`, 'error')
+        })
+    })
+    node.append(button)
+  }
+  container.append(node)
+  refreshIcons()
+  timer = setTimeout(dismiss, duration)
 }
 
 let quickTooltipTimer = null
@@ -2338,6 +2503,161 @@ async function handleAction(action, element) {
       state.editingAssignmentId = null
       render()
       break
+    case 'open-smart-entry':
+      state.smartEntryOpen = true
+      state.smartEntryBusy = false
+      state.smartEntryDrafts = []
+      state.smartEntryMatches = []
+      state.smartEntryDecisions = []
+      state.smartEntryNotice = ''
+      state.smartEntryImages = []
+      state.smartEntryImageBusy = false
+      state.smartEntryError = ''
+      state.assignmentComposerOpen = false
+      state.editingAssignmentId = null
+      render()
+      requestAnimationFrame(() => document.querySelector('#smartEntryText')?.focus())
+      break
+    case 'close-smart-entry':
+      state.smartEntryOpen = false
+      state.smartEntryBusy = false
+      state.smartEntryText = ''
+      state.smartEntryDrafts = []
+      state.smartEntryMatches = []
+      state.smartEntryDecisions = []
+      state.smartEntryNotice = ''
+      state.smartEntryImages = []
+      state.smartEntryImageBusy = false
+      state.smartEntryError = ''
+      render()
+      break
+    case 'remove-smart-image': {
+      const index = Number(element.dataset.index)
+      if (!Number.isInteger(index)) break
+      syncSmartEntryTextFromDom()
+      state.smartEntryImages.splice(index, 1)
+      render({ anchor: '.smart-entry-panel' })
+      break
+    }
+    case 'parse-smart-entry': {
+      const text = document.querySelector('#smartEntryText')?.value?.trim() || ''
+      const images = state.smartEntryImages || []
+      state.smartEntryText = text
+      state.smartEntryError = ''
+      state.smartEntryNotice = ''
+      state.smartEntryDrafts = []
+      state.smartEntryMatches = []
+      state.smartEntryDecisions = []
+      if (!text && !images.length) {
+        state.smartEntryError = '请先粘贴通知文字或添加通知截图。'
+        render()
+        return
+      }
+      const profile = activeAiProfile()
+      if (!profile || !(profile.hasKey || !profile.requiresKey)) {
+        state.smartEntryError = '请先在「模型配置」里添加并启用一个可用模型。'
+        render()
+        return
+      }
+      if (images.length && !profile.supportsVision) {
+        state.smartEntryError =
+          '当前模型未开启视觉输入，请先在「模型配置」勾选「支持视觉输入」或换一个支持图片的模型。'
+        render()
+        return
+      }
+      state.smartEntryBusy = true
+      render()
+      try {
+        const result = await api.extractAssignments({
+          text,
+          images: images.map(({ name, dataUrl }) => ({ name, dataUrl })),
+        })
+        const drafts = Array.isArray(result?.assignments) ? result.assignments : []
+        prepareSmartEntryDrafts(drafts)
+        if (!drafts.length) {
+          state.smartEntryError = '模型没有识别出作业，请补充标题和截止时间后重试。'
+        }
+      } catch (error) {
+        state.smartEntryError = readableAiError(error)
+      } finally {
+        state.smartEntryBusy = false
+        render()
+      }
+      break
+    }
+    case 'add-smart-drafts': {
+      const selected = [...document.querySelectorAll('[data-smart-draft]:checked')]
+        .map((node) => Number(node.dataset.smartDraft))
+        .filter((index) => Number.isInteger(index))
+      if (!selected.length) {
+        state.smartEntryError = '请至少勾选一条作业。'
+        state.smartEntryNotice = ''
+        render()
+        return
+      }
+      let created = 0
+      let merged = 0
+      let skipped = 0
+      const handled = new Set()
+      try {
+        for (const index of selected) {
+          const draft = state.smartEntryDrafts[index]
+          if (!draft) continue
+          const match = state.smartEntryMatches[index]
+          const decision = state.smartEntryDecisions[index] || (match ? 'skip' : 'create')
+          if (match && decision === 'skip') {
+            skipped += 1
+            handled.add(draft)
+            continue
+          }
+          if (match && decision === 'merge') {
+            const existing = state.workspace?.assignments.find(
+              (item) => item.id === match.assignment.id,
+            )
+            if (existing) {
+              applyWorkspace(
+                await api.updateAssignment(existing.id, buildAssignmentMergePatch(existing, draft)),
+              )
+              merged += 1
+              handled.add(draft)
+              continue
+            }
+          }
+          applyWorkspace(await api.createAssignment(draft))
+          created += 1
+          handled.add(draft)
+        }
+        if (!created && !merged) {
+          state.smartEntryNotice = skipped
+            ? `已跳过 ${skipped} 条重复作业，没有写入新作业。可改成“合并”或“仍要新建”。`
+            : '没有需要写入的作业。'
+          state.smartEntryError = ''
+          render()
+          return
+        }
+        state.smartEntryOpen = false
+        state.smartEntryText = ''
+        state.smartEntryDrafts = []
+        state.smartEntryMatches = []
+        state.smartEntryDecisions = []
+        state.smartEntryNotice = ''
+        state.smartEntryImages = []
+        state.smartEntryError = ''
+        state.assignmentFilter = 'all'
+        render()
+        const parts = []
+        if (created) parts.push(`添加 ${created} 条`)
+        if (merged) parts.push(`合并 ${merged} 条`)
+        if (skipped) parts.push(`跳过 ${skipped} 条重复`)
+        toast(`已${parts.join('，')}，记得核对截止时间和备注。`, 'success', 6000)
+      } catch (error) {
+        state.smartEntryDrafts = state.smartEntryDrafts.filter((draft) => !handled.has(draft))
+        prepareSmartEntryDrafts(state.smartEntryDrafts)
+        state.smartEntryError = `已处理 ${created + merged} 条，剩余写入失败：${readableAiError(error)}`
+        render()
+      }
+      break
+    }
     case 'edit-assignment': {
       const assignment = state.workspace?.assignments.find((item) => item.id === element.dataset.id)
       if (!assignment) return
@@ -2370,13 +2690,21 @@ async function handleAction(action, element) {
     case 'delete-assignment': {
       const assignment = state.workspace?.assignments.find((item) => item.id === element.dataset.id)
       if (!assignment || !window.confirm(`删除“${assignment.title}”吗？`)) return
+      const restorePoint = structuredClone(assignment)
       applyWorkspace(await api.deleteAssignment(assignment.id))
       if (state.editingAssignmentId === assignment.id) {
         state.assignmentComposerOpen = false
         state.editingAssignmentId = null
       }
       render()
-      toast('作业已删除。', 'success')
+      toast(`已删除“${assignment.title}”。`, 'success', 9000, {
+        label: '撤销',
+        onClick: async () => {
+          applyWorkspace(await api.createAssignment(restorePoint))
+          render()
+          toast('已恢复这条作业。', 'success')
+        },
+      })
       break
     }
     case 'copy-assignment-prompt': {
@@ -3515,6 +3843,20 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (event.target.matches?.('[data-smart-draft-decision]')) {
+    const index = Number(event.target.dataset.smartDraftDecision)
+    if (Number.isInteger(index)) {
+      state.smartEntryDecisions[index] = event.target.value
+    }
+    return
+  }
+  if (event.target.id === 'smartEntryImages') {
+    const input = /** @type {HTMLInputElement} */ (event.target)
+    const files = [...(input.files || [])]
+    input.value = ''
+    await addSmartEntryImages(files)
+    return
+  }
   if (event.target.id === 'aiProfilePreset') {
     getModelSettingsPage().applyPreset(event.target)
     return
@@ -3686,6 +4028,73 @@ document.addEventListener('dragend', (event) => {
   setExperimentDropTargetGroup(null)
   event.target.closest?.('.experiment-file')?.classList.remove('is-dragging')
 })
+
+document.addEventListener('paste', (event) => {
+  if (!state.smartEntryOpen || !event.target?.closest?.('.smart-entry-panel')) return
+  const files = [...(event.clipboardData?.files || [])].filter((file) =>
+    String(file?.type || '').startsWith('image/'),
+  )
+  if (!files.length) return
+  event.preventDefault()
+  void addSmartEntryImages(files)
+})
+
+document.addEventListener(
+  'dragenter',
+  (event) => {
+    const panel = smartEntryPanelFromEvent(event)
+    if (!panel || !smartEntryDragHasFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    panel.classList.add('is-image-dragging')
+  },
+  true,
+)
+
+document.addEventListener(
+  'dragover',
+  (event) => {
+    const panel = smartEntryPanelFromEvent(event)
+    if (!panel || !smartEntryDragHasFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    panel.classList.add('is-image-dragging')
+  },
+  true,
+)
+
+document.addEventListener(
+  'dragleave',
+  (event) => {
+    const panel = smartEntryPanelFromEvent(event)
+    if (!panel) return
+    if (event.relatedTarget && panel.contains(event.relatedTarget)) return
+    panel.classList.remove('is-image-dragging')
+  },
+  true,
+)
+
+document.addEventListener(
+  'drop',
+  (event) => {
+    const panel = smartEntryPanelFromEvent(event)
+    if (!panel || !smartEntryDragHasFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    panel.classList.remove('is-image-dragging')
+    const images = [...(event.dataTransfer?.files || [])].filter((file) =>
+      String(file?.type || '').startsWith('image/'),
+    )
+    if (!images.length) {
+      state.smartEntryError = '只能拖入 PNG、JPEG 或 WebP 截图。'
+      render({ anchor: '.smart-entry-panel' })
+      return
+    }
+    void addSmartEntryImages(images)
+  },
+  true,
+)
 
 document.addEventListener('dragenter', (event) => {
   if (isInternalExperimentDrag(event)) {

@@ -13,48 +13,210 @@ export const AI_PROVIDER_PRESETS = [
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-chat',
+    supportsVision: false,
+  },
+  {
+    id: 'deepseek-flash',
+    label: 'DeepSeek V4.1 Flash（视觉）',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-flash',
+    supportsVision: true,
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'gemini',
+    label: 'Google Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    model: '',
+    supportsVision: false,
   },
   {
     id: 'kimi',
     label: 'Kimi / Moonshot',
     baseUrl: 'https://api.moonshot.cn/v1',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'qwen',
     label: '通义千问',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'zhipu',
     label: '智谱 GLM',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'doubao',
+    label: '字节豆包 / 火山方舟',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'qianfan',
+    label: '百度千帆',
+    baseUrl: 'https://qianfan.baidubce.com/v2',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'hunyuan',
+    label: '腾讯混元',
+    baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'spark',
+    label: '讯飞星火',
+    baseUrl: 'https://spark-api-open.xf-yun.com/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'minimax',
+    label: 'MiniMax',
+    baseUrl: 'https://api.minimaxi.com/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'baichuan',
+    label: '百川智能',
+    baseUrl: 'https://api.baichuan-ai.com/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'yi',
+    label: '零一万物 Yi',
+    baseUrl: 'https://api.lingyiwanwu.com/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'stepfun',
+    label: '阶跃星辰 StepFun',
+    baseUrl: 'https://api.stepfun.com/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'sensenova',
+    label: '商汤日日新',
+    baseUrl: 'https://api.sensenova.cn/compatible-mode/v2',
+    model: '',
+    supportsVision: false,
   },
   {
     id: 'siliconflow',
     label: 'SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'openrouter',
-    label: 'OpenRouter',
+    label: 'OpenRouter（聚合）',
     baseUrl: 'https://openrouter.ai/api/v1',
     model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'groq',
+    label: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'mistral',
+    label: 'Mistral',
+    baseUrl: 'https://api.mistral.ai/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'xai',
+    label: 'xAI Grok',
+    baseUrl: 'https://api.x.ai/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'together',
+    label: 'Together AI',
+    baseUrl: 'https://api.together.xyz/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'fireworks',
+    label: 'Fireworks AI',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'perplexity',
+    label: 'Perplexity',
+    baseUrl: 'https://api.perplexity.ai',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'cohere',
+    label: 'Cohere',
+    baseUrl: 'https://api.cohere.ai/compatibility/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'huggingface',
+    label: 'Hugging Face',
+    baseUrl: 'https://router.huggingface.co/v1',
+    model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'github-models',
+    label: 'GitHub Models',
+    baseUrl: 'https://models.inference.ai.azure.com',
+    model: '',
+    supportsVision: false,
   },
   {
     id: 'ollama',
     label: 'Ollama（本机）',
     baseUrl: 'http://127.0.0.1:11434/v1',
     model: '',
+    supportsVision: false,
+  },
+  {
+    id: 'lmstudio',
+    label: 'LM Studio（本机）',
+    baseUrl: 'http://127.0.0.1:1234/v1',
+    model: '',
+    supportsVision: false,
   },
   {
     id: 'custom',
     label: '自定义 OpenAI Compatible',
     baseUrl: '',
     model: '',
+    supportsVision: false,
   },
 ]
 
@@ -71,6 +233,26 @@ export function createModelSettingsPage({
   function renderProfileEditor() {
     if (!state.aiProfileEditorOpen) return ''
     const editing = aiProfiles().find((profile) => profile.id === state.aiEditingProfileId)
+    const baseKey = (value) =>
+      String(value || '')
+        .trim()
+        .replace(/\/+$/, '')
+        .toLowerCase()
+    const selectedPresetId = editing
+      ? AI_PROVIDER_PRESETS.find(
+          (preset) =>
+            preset.model &&
+            preset.model === editing.model &&
+            baseKey(preset.baseUrl) === baseKey(editing.baseUrl),
+        )?.id ||
+        AI_PROVIDER_PRESETS.find(
+          (preset) =>
+            !preset.model &&
+            preset.id !== 'custom' &&
+            baseKey(preset.baseUrl) === baseKey(editing.baseUrl),
+        )?.id ||
+        'custom'
+      : ''
     return `
       <form class="ai-profile-editor" id="aiProfileForm">
         <div class="ai-profile-editor-head">
@@ -86,11 +268,13 @@ export function createModelSettingsPage({
           <label class="field">
             <span>服务商预设</span>
             <select id="aiProfilePreset">
+              <option value="" disabled ${selectedPresetId === '' ? 'selected' : ''}>选择服务商预设</option>
               ${AI_PROVIDER_PRESETS.map(
                 (preset) =>
-                  `<option value="${escapeHtml(preset.id)}" ${preset.id === 'custom' ? 'selected' : ''}>${escapeHtml(preset.label)}</option>`,
+                  `<option value="${escapeHtml(preset.id)}" ${preset.id === selectedPresetId ? 'selected' : ''}>${escapeHtml(preset.label)}</option>`,
               ).join('')}
             </select>
+            <small class="setting-hint">预设只填接口地址；模型 ID 和视觉能力请按账号实际可用模型填写。</small>
           </label>
           <label class="field">
             <span>显示名称</span>
@@ -100,14 +284,20 @@ export function createModelSettingsPage({
             <span>Base URL</span>
             <input id="aiProfileBaseUrl" type="url" maxlength="2048" required value="${escapeHtml(editing?.baseUrl || '')}" placeholder="https://api.example.com/v1" />
           </label>
-          <label class="field">
+          <label class="field ai-profile-field-wide">
             <span>模型 ID</span>
-            <input id="aiProfileModel" type="text" maxlength="160" required value="${escapeHtml(editing?.model || '')}" placeholder="例如：deepseek-chat" />
+            <div class="ai-model-input-row">
+              <input id="aiProfileModel" type="text" maxlength="160" required value="${escapeHtml(editing?.model || '')}" placeholder="例如：deepseek-chat" />
+              <button class="button secondary" type="button" data-action="search-ai-models">
+                <i data-lucide="search"></i><span>搜索模型</span>
+              </button>
+            </div>
           </label>
-          <label class="field">
+          <label class="field ai-profile-field-wide">
             <span>API Key</span>
             <input id="aiProfileApiKey" type="password" maxlength="4096" autocomplete="off" placeholder="${editing?.hasKey ? '已保存，留空保持不变' : '输入 API Key；本机模型可留空'}" />
           </label>
+          <div class="ai-model-search-results" id="aiModelSearchResults" hidden></div>
         </div>
         <details class="ai-advanced-settings">
           <summary>
@@ -312,6 +502,7 @@ export function createModelSettingsPage({
     const labelInput = document.querySelector('#aiProfileLabel')
     const baseUrlInput = document.querySelector('#aiProfileBaseUrl')
     const modelInput = document.querySelector('#aiProfileModel')
+    const visionInput = document.querySelector('#aiProfileSupportsVision')
     if (labelInput) labelInput.value = preset.label
     if (baseUrlInput) baseUrlInput.value = preset.baseUrl
     if (modelInput) {
@@ -320,6 +511,28 @@ export function createModelSettingsPage({
         ? '例如：deepseek-chat'
         : `输入 ${preset.label} 的模型 ID`
     }
+    if (visionInput) visionInput.checked = Boolean(preset.supportsVision)
+  }
+
+  function readableMessage(error) {
+    return (
+      String(error?.message || '')
+        .trim()
+        .replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') ||
+      '搜索失败，请稍后重试。'
+    )
+  }
+
+  function showModelSearchResults(message, tone = 'error') {
+    const results = document.querySelector('#aiModelSearchResults')
+    if (!results) return
+    results.hidden = false
+    results.replaceChildren()
+    const node = document.createElement('span')
+    node.className = tone === 'error' ? 'ai-model-search-error' : 'setting-hint'
+    if (tone === 'error') node.setAttribute('role', 'alert')
+    node.textContent = message
+    results.append(node)
   }
 
   /** 返回 true 表示这个动作属于模型配置页，main.js 不再处理。 */
@@ -377,6 +590,69 @@ export function createModelSettingsPage({
         }
         render()
         toast('模型配置已删除。', 'success')
+        break
+      }
+      case 'search-ai-models': {
+        const baseUrl = document.querySelector('#aiProfileBaseUrl')?.value?.trim() || ''
+        const apiKey = document.querySelector('#aiProfileApiKey')?.value || ''
+        const headersValue = document.querySelector('#aiProfileHeaders')?.value?.trim() || '{}'
+        let headers = {}
+        try {
+          headers = JSON.parse(headersValue)
+        } catch {
+          showModelSearchResults('附加请求头必须是有效的 JSON 对象。')
+          break
+        }
+        if (!baseUrl) {
+          showModelSearchResults('请先填写 Base URL。')
+          break
+        }
+
+        const button = element
+        const label = button?.querySelector('span')
+        const originalLabel = label?.textContent || '搜索模型'
+        if (button) button.disabled = true
+        if (label) label.textContent = '搜索中…'
+        try {
+          const result = await api.listAiModels({
+            baseUrl,
+            apiKey,
+            profileId: state.aiEditingProfileId || '',
+            headers,
+          })
+          const models = Array.isArray(result?.models) ? result.models : []
+          if (!models.length) {
+            throw new Error('接口没有返回可用模型，请手动填写模型 ID。')
+          }
+          const results = document.querySelector('#aiModelSearchResults')
+          if (!results) break
+          results.hidden = false
+          results.replaceChildren()
+          const hint = document.createElement('span')
+          hint.className = 'setting-hint'
+          hint.textContent = `找到 ${models.length} 个模型，点击填入：`
+          const list = document.createElement('div')
+          list.className = 'ai-model-option-list'
+          for (const id of models) {
+            const option = document.createElement('button')
+            option.type = 'button'
+            option.className = 'ai-model-option'
+            option.textContent = id
+            option.addEventListener('click', () => {
+              const input = document.querySelector('#aiProfileModel')
+              if (!input) return
+              input.value = id
+              input.focus()
+            })
+            list.append(option)
+          }
+          results.append(hint, list)
+        } catch (error) {
+          showModelSearchResults(readableMessage(error))
+        } finally {
+          if (button) button.disabled = false
+          if (label) label.textContent = originalLabel
+        }
         break
       }
       default:

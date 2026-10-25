@@ -22,9 +22,19 @@
   节次时间设置。
 - 作业收件箱集中记录标题、课程和截止时间，一条作业可以整理成结构化提示词复制给
   常用 AI 工具使用，也可以直接调用用户配置的模型生成结构化执行计划。
+- 粘贴群通知、教务系统或学习通的文字或截图，由支持视觉输入的模型抽取作业标题、课程、
+  截止时间和优先级；草稿勾选确认后才会写入收件箱。
 - AI 模型接入支持任意 OpenAI Compatible 接口：用户自带 Base URL、模型 ID 和 API Key，
   可选择 Chat Completions / Responses 协议，并配置上下文窗口、输出上限、温度、推理强度、
   超时和附加请求头；独立「模型配置」页面支持多个模型档案、连接测试与作业拆解时切换。
+- 模型配置内置国内外主流厂商预设：DeepSeek、OpenAI、Gemini、通义、智谱、Kimi、豆包、
+  千帆、混元、星火、MiniMax、百川、零一、阶跃、商汤、SiliconFlow、OpenRouter、Groq、
+  Mistral、xAI、Together、Fireworks、Perplexity、Cohere、Hugging Face、GitHub Models、
+  Ollama、LM Studio；预设只填接口地址，模型 ID 和视觉能力按账号实际可用模型填写。
+- 填好 Base URL 和 API Key 后点「搜索模型」，应用会请求该接口的 `/models` 并列出可用
+  模型，点击即可填入模型 ID；接口不提供 `/models` 时仍可手动填写。
+- DeepSeek V4.1 Flash（`deepseek-flash`）预设会自动勾选「支持视觉输入」；其他 OpenAI
+  Compatible 视觉模型也可以手动勾选。
 - 资料库把拖入的文件按课程自动归档成文件夹，支持分组重命名、移动和文件校验。
 - 今日页汇总当天课程、待交作业、最近资料和 AI 资讯摘要。
 - AI 资讯页在应用内阅读精选条目、热点事件综述与报道时间线、当日日报。

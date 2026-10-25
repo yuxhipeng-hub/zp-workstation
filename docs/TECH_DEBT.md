@@ -132,7 +132,11 @@ E2E 以正常路径为主（20 条）；0.6.1 的下载器事故说明失败路�
 
 **后续**
 
-- [ ] 逐步把 `globals.d.ts` 的宽松 DOM 类型收紧到具体元素类型，再打开 `strict`。
+- [x] 新增 `tsconfig.renderer-strict.json`，先对 `src/renderer/lib/**` 开启 `strict` 并纳入
+      `npm run typecheck`；`lib/focus.js` 已补具体 DOM 类型，新 lib 模块默认走严格检查。
+- [ ] 全量渲染层 strict 仍有 751 条错误（2026-10-25 实测），按 `pages/`、`components/`
+      逐块迁入严格配置，不一次性打开。
+- [ ] 逐步把 `globals.d.ts` 的宽松 DOM 类型收紧到具体元素类型，再打开全量 `strict`。
 - [ ] 新增页面模块直接写具体元素类型，不再依赖宽松声明。
 
 ## P1-1 失败诊断包导出

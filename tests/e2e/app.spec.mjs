@@ -237,28 +237,48 @@ test('configures a model and runs AI assignment planning end to end', async () =
     JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
     'utf8',
   )
-  let requestBody = null
+  const requests = []
   const server = http.createServer((request, response) => {
+    if (request.method === 'GET' && request.url === '/v1/models') {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify({ data: [{ id: 'test-model' }, { id: 'vision-test' }] }))
+      return
+    }
     let body = ''
     request.setEncoding('utf8')
     request.on('data', (chunk) => {
       body += chunk
     })
     request.on('end', () => {
-      requestBody = JSON.parse(body)
+      const payload = JSON.parse(body)
+      requests.push(payload)
+      const userText = String(payload.messages?.at(-1)?.content || '')
+      const content = userText.includes('通知原文')
+        ? JSON.stringify({
+            assignments: [
+              {
+                title: '概率论第 5 章习题',
+                course: '概率论',
+                dueAt: '',
+                priority: 'high',
+                notes: '拍照上传',
+              },
+            ],
+          })
+        : JSON.stringify({
+            summary: '完成操作系统实验',
+            prerequisites: ['阅读实验要求'],
+            steps: ['梳理调度目标', '实现算法', '运行边界测试'],
+            risks: ['忽略进程状态边界'],
+            checklist: ['提交实验报告'],
+          })
       response.writeHead(200, { 'Content-Type': 'application/json' })
       response.end(
         JSON.stringify({
           choices: [
             {
               message: {
-                content: JSON.stringify({
-                  summary: '完成操作系统实验',
-                  prerequisites: ['阅读实验要求'],
-                  steps: ['梳理调度目标', '实现算法', '运行边界测试'],
-                  risks: ['忽略进程状态边界'],
-                  checklist: ['提交实验报告'],
-                }),
+                content,
               },
             },
           ],
@@ -277,11 +297,22 @@ test('configures a model and runs AI assignment planning end to end', async () =
     await expect(window.locator('.page-intro h2').filter({ hasText: '模型配置' })).toBeVisible()
     await window.getByRole('button', { name: '添加模型' }).click()
     await expect(window.getByText('高级模型设置', { exact: true })).toBeVisible()
+    await expect(window.locator('#aiProfilePreset')).toHaveValue('')
+    await expect(window.locator('#aiProfilePreset option').first()).toHaveText('选择服务商预设')
     await window.locator('.ai-advanced-settings > summary').click()
     await expect(window.locator('#aiProfileProtocol')).toBeVisible()
     await expect(window.getByText('能力声明', { exact: true })).toBeVisible()
+    await window.locator('#aiProfilePreset').selectOption('deepseek-flash')
+    await expect(window.locator('#aiProfileBaseUrl')).toHaveValue('https://api.deepseek.com')
+    await expect(window.locator('#aiProfileModel')).toHaveValue('deepseek-flash')
+    await expect(window.locator('#aiProfileSupportsVision')).toBeChecked()
     await window.locator('#aiProfileLabel').fill('本地测试模型')
     await window.locator('#aiProfileBaseUrl').fill(baseUrl)
+    await window.getByRole('button', { name: '搜索模型' }).click()
+    const modelOption = window.locator('.ai-model-option').filter({ hasText: 'vision-test' })
+    await expect(modelOption).toBeVisible()
+    await modelOption.click()
+    await expect(window.locator('#aiProfileModel')).toHaveValue('vision-test')
     await window.locator('#aiProfileModel').fill('test-model')
     await window.getByRole('button', { name: '保存模型' }).click()
     await expect(window.locator('.ai-profile-row')).toContainText('本地测试模型')
@@ -323,8 +354,180 @@ test('configures a model and runs AI assignment planning end to end', async () =
     await expect(window.locator('.assignment-ai-plan')).toBeVisible()
     await expect(window.locator('.assignment-ai-plan')).toContainText('3 步')
     await expect(window.locator('.assignment-ai-plan')).toContainText('梳理调度目标')
-    expect(requestBody.model).toBe('test-model')
-    expect(requestBody.messages.at(-1).content).toContain('进程调度实验')
+    expect(requests.at(-1).model).toBe('test-model')
+    expect(requests.at(-1).messages.at(-1).content).toContain('进程调度实验')
+
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await expect(window.locator('#smartEntryTitle')).toBeVisible()
+    await window
+      .locator('#smartEntryText')
+      .fill('各位同学：下周五前提交概率论第 5 章习题，拍照上传到学习通。')
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-draft')).toHaveCount(1)
+    await expect(window.locator('.smart-entry-draft')).toContainText('概率论第 5 章习题')
+    await expect(window.locator('.smart-entry-draft')).toContainText('高优先级')
+    await expect(window.locator('.smart-entry-draft')).toContainText('未设截止')
+    expect(requests.at(-1).messages.at(-1).content).toContain('通知原文')
+    expect(requests.at(-1).messages.at(-1).content).toContain('概率论第 5 章习题')
+
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(
+      window.locator('.assignment-card').filter({ hasText: '概率论第 5 章习题' }),
+    ).toBeVisible()
+    await expect(window.locator('#smartEntryTitle')).toHaveCount(0)
+
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await window
+      .locator('#smartEntryText')
+      .fill('各位同学：下周五前提交概率论第 5 章习题，拍照上传到学习通。')
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-duplicate')).toBeVisible()
+    await expect(window.locator('.smart-entry-draft')).toContainText('可能已存在')
+    await expect(window.locator('[data-smart-draft-decision]')).toHaveValue('skip')
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(window.locator('.smart-entry-notice')).toContainText('已跳过 1 条重复作业')
+    await expect(
+      window.locator('.assignment-card').filter({ hasText: '概率论第 5 章习题' }),
+    ).toHaveCount(1)
+    await window.locator('[data-smart-draft-decision]').selectOption('create')
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(
+      window.locator('.assignment-card').filter({ hasText: '概率论第 5 章习题' }),
+    ).toHaveCount(2)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test('restores a deleted assignment from the toast', async () => {
+  const userDataDir = createUserDataDir()
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav-item[data-page="assignments"]').click()
+    await window.getByRole('button', { name: '添加作业' }).click()
+    await window.locator('#assignmentTitle').fill('可撤销的作业')
+    await window.locator('#assignmentCourse').fill('测试课程')
+    await window.getByRole('button', { name: '添加到收件箱' }).click()
+
+    const card = window.locator('.assignment-card').filter({ hasText: '可撤销的作业' })
+    await expect(card).toBeVisible()
+
+    window.once('dialog', (dialog) => dialog.accept())
+    await card.locator('[data-action="delete-assignment"]').click()
+    await expect(card).toHaveCount(0)
+
+    await window.getByRole('button', { name: '撤销' }).click()
+    await expect(card).toBeVisible()
+    await expect(card).toContainText('测试课程')
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('extracts assignment drafts from a platform screenshot', async () => {
+  const userDataDir = createUserDataDir()
+  const imagePath = path.join(userDataDir, '平台通知.png')
+  const pngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAHgAAAA8CAYAAACtrX6oAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAMASURBVHhe7ZgJkoMgEEU9ngfiON7Fq3gTpkSI0HSzJJlM5td/VVRFZO0HqFk8gWaRGQQLCgaHgsGhYHAoGBwKBoeCwaHgj3D4bV2822X+7/N3gnfnl9kZn3XWzR/x8tjW4nqU3S1+3e5aoZ3GWHa3+qz4PMfm1+XFNp5kQPC1+pZlNjlvhixMePFuO6bklGKe3xWzgsPCesxn926aa53y9uXCzAl9K/Wb8ZtgQLBNNzAqV4CKAITs3o4+62W7IARdBkUkI6jTgmOdXpm0cGW/oa4cW4yB2ndo56OCz91SHzHm4IzAmnID8aSQ7UXKvrLxdINx9Zk32xWsHalVP9d4UztpJ9bDzxamspOrvq/MzpzGGRScdkw56WpwcQWvbq8Fp3uq3IQlWeTnu30gGPJZ3RMcdpy5SBOHP47suLbK51K/WvCJkFwMriUwHqf1Pfv5Xj3DzvzQlziqR4IhdmRbcL3jJdaRW6TQQLnLv1+wGND9u/HCk55LaqqP/Yv8KI9BWmNfuyvlm+3nbZcnQFNw8UJVyryLNOor1w/+g+AcdXDvIgZjj32YfY0GIxNnC2o/InLB9YISKVtM1b2UsvmV3Q3OaYCu4DB5ObDRJAf+BOkb9GXB2dFrChZH+U0tWK1vXD9A3sFTC0Vp0+xrIhhJjCUo7DatD0VwNWaZlHZSDPJb6rwm5tTjs4IHylrlrHz7GWy8EwzswJpacKu+vI65Vxuu8aL6KErB+Y3pYPQE1bxBsHgHSEe1WvaJOVlQcKvtRDwlUh29/lZ88pXNyU+v+ysh1FVOn3/3V6U9ESUpbZp9dQQPPS+tdO6y+A3u9ta/cC3inyFy7OIroaAzpxk+K3igrFXOyn9nMDTOBZJ3O7Vgmi9uF+q83jinlwST74eCwaFgcCgYHAoGh4LBoWBwKBgcCgaHgsGhYHAoGBwKBoeCwaFgcCgYHAoGh4LBoWBwKBgcCgaHgsGhYHAoGBwKBoeCwaFgcCgYHAoGh4LBoWBwKBgcCgaHgsGhYHAoGBwKBoeCwaFgcH6UjErm7hwzHAAAAABJRU5ErkJggg=='
+  fs.writeFileSync(imagePath, Buffer.from(pngBase64, 'base64'))
+  const requests = []
+  const server = http.createServer((request, response) => {
+    let body = ''
+    request.setEncoding('utf8')
+    request.on('data', (chunk) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      requests.push(JSON.parse(body))
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  assignments: [
+                    {
+                      title: '平台截图作业',
+                      course: '操作系统',
+                      dueAt: '2026-11-01',
+                      priority: 'high',
+                      notes: '从平台截图识别',
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+      )
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  const baseUrl = `http://127.0.0.1:${address.port}/v1`
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify(
+      {
+        onboarding: { welcomeSeen: true },
+        aiProfiles: [
+          {
+            id: 'vision-e2e',
+            label: '视觉测试模型',
+            baseUrl,
+            model: 'vision-test',
+            protocol: 'chat-completions',
+            supportsVision: true,
+            timeoutMs: 90000,
+            contextWindow: 0,
+            maxOutputTokens: 1800,
+            temperature: 0.2,
+          },
+        ],
+        activeAiProfileId: 'vision-e2e',
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav-item[data-page="assignments"]').click()
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await expect(window.locator('#smartEntryTitle')).toBeVisible()
+
+    await window.locator('#smartEntryImages').setInputFiles(imagePath)
+    await expect(window.locator('.smart-entry-image')).toHaveCount(1)
+    await expect(window.locator('.smart-entry-image img')).toBeVisible()
+
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-draft')).toContainText('平台截图作业')
+    await expect(window.locator('.smart-entry-draft')).toContainText('高优先级')
+
+    const payload = requests.at(-1)
+    const userContent = payload.messages.at(-1).content
+    assert.equal(Array.isArray(userContent), true)
+    const textPart = userContent.find((part) => part.type === 'text')
+    assert.match(textPart.text, /通知内容在图片中/)
+    const imagePart = userContent.find((part) => part.type === 'image_url')
+    assert.match(imagePart.image_url.url, /^data:image\/jpeg;base64,/)
+
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(
+      window.locator('.assignment-card').filter({ hasText: '平台截图作业' }),
+    ).toBeVisible()
   } finally {
     await closeWorkstation(app, userDataDir)
     await new Promise((resolve) => server.close(resolve))
