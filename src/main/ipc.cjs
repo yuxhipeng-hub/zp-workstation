@@ -84,6 +84,12 @@ function registerIpc({
   ipcMain.handle('ai:profile-delete', (_event, id) => aiService.deleteProfile(id))
   ipcMain.handle('ai:profile-activate', (_event, id) => aiService.activateProfile(id))
   ipcMain.handle('ai:profile-test', (_event, id) => aiService.testProfile(id))
+  ipcMain.handle('ai:list-models', (_event, input) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('模型列表参数无效。')
+    }
+    return aiService.listModels(input)
+  })
   ipcMain.handle('ai:assignment-plan', async (_event, assignmentId) => {
     const assignment = workspace
       .get()

@@ -10,6 +10,7 @@ const {
 
 const MAX_PROFILES = 20
 const REQUEST_TIMEOUT_MS = 90_000
+const MODEL_LIST_TIMEOUT_MS = 15_000
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 const API_PROTOCOLS = new Set(['chat-completions', 'responses'])
 const REASONING_EFFORTS = new Set(['', 'low', 'medium', 'high'])
@@ -65,6 +66,27 @@ function isLocalBaseUrl(value) {
 function apiEndpoint(baseUrl, protocol = 'chat-completions') {
   const suffix = protocol === 'responses' ? '/responses' : '/chat/completions'
   return `${normalizeBaseUrl(baseUrl)}${suffix}`
+}
+
+function modelsEndpoint(baseUrl) {
+  const base = normalizeBaseUrl(baseUrl).replace(/\/models$/i, '')
+  return `${base}/models`
+}
+
+function parseModelList(payload) {
+  const source = Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.models)
+      ? payload.models
+      : []
+  const models = []
+  for (const item of source) {
+    const id = typeof item === 'string' ? item.trim() : String(item?.id || item?.name || '').trim()
+    if (!id || id.length > 160 || models.includes(id)) continue
+    models.push(id)
+    if (models.length >= 500) break
+  }
+  return models
 }
 
 function chatEndpoint(baseUrl) {
@@ -426,6 +448,72 @@ class AiService {
     )
     this.logger?.info('ai', `模型连接测试成功：${profile.label} / ${profile.model}`)
     return { ok: true, message: content.slice(0, 120), profileId: profile.id }
+  }
+
+  /**
+   * @param {{ baseUrl?: string, apiKey?: string, profileId?: string, headers?: unknown }} [input]
+   */
+  async listModels(input = {}) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('模型列表参数无效。')
+    }
+    const baseUrl = normalizeBaseUrl(input.baseUrl)
+    const profileId = cleanText(input.profileId, 80)
+    let apiKey = cleanText(input.apiKey, 4096)
+    if (/[\u0000-\u001f]/.test(apiKey)) throw new Error('API Key 格式无效。')
+
+    if (!apiKey && profileId) {
+      const saved = this.storedProfiles().find((profile) => profile.id === profileId)
+      if (saved) {
+        if (normalizeBaseUrl(saved.baseUrl) !== baseUrl) {
+          throw new Error('更改 Base URL 后请重新填写 API Key，再搜索可用模型。')
+        }
+        apiKey = this.secrets.get(saved.id)
+      }
+    }
+    if (!apiKey && !isLocalBaseUrl(baseUrl)) {
+      throw new Error('请先填写 API Key，再搜索可用模型。')
+    }
+
+    const headers = {
+      Accept: 'application/json',
+      ...cleanHeaders(input.headers),
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    }
+    let response
+    try {
+      response = await this.fetchImpl(modelsEndpoint(baseUrl), {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
+      })
+    } catch (error) {
+      if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+        throw new Error('获取模型列表超时，请检查网络或稍后重试。')
+      }
+      throw new Error(`无法连接模型服务：${error.message}`)
+    }
+
+    const raw = await response.text()
+    let payload = null
+    try {
+      payload = raw ? JSON.parse(raw) : null
+    } catch {
+      payload = null
+    }
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('这个接口没有提供模型列表（/models），请手动填写模型 ID。')
+      }
+      throw this.errorFromResponse(response, raw, payload)
+    }
+
+    const models = parseModelList(payload)
+    if (!models.length) {
+      throw new Error('接口没有返回可用模型，请手动填写模型 ID。')
+    }
+    this.logger?.info('ai', `读取可用模型列表：${models.length} 个`)
+    return { models }
   }
 
   async extractAssignments(input) {

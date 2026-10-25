@@ -239,6 +239,11 @@ test('configures a model and runs AI assignment planning end to end', async () =
   )
   const requests = []
   const server = http.createServer((request, response) => {
+    if (request.method === 'GET' && request.url === '/v1/models') {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify({ data: [{ id: 'test-model' }, { id: 'vision-test' }] }))
+      return
+    }
     let body = ''
     request.setEncoding('utf8')
     request.on('data', (chunk) => {
@@ -301,6 +306,11 @@ test('configures a model and runs AI assignment planning end to end', async () =
     await expect(window.locator('#aiProfileSupportsVision')).toBeChecked()
     await window.locator('#aiProfileLabel').fill('本地测试模型')
     await window.locator('#aiProfileBaseUrl').fill(baseUrl)
+    await window.getByRole('button', { name: '搜索模型' }).click()
+    const modelOption = window.locator('.ai-model-option').filter({ hasText: 'vision-test' })
+    await expect(modelOption).toBeVisible()
+    await modelOption.click()
+    await expect(window.locator('#aiProfileModel')).toHaveValue('vision-test')
     await window.locator('#aiProfileModel').fill('test-model')
     await window.getByRole('button', { name: '保存模型' }).click()
     await expect(window.locator('.ai-profile-row')).toContainText('本地测试模型')

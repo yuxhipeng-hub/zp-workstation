@@ -31,6 +31,8 @@
   千帆、混元、星火、MiniMax、百川、零一、阶跃、商汤、SiliconFlow、OpenRouter、Groq、
   Mistral、xAI、Together、Fireworks、Perplexity、Cohere、Hugging Face、GitHub Models、
   Ollama、LM Studio；预设只填接口地址，模型 ID 和视觉能力按账号实际可用模型填写。
+- 填好 Base URL 和 API Key 后点「搜索模型」，应用会请求该接口的 `/models` 并列出可用
+  模型，点击即可填入模型 ID；接口不提供 `/models` 时仍可手动填写。
 - DeepSeek V4.1 Flash（`deepseek-flash`）预设会自动勾选「支持视觉输入」；其他 OpenAI
   Compatible 视觉模型也可以手动勾选。
 - 资料库把拖入的文件按课程自动归档成文件夹，支持分组重命名、移动和文件校验。

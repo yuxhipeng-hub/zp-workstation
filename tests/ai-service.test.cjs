@@ -345,6 +345,91 @@ test('maps screenshots to input_image for the Responses protocol', async (t) => 
   assert.equal(imagePart.image_url, PNG_DATA_URL)
 })
 
+test('lists available models from an OpenAI-compatible endpoint', async (t) => {
+  const requests = []
+  const { directory, service } = createHarness(async (url, options) => {
+    requests.push({ url, options })
+    return jsonResponse({ data: [{ id: 'vision-model' }, { id: 'chat-model' }] })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const result = await service.listModels({
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-test',
+  })
+
+  assert.deepEqual(result.models, ['vision-model', 'chat-model'])
+  assert.equal(requests[0].url, 'https://api.example.com/v1/models')
+  assert.equal(requests[0].options.method, 'GET')
+  assert.equal(requests[0].options.headers.Authorization, 'Bearer sk-test')
+  assert.equal(requests[0].options.body, undefined)
+})
+
+test('reuses a saved key only when the Base URL is unchanged', async (t) => {
+  const requests = []
+  const { directory, service } = createHarness(async (url, options) => {
+    requests.push({ url, options })
+    return jsonResponse({ models: [{ id: 'saved-model' }] })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const config = service.saveProfile(
+    { label: '已保存模型', baseUrl: 'https://api.example.com/v1', model: 'saved-model' },
+    'sk-saved',
+  )
+
+  const sameBase = await service.listModels({
+    baseUrl: 'https://api.example.com/v1',
+    profileId: config.profiles[0].id,
+    apiKey: '',
+  })
+  assert.deepEqual(sameBase.models, ['saved-model'])
+  assert.equal(requests.at(-1).options.headers.Authorization, 'Bearer sk-saved')
+
+  await assert.rejects(
+    () =>
+      service.listModels({
+        baseUrl: 'https://other.example.com/v1',
+        profileId: config.profiles[0].id,
+        apiKey: '',
+      }),
+    /重新填写 API Key/,
+  )
+  assert.equal(requests.length, 1)
+})
+
+test('reports model-list failures without leaking the API key', async (t) => {
+  const { directory, service } = createHarness(async () =>
+    jsonResponse({ error: { message: 'not found' } }, 404),
+  )
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  await assert.rejects(
+    () => service.listModels({ baseUrl: 'https://api.example.com/v1', apiKey: 'sk-secret' }),
+    /没有提供模型列表/,
+  )
+  await assert.rejects(
+    () => service.listModels({ baseUrl: 'https://api.example.com/v1', apiKey: '' }),
+    /请先填写 API Key/,
+  )
+})
+
+test('allows keyless local model discovery', async (t) => {
+  const requests = []
+  const { directory, service } = createHarness(async (url, options) => {
+    requests.push({ url, options })
+    return jsonResponse({ data: [{ id: 'qwen3:8b' }] })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  const result = await service.listModels({
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    apiKey: '',
+  })
+
+  assert.deepEqual(result.models, ['qwen3:8b'])
+  assert.equal(requests[0].options.headers.Authorization, undefined)
+})
+
 test('rejects malformed plans and insecure remote HTTP endpoints', () => {
   assert.throws(() => parsePlanContent('没有 JSON'), /没有返回 JSON/)
   assert.throws(() => parsePlanContent('{"summary":"缺少步骤"}'), /缺少有效步骤/)

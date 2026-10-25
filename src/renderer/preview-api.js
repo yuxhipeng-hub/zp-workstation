@@ -1236,6 +1236,11 @@ export function createPreviewLauncherApi() {
         throw new Error('没有找到这个模型配置。')
       return { ok: true, message: 'OK', profileId: id }
     },
+    async listAiModels(input) {
+      const baseUrl = String(input?.baseUrl || '').trim()
+      if (!baseUrl) throw new Error('请先填写 Base URL。')
+      return { models: ['preview-deepseek', 'preview-vision-flash', 'preview-local-model'] }
+    },
     async extractAssignments(input) {
       const source =
         typeof input === 'string' ? String(input || '').trim() : String(input?.text || '').trim()

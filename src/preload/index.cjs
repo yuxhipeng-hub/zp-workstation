@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('launcher', {
   deleteAiProfile: (id) => ipcRenderer.invoke('ai:profile-delete', id),
   activateAiProfile: (id) => ipcRenderer.invoke('ai:profile-activate', id),
   testAiProfile: (id) => ipcRenderer.invoke('ai:profile-test', id),
+  listAiModels: (input) => ipcRenderer.invoke('ai:list-models', input),
   generateAssignmentPlan: (id) => ipcRenderer.invoke('ai:assignment-plan', id),
   extractAssignments: (text) => ipcRenderer.invoke('ai:extract-assignments', text),
   getWorkspace: () => ipcRenderer.invoke('workspace:get'),

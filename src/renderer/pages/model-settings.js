@@ -263,14 +263,20 @@ export function createModelSettingsPage({
             <span>Base URL</span>
             <input id="aiProfileBaseUrl" type="url" maxlength="2048" required value="${escapeHtml(editing?.baseUrl || '')}" placeholder="https://api.example.com/v1" />
           </label>
-          <label class="field">
+          <label class="field ai-profile-field-wide">
             <span>模型 ID</span>
-            <input id="aiProfileModel" type="text" maxlength="160" required value="${escapeHtml(editing?.model || '')}" placeholder="例如：deepseek-chat" />
+            <div class="ai-model-input-row">
+              <input id="aiProfileModel" type="text" maxlength="160" required value="${escapeHtml(editing?.model || '')}" placeholder="例如：deepseek-chat" />
+              <button class="button secondary" type="button" data-action="search-ai-models">
+                <i data-lucide="search"></i><span>搜索模型</span>
+              </button>
+            </div>
           </label>
-          <label class="field">
+          <label class="field ai-profile-field-wide">
             <span>API Key</span>
             <input id="aiProfileApiKey" type="password" maxlength="4096" autocomplete="off" placeholder="${editing?.hasKey ? '已保存，留空保持不变' : '输入 API Key；本机模型可留空'}" />
           </label>
+          <div class="ai-model-search-results" id="aiModelSearchResults" hidden></div>
         </div>
         <details class="ai-advanced-settings">
           <summary>
@@ -487,6 +493,27 @@ export function createModelSettingsPage({
     if (visionInput) visionInput.checked = Boolean(preset.supportsVision)
   }
 
+  function readableMessage(error) {
+    return (
+      String(error?.message || '')
+        .trim()
+        .replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') ||
+      '搜索失败，请稍后重试。'
+    )
+  }
+
+  function showModelSearchResults(message, tone = 'error') {
+    const results = document.querySelector('#aiModelSearchResults')
+    if (!results) return
+    results.hidden = false
+    results.replaceChildren()
+    const node = document.createElement('span')
+    node.className = tone === 'error' ? 'ai-model-search-error' : 'setting-hint'
+    if (tone === 'error') node.setAttribute('role', 'alert')
+    node.textContent = message
+    results.append(node)
+  }
+
   /** 返回 true 表示这个动作属于模型配置页，main.js 不再处理。 */
   async function handleAction(action, element) {
     switch (action) {
@@ -542,6 +569,69 @@ export function createModelSettingsPage({
         }
         render()
         toast('模型配置已删除。', 'success')
+        break
+      }
+      case 'search-ai-models': {
+        const baseUrl = document.querySelector('#aiProfileBaseUrl')?.value?.trim() || ''
+        const apiKey = document.querySelector('#aiProfileApiKey')?.value || ''
+        const headersValue = document.querySelector('#aiProfileHeaders')?.value?.trim() || '{}'
+        let headers = {}
+        try {
+          headers = JSON.parse(headersValue)
+        } catch {
+          showModelSearchResults('附加请求头必须是有效的 JSON 对象。')
+          break
+        }
+        if (!baseUrl) {
+          showModelSearchResults('请先填写 Base URL。')
+          break
+        }
+
+        const button = element
+        const label = button?.querySelector('span')
+        const originalLabel = label?.textContent || '搜索模型'
+        if (button) button.disabled = true
+        if (label) label.textContent = '搜索中…'
+        try {
+          const result = await api.listAiModels({
+            baseUrl,
+            apiKey,
+            profileId: state.aiEditingProfileId || '',
+            headers,
+          })
+          const models = Array.isArray(result?.models) ? result.models : []
+          if (!models.length) {
+            throw new Error('接口没有返回可用模型，请手动填写模型 ID。')
+          }
+          const results = document.querySelector('#aiModelSearchResults')
+          if (!results) break
+          results.hidden = false
+          results.replaceChildren()
+          const hint = document.createElement('span')
+          hint.className = 'setting-hint'
+          hint.textContent = `找到 ${models.length} 个模型，点击填入：`
+          const list = document.createElement('div')
+          list.className = 'ai-model-option-list'
+          for (const id of models) {
+            const option = document.createElement('button')
+            option.type = 'button'
+            option.className = 'ai-model-option'
+            option.textContent = id
+            option.addEventListener('click', () => {
+              const input = document.querySelector('#aiProfileModel')
+              if (!input) return
+              input.value = id
+              input.focus()
+            })
+            list.append(option)
+          }
+          results.append(hint, list)
+        } catch (error) {
+          showModelSearchResults(readableMessage(error))
+        } finally {
+          if (button) button.disabled = false
+          if (label) label.textContent = originalLabel
+        }
         break
       }
       default:
