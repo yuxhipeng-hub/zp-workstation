@@ -365,6 +365,108 @@ test('configures a model and runs AI assignment planning end to end', async () =
   }
 })
 
+test('extracts assignment drafts from a platform screenshot', async () => {
+  const userDataDir = createUserDataDir()
+  const imagePath = path.join(userDataDir, '平台通知.png')
+  const pngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAHgAAAA8CAYAAACtrX6oAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAMASURBVHhe7ZgJkoMgEEU9ngfiON7Fq3gTpkSI0HSzJJlM5td/VVRFZO0HqFk8gWaRGQQLCgaHgsGhYHAoGBwKBoeCwaHgj3D4bV2822X+7/N3gnfnl9kZn3XWzR/x8tjW4nqU3S1+3e5aoZ3GWHa3+qz4PMfm1+XFNp5kQPC1+pZlNjlvhixMePFuO6bklGKe3xWzgsPCesxn926aa53y9uXCzAl9K/Wb8ZtgQLBNNzAqV4CKAITs3o4+62W7IARdBkUkI6jTgmOdXpm0cGW/oa4cW4yB2ndo56OCz91SHzHm4IzAmnID8aSQ7UXKvrLxdINx9Zk32xWsHalVP9d4UztpJ9bDzxamspOrvq/MzpzGGRScdkw56WpwcQWvbq8Fp3uq3IQlWeTnu30gGPJZ3RMcdpy5SBOHP47suLbK51K/WvCJkFwMriUwHqf1Pfv5Xj3DzvzQlziqR4IhdmRbcL3jJdaRW6TQQLnLv1+wGND9u/HCk55LaqqP/Yv8KI9BWmNfuyvlm+3nbZcnQFNw8UJVyryLNOor1w/+g+AcdXDvIgZjj32YfY0GIxNnC2o/InLB9YISKVtM1b2UsvmV3Q3OaYCu4DB5ObDRJAf+BOkb9GXB2dFrChZH+U0tWK1vXD9A3sFTC0Vp0+xrIhhJjCUo7DatD0VwNWaZlHZSDPJb6rwm5tTjs4IHylrlrHz7GWy8EwzswJpacKu+vI65Vxuu8aL6KErB+Y3pYPQE1bxBsHgHSEe1WvaJOVlQcKvtRDwlUh29/lZ88pXNyU+v+ysh1FVOn3/3V6U9ESUpbZp9dQQPPS+tdO6y+A3u9ta/cC3inyFy7OIroaAzpxk+K3igrFXOyn9nMDTOBZJ3O7Vgmi9uF+q83jinlwST74eCwaFgcCgYHAoGh4LBoWBwKBgcCgaHgsGhYHAoGBwKBoeCwaFgcCgYHAoGh4LBoWBwKBgcCgaHgsGhYHAoGBwKBoeCwaFgcCgYHAoGh4LBoWBwKBgcCgaHgsGhYHAoGBwKBoeCwaFgcH6UjErm7hwzHAAAAABJRU5ErkJggg=='
+  fs.writeFileSync(imagePath, Buffer.from(pngBase64, 'base64'))
+  const requests = []
+  const server = http.createServer((request, response) => {
+    let body = ''
+    request.setEncoding('utf8')
+    request.on('data', (chunk) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      requests.push(JSON.parse(body))
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  assignments: [
+                    {
+                      title: '平台截图作业',
+                      course: '操作系统',
+                      dueAt: '2026-11-01',
+                      priority: 'high',
+                      notes: '从平台截图识别',
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+      )
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  const baseUrl = `http://127.0.0.1:${address.port}/v1`
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify(
+      {
+        onboarding: { welcomeSeen: true },
+        aiProfiles: [
+          {
+            id: 'vision-e2e',
+            label: '视觉测试模型',
+            baseUrl,
+            model: 'vision-test',
+            protocol: 'chat-completions',
+            supportsVision: true,
+            timeoutMs: 90000,
+            contextWindow: 0,
+            maxOutputTokens: 1800,
+            temperature: 0.2,
+          },
+        ],
+        activeAiProfileId: 'vision-e2e',
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav-item[data-page="assignments"]').click()
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await expect(window.locator('#smartEntryTitle')).toBeVisible()
+
+    await window.locator('#smartEntryImages').setInputFiles(imagePath)
+    await expect(window.locator('.smart-entry-image')).toHaveCount(1)
+    await expect(window.locator('.smart-entry-image img')).toBeVisible()
+
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-draft')).toContainText('平台截图作业')
+    await expect(window.locator('.smart-entry-draft')).toContainText('高优先级')
+
+    const payload = requests.at(-1)
+    const userContent = payload.messages.at(-1).content
+    assert.equal(Array.isArray(userContent), true)
+    const textPart = userContent.find((part) => part.type === 'text')
+    assert.match(textPart.text, /通知内容在图片中/)
+    const imagePart = userContent.find((part) => part.type === 'image_url')
+    assert.match(imagePart.image_url.url, /^data:image\/jpeg;base64,/)
+
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(
+      window.locator('.assignment-card').filter({ hasText: '平台截图作业' }),
+    ).toBeVisible()
+  } finally {
+    await closeWorkstation(app, userDataDir)
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
 test('reads AI news inside the app instead of jumping to the website', async () => {
   const userDataDir = createUserDataDir()
   const app = await launchWorkstation(userDataDir)

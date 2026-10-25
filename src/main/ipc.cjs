@@ -93,9 +93,14 @@ function registerIpc({
     const nextWorkspace = workspace.updateAssignment(assignment.id, { aiPlan: result.plan })
     return { ...result, workspace: nextWorkspace }
   })
-  ipcMain.handle('ai:extract-assignments', (_event, text) => {
-    if (typeof text !== 'string') throw new Error('请先粘贴通知内容。')
-    return aiService.extractAssignments(text)
+  ipcMain.handle('ai:extract-assignments', (_event, payload) => {
+    if (
+      typeof payload !== 'string' &&
+      (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    ) {
+      throw new Error('请先粘贴通知内容或添加截图。')
+    }
+    return aiService.extractAssignments(payload)
   })
 
   ipcMain.handle('aihot:daily', (_event, options = {}) => {

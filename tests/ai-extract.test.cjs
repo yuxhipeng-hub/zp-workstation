@@ -3,11 +3,17 @@ const test = require('node:test')
 
 const {
   MAX_EXTRACT_DRAFTS,
+  MAX_EXTRACT_IMAGE_BYTES,
+  MAX_EXTRACT_IMAGES,
   MAX_EXTRACT_TEXT_LENGTH,
   buildExtractMessages,
+  cleanExtractImages,
   cleanExtractedAssignments,
   parseExtractContent,
 } = require('../src/main/ai-extract.cjs')
+
+const PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII='
 
 test('cleans extracted drafts and drops unusable rows', () => {
   const drafts = cleanExtractedAssignments({
@@ -92,4 +98,39 @@ test('prompt sends only the pasted notice plus today and the strict schema', () 
 test('keeps the documented payload limit', () => {
   assert.equal(MAX_EXTRACT_TEXT_LENGTH, 4000)
   assert.equal(MAX_EXTRACT_DRAFTS, 5)
+  assert.equal(MAX_EXTRACT_IMAGES, 2)
+})
+
+test('validates screenshot data and builds multimodal prompts', () => {
+  const images = cleanExtractImages([{ name: '平台通知.png', dataUrl: PNG_DATA_URL }])
+  assert.deepEqual(images, [{ name: '平台通知.png', dataUrl: PNG_DATA_URL }])
+
+  const messages = buildExtractMessages('', new Date(2026, 9, 25, 9, 0, 0), images)
+  assert.equal(messages[0].content.includes('读取图片'), true)
+  assert.equal(Array.isArray(messages[1].content), true)
+  assert.equal(messages[1].content[0].type, 'text')
+  assert.match(messages[1].content[0].text, /图片中/)
+  assert.equal(messages[1].content[1].type, 'image_url')
+  assert.equal(messages[1].content[1].image_url.url, PNG_DATA_URL)
+
+  assert.throws(
+    () => cleanExtractImages([{ dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=' }]),
+    /只支持 PNG、JPEG 或 WebP/,
+  )
+  assert.throws(
+    () =>
+      cleanExtractImages(
+        Array.from({ length: MAX_EXTRACT_IMAGES + 1 }, () => ({ dataUrl: PNG_DATA_URL })),
+      ),
+    /最多识别 2 张截图/,
+  )
+  assert.throws(
+    () =>
+      cleanExtractImages([
+        {
+          dataUrl: `data:image/png;base64,${Buffer.alloc(MAX_EXTRACT_IMAGE_BYTES + 1).toString('base64')}`,
+        },
+      ]),
+    /不能超过 5 MB/,
+  )
 })

@@ -2228,6 +2228,95 @@ label.input-shell:not(.field):not(.toggle-row):has(input:focus-visible),
   resize: vertical;
 }
 
+.smart-entry-images {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  min-height: 92px;
+  padding: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.smart-entry-panel.is-image-dragging .smart-entry-images {
+  border-color: var(--focus);
+  background: color-mix(in srgb, var(--info-soft) 42%, var(--panel));
+}
+
+.smart-entry-images.is-busy {
+  opacity: 0.72;
+}
+
+.smart-entry-image {
+  position: relative;
+  width: 148px;
+  height: 92px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.smart-entry-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.smart-entry-image .icon-button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+}
+
+.smart-entry-image-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 148px;
+  min-height: 92px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+.smart-entry-image-add:hover {
+  border-color: var(--focus);
+  color: var(--text);
+}
+
+.smart-entry-image-add.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.smart-entry-image-add svg {
+  width: 18px;
+  height: 18px;
+}
+
+.smart-entry-image-hint {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .smart-entry-actions {
   display: flex;
   flex-wrap: wrap;

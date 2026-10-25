@@ -785,7 +785,7 @@ function createPreviewState() {
           temperature: 0.2,
           reasoningEffort: '',
           supportsTools: true,
-          supportsVision: false,
+          supportsVision: true,
           headers: {},
         },
       ],
@@ -1236,19 +1236,24 @@ export function createPreviewLauncherApi() {
         throw new Error('没有找到这个模型配置。')
       return { ok: true, message: 'OK', profileId: id }
     },
-    async extractAssignments(text) {
-      const source = String(text || '').trim()
-      if (!source) throw new Error('请先粘贴通知内容。')
+    async extractAssignments(input) {
+      const source =
+        typeof input === 'string' ? String(input || '').trim() : String(input?.text || '').trim()
+      const images = Array.isArray(input?.images) ? input.images : []
+      if (!source && !images.length) throw new Error('请先粘贴通知内容。')
       const profile = state.ai.profiles.find((item) => item.id === state.ai.activeProfileId)
       if (!profile?.hasKey) throw new Error('当前模型还没有保存 API Key。')
+      if (images.length && !profile.supportsVision) {
+        throw new Error('当前模型未开启视觉输入。')
+      }
       return clone({
         assignments: [
           {
-            title: '示例作业：完成实验报告',
+            title: images.length ? '示例作业：从截图完成实验报告' : '示例作业：完成实验报告',
             course: '示例课程',
             dueAt: '',
             priority: 'medium',
-            notes: '预览环境下的模拟抽取结果。',
+            notes: images.length ? '预览环境下的截图识别结果。' : '预览环境下的模拟抽取结果。',
           },
         ],
         profile: { id: profile.id, label: profile.label, model: profile.model },

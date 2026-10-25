@@ -1,5 +1,8 @@
 const MAX_EXTRACT_TEXT_LENGTH = 4000
 const MAX_EXTRACT_DRAFTS = 5
+const MAX_EXTRACT_IMAGES = 2
+const MAX_EXTRACT_IMAGE_BYTES = 5 * 1024 * 1024
+const IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/i
 
 const PRIORITY_ALIASES = new Map([
   ['high', 'high'],
@@ -35,6 +38,36 @@ function cleanDueDate(value) {
 
 function cleanPriority(value) {
   return PRIORITY_ALIASES.get(cleanText(value, 12).toLowerCase()) || 'medium'
+}
+
+function cleanExtractImages(images) {
+  if (!Array.isArray(images) || !images.length) return []
+  if (images.length > MAX_EXTRACT_IMAGES) {
+    throw new Error(`一次最多识别 ${MAX_EXTRACT_IMAGES} 张截图，请分次处理。`)
+  }
+  const cleaned = []
+  for (const image of images) {
+    if (!image || typeof image !== 'object' || Array.isArray(image)) {
+      throw new Error('截图数据无效，请重新选择图片。')
+    }
+    const dataUrl = String(image.dataUrl || '').trim()
+    const match = dataUrl.match(IMAGE_DATA_URL_PATTERN)
+    if (!match) {
+      throw new Error('截图格式无效，只支持 PNG、JPEG 或 WebP。')
+    }
+    const bytes = Buffer.byteLength(match[2], 'base64')
+    if (!bytes) throw new Error('截图内容为空，请重新选择图片。')
+    if (bytes > MAX_EXTRACT_IMAGE_BYTES) {
+      throw new Error(
+        `单张截图不能超过 ${Math.round(MAX_EXTRACT_IMAGE_BYTES / 1024 / 1024)} MB，请压缩后再试。`,
+      )
+    }
+    cleaned.push({
+      name: cleanText(image.name, 80) || '通知截图',
+      dataUrl,
+    })
+  }
+  return cleaned
 }
 
 function cleanAssignmentDraft(input) {
@@ -77,25 +110,40 @@ function localDateString(now) {
   return `${year}-${month}-${day}`
 }
 
-function buildExtractMessages(text, now = new Date()) {
+function buildExtractMessages(text, now = new Date(), images = []) {
   const today = localDateString(now)
+  const attachments = Array.isArray(images)
+    ? images.filter((image) => image?.dataUrl).slice(0, MAX_EXTRACT_IMAGES)
+    : []
+  const hasImages = attachments.length > 0
+  const userText = [
+    `今天是 ${today}。`,
+    `通知原文：\n${text || '（没有文字，通知内容在图片中）'}`,
+    ...(hasImages ? [`随附 ${attachments.length} 张通知截图，请先读取截图中的文字。`] : []),
+    '',
+    '请严格输出以下结构：',
+    '{"assignments":[{"title":"作业标题","course":"课程名或空字符串","dueAt":"YYYY-MM-DD 或空字符串","priority":"low|medium|high","notes":"通知里的关键要求或空字符串"}]}',
+    `要求：最多 ${MAX_EXTRACT_DRAFTS} 条；合并重复作业；标题必须来自通知内容；相对日期（如“下周五”）按今天换算成 YYYY-MM-DD；所有文字使用中文。`,
+  ].join('\n')
   return [
     {
       role: 'system',
       content:
-        '你是大学生作业录入助手。请从用户粘贴的通知里抽取作业或任务，不要编造通知里没有的信息；' +
+        '你是大学生作业录入助手。请从用户提供或粘贴的通知里抽取作业或任务，不要编造通知里没有的信息；' +
+        '如果提供了截图，请先读取图片中的文字，只根据图片和文字里能看到的内容抽取。' +
         '不确定的字段留空。只输出一个 JSON 对象，不要使用 Markdown 代码块。',
     },
     {
       role: 'user',
-      content: [
-        `今天是 ${today}。`,
-        `通知原文：\n${text}`,
-        '',
-        '请严格输出以下结构：',
-        '{"assignments":[{"title":"作业标题","course":"课程名或空字符串","dueAt":"YYYY-MM-DD 或空字符串","priority":"low|medium|high","notes":"通知里的关键要求或空字符串"}]}',
-        `要求：最多 ${MAX_EXTRACT_DRAFTS} 条；合并重复作业；标题必须来自通知内容；相对日期（如“下周五”）按今天换算成 YYYY-MM-DD；所有文字使用中文。`,
-      ].join('\n'),
+      content: hasImages
+        ? [
+            { type: 'text', text: userText },
+            ...attachments.map((image) => ({
+              type: 'image_url',
+              image_url: { url: image.dataUrl },
+            })),
+          ]
+        : userText,
     },
   ]
 }
@@ -125,8 +173,11 @@ function parseExtractContent(content) {
 
 module.exports = {
   MAX_EXTRACT_DRAFTS,
+  MAX_EXTRACT_IMAGE_BYTES,
+  MAX_EXTRACT_IMAGES,
   MAX_EXTRACT_TEXT_LENGTH,
   buildExtractMessages,
+  cleanExtractImages,
   cleanExtractedAssignments,
   parseExtractContent,
 }

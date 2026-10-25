@@ -4,6 +4,7 @@ const { cleanAiPlan } = require('./ai-plan.cjs')
 const {
   MAX_EXTRACT_TEXT_LENGTH,
   buildExtractMessages,
+  cleanExtractImages,
   parseExtractContent,
 } = require('./ai-extract.cjs')
 
@@ -119,6 +120,47 @@ function extractMessageContent(payload) {
   }
   if (content && typeof content === 'object') return JSON.stringify(content)
   return ''
+}
+
+function messageText(content) {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((part) => part?.type === 'text')
+    .map((part) => String(part.text || ''))
+    .join('\n\n')
+}
+
+function messagesHaveImages(messages) {
+  return messages.some(
+    (message) =>
+      Array.isArray(message?.content) &&
+      message.content.some((part) => part?.type === 'image_url' && part.image_url?.url),
+  )
+}
+
+function toResponsesInput(messages) {
+  return messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => ({
+      role: message.role,
+      content: Array.isArray(message.content)
+        ? message.content.flatMap((part) => {
+            if (part?.type === 'text') {
+              return [{ type: 'input_text', text: String(part.text || '') }]
+            }
+            if (part?.type === 'image_url') {
+              return [
+                {
+                  type: 'input_image',
+                  image_url: String(part.image_url?.url || ''),
+                },
+              ]
+            }
+            return []
+          })
+        : [{ type: 'input_text', text: String(message.content || '') }],
+    }))
 }
 
 function parsePlanContent(content) {
@@ -320,13 +362,16 @@ class AiService {
     if (protocol === 'responses') {
       const instructions = messages
         .filter((message) => message.role === 'system')
-        .map((message) => message.content)
+        .map((message) => messageText(message.content))
         .join('\n\n')
-      const input = messages
-        .filter((message) => message.role !== 'system')
-        .map((message) => message.content)
-        .join('\n\n')
-      body.input = input
+      if (messagesHaveImages(messages)) {
+        body.input = toResponsesInput(messages)
+      } else {
+        body.input = messages
+          .filter((message) => message.role !== 'system')
+          .map((message) => messageText(message.content))
+          .join('\n\n')
+      }
       body.max_output_tokens = maxTokens
       if (instructions) body.instructions = instructions
       if (profile.reasoningEffort) body.reasoning = { effort: profile.reasoningEffort }
@@ -383,21 +428,32 @@ class AiService {
     return { ok: true, message: content.slice(0, 120), profileId: profile.id }
   }
 
-  async extractAssignments(text) {
-    const source = String(text ?? '').trim()
-    if (!source) throw new Error('请先粘贴通知内容。')
+  async extractAssignments(input) {
+    const payload = input && typeof input === 'object' && !Array.isArray(input) ? input : null
+    const source = String(payload ? (payload.text ?? '') : (input ?? '')).trim()
+    const images = cleanExtractImages(payload?.images)
+    if (!source && !images.length) throw new Error('请先粘贴通知内容。')
     if (source.length > MAX_EXTRACT_TEXT_LENGTH) {
       throw new Error(`通知内容最多 ${MAX_EXTRACT_TEXT_LENGTH} 字，请分段处理。`)
     }
     const profile = this.resolveProfile()
+    if (images.length && !profile.supportsVision) {
+      throw new Error(
+        '当前模型未开启视觉输入，请先在「模型配置」勾选「支持视觉输入」或换一个支持图片的模型。',
+      )
+    }
     this.logger?.info(
       'ai',
-      `从通知中抽取作业草稿（${source.length} 字）：${profile.label} / ${profile.model}`,
+      `从通知中抽取作业草稿（${source.length} 字，${images.length} 张截图）：${profile.label} / ${profile.model}`,
     )
-    const content = await this.requestChat(profile, buildExtractMessages(source), {
-      maxTokens: Math.min(profile.maxOutputTokens || 1400, 2000),
-      temperature: 0.1,
-    })
+    const content = await this.requestChat(
+      profile,
+      buildExtractMessages(source, new Date(), images),
+      {
+        maxTokens: Math.min(profile.maxOutputTokens || 1400, 2000),
+        temperature: 0.1,
+      },
+    )
     const assignments = parseExtractContent(content)
     this.logger?.info('ai', `通知抽取完成：${assignments.length} 条作业草稿`)
     return {

@@ -72,6 +72,8 @@ const state = {
   smartEntryBusy: false,
   smartEntryText: '',
   smartEntryDrafts: [],
+  smartEntryImages: [],
+  smartEntryImageBusy: false,
   smartEntryError: '',
   highlightAssignmentId: null,
   experimentDropActive: false,
@@ -241,6 +243,120 @@ function readableAiError(error) {
     message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') ||
     '操作失败，请稍后重试。'
   )
+}
+
+const SMART_ENTRY_MAX_IMAGES = 2
+const SMART_ENTRY_MAX_SOURCE_BYTES = 15 * 1024 * 1024
+const SMART_ENTRY_IMAGE_MAX_SIDE = 2000
+
+function syncSmartEntryTextFromDom() {
+  const input = document.querySelector('#smartEntryText')
+  if (input) state.smartEntryText = input.value
+}
+
+async function prepareSmartEntryImage(file) {
+  if (!file || typeof file.arrayBuffer !== 'function') {
+    throw new Error('没有读到这张图片，请重新选择。')
+  }
+  if (!/^image\/(png|jpe?g|webp)$/i.test(file.type || '')) {
+    throw new Error('只支持 PNG、JPEG 或 WebP 截图。')
+  }
+  if (Number(file.size) > SMART_ENTRY_MAX_SOURCE_BYTES) {
+    throw new Error('这张图片超过 15 MB，请压缩后再试。')
+  }
+
+  let sourceUrl
+  try {
+    sourceUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('读取失败'))
+      reader.readAsDataURL(file)
+    })
+  } catch {
+    throw new Error('这张图片无法读取，请换一张截图。')
+  }
+
+  const image = new Image()
+  try {
+    await new Promise((resolve, reject) => {
+      image.onload = resolve
+      image.onerror = () => reject(new Error('decode failed'))
+      image.src = sourceUrl
+    })
+  } catch {
+    throw new Error('这张图片无法读取，请换一张截图。')
+  }
+
+  const naturalWidth = image.naturalWidth || image.width || 1
+  const naturalHeight = image.naturalHeight || image.height || 1
+  const scale = Math.min(1, SMART_ENTRY_IMAGE_MAX_SIDE / Math.max(naturalWidth, naturalHeight))
+  const width = Math.max(1, Math.round(naturalWidth * scale))
+  const height = Math.max(1, Math.round(naturalHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('当前环境无法处理图片，请稍后重试。')
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, width, height)
+  context.drawImage(image, 0, 0, width, height)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.86)
+  if (!dataUrl.startsWith('data:image/jpeg;base64,')) {
+    throw new Error('图片转换失败，请换一张截图。')
+  }
+  return {
+    name: String(file.name || '通知截图').slice(0, 80),
+    dataUrl,
+  }
+}
+
+async function addSmartEntryImages(files) {
+  if (!state.smartEntryOpen) return
+  const sourceFiles = [...(files || [])].filter((file) =>
+    String(file?.type || '').startsWith('image/'),
+  )
+  if (!sourceFiles.length) return
+  syncSmartEntryTextFromDom()
+
+  const room = SMART_ENTRY_MAX_IMAGES - (state.smartEntryImages || []).length
+  if (room <= 0) {
+    state.smartEntryError = `最多添加 ${SMART_ENTRY_MAX_IMAGES} 张截图。`
+    render({ anchor: '.smart-entry-panel' })
+    return
+  }
+
+  state.smartEntryImageBusy = true
+  state.smartEntryError = ''
+  render({ anchor: '.smart-entry-panel' })
+  try {
+    for (const file of sourceFiles.slice(0, room)) {
+      try {
+        const image = await prepareSmartEntryImage(file)
+        state.smartEntryImages.push(image)
+      } catch (error) {
+        state.smartEntryError = error.message
+      }
+    }
+    if (sourceFiles.length > room) {
+      state.smartEntryError = `最多添加 ${SMART_ENTRY_MAX_IMAGES} 张截图，已保留前 ${room} 张。`
+    }
+  } finally {
+    state.smartEntryImageBusy = false
+    render({ anchor: '.smart-entry-panel' })
+  }
+}
+
+function smartEntryDragHasFiles(event) {
+  const types = [...(event.dataTransfer?.types || [])].map(String)
+  return (
+    types.includes('Files') ||
+    [...(event.dataTransfer?.items || [])].some((item) => item.kind === 'file')
+  )
+}
+
+function smartEntryPanelFromEvent(event) {
+  return state.smartEntryOpen ? event.target?.closest?.('.smart-entry-panel') || null : null
 }
 
 function aiProtocolLabel(protocol) {
@@ -2355,6 +2471,8 @@ async function handleAction(action, element) {
       state.smartEntryOpen = true
       state.smartEntryBusy = false
       state.smartEntryDrafts = []
+      state.smartEntryImages = []
+      state.smartEntryImageBusy = false
       state.smartEntryError = ''
       state.assignmentComposerOpen = false
       state.editingAssignmentId = null
@@ -2366,16 +2484,27 @@ async function handleAction(action, element) {
       state.smartEntryBusy = false
       state.smartEntryText = ''
       state.smartEntryDrafts = []
+      state.smartEntryImages = []
+      state.smartEntryImageBusy = false
       state.smartEntryError = ''
       render()
       break
+    case 'remove-smart-image': {
+      const index = Number(element.dataset.index)
+      if (!Number.isInteger(index)) break
+      syncSmartEntryTextFromDom()
+      state.smartEntryImages.splice(index, 1)
+      render({ anchor: '.smart-entry-panel' })
+      break
+    }
     case 'parse-smart-entry': {
       const text = document.querySelector('#smartEntryText')?.value?.trim() || ''
+      const images = state.smartEntryImages || []
       state.smartEntryText = text
       state.smartEntryError = ''
       state.smartEntryDrafts = []
-      if (!text) {
-        state.smartEntryError = '请先粘贴通知内容。'
+      if (!text && !images.length) {
+        state.smartEntryError = '请先粘贴通知文字或添加通知截图。'
         render()
         return
       }
@@ -2385,10 +2514,19 @@ async function handleAction(action, element) {
         render()
         return
       }
+      if (images.length && !profile.supportsVision) {
+        state.smartEntryError =
+          '当前模型未开启视觉输入，请先在「模型配置」勾选「支持视觉输入」或换一个支持图片的模型。'
+        render()
+        return
+      }
       state.smartEntryBusy = true
       render()
       try {
-        const result = await api.extractAssignments(text)
+        const result = await api.extractAssignments({
+          text,
+          images: images.map(({ name, dataUrl }) => ({ name, dataUrl })),
+        })
         state.smartEntryDrafts = Array.isArray(result?.assignments) ? result.assignments : []
         if (!state.smartEntryDrafts.length) {
           state.smartEntryError = '模型没有识别出作业，请补充标题和截止时间后重试。'
@@ -2421,6 +2559,7 @@ async function handleAction(action, element) {
         state.smartEntryOpen = false
         state.smartEntryText = ''
         state.smartEntryDrafts = []
+        state.smartEntryImages = []
         state.smartEntryError = ''
         state.assignmentFilter = 'all'
         render()
@@ -3608,6 +3747,13 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (event.target.id === 'smartEntryImages') {
+    const input = /** @type {HTMLInputElement} */ (event.target)
+    const files = [...(input.files || [])]
+    input.value = ''
+    await addSmartEntryImages(files)
+    return
+  }
   if (event.target.id === 'aiProfilePreset') {
     getModelSettingsPage().applyPreset(event.target)
     return
@@ -3779,6 +3925,73 @@ document.addEventListener('dragend', (event) => {
   setExperimentDropTargetGroup(null)
   event.target.closest?.('.experiment-file')?.classList.remove('is-dragging')
 })
+
+document.addEventListener('paste', (event) => {
+  if (!state.smartEntryOpen || !event.target?.closest?.('.smart-entry-panel')) return
+  const files = [...(event.clipboardData?.files || [])].filter((file) =>
+    String(file?.type || '').startsWith('image/'),
+  )
+  if (!files.length) return
+  event.preventDefault()
+  void addSmartEntryImages(files)
+})
+
+document.addEventListener(
+  'dragenter',
+  (event) => {
+    const panel = smartEntryPanelFromEvent(event)
+    if (!panel || !smartEntryDragHasFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    panel.classList.add('is-image-dragging')
+  },
+  true,
+)
+
+document.addEventListener(
+  'dragover',
+  (event) => {
+    const panel = smartEntryPanelFromEvent(event)
+    if (!panel || !smartEntryDragHasFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    panel.classList.add('is-image-dragging')
+  },
+  true,
+)
+
+document.addEventListener(
+  'dragleave',
+  (event) => {
+    const panel = smartEntryPanelFromEvent(event)
+    if (!panel) return
+    if (event.relatedTarget && panel.contains(event.relatedTarget)) return
+    panel.classList.remove('is-image-dragging')
+  },
+  true,
+)
+
+document.addEventListener(
+  'drop',
+  (event) => {
+    const panel = smartEntryPanelFromEvent(event)
+    if (!panel || !smartEntryDragHasFiles(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    panel.classList.remove('is-image-dragging')
+    const images = [...(event.dataTransfer?.files || [])].filter((file) =>
+      String(file?.type || '').startsWith('image/'),
+    )
+    if (!images.length) {
+      state.smartEntryError = '只能拖入 PNG、JPEG 或 WebP 截图。'
+      render({ anchor: '.smart-entry-panel' })
+      return
+    }
+    void addSmartEntryImages(images)
+  },
+  true,
+)
 
 document.addEventListener('dragenter', (event) => {
   if (isInternalExperimentDrag(event)) {

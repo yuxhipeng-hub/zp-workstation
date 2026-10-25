@@ -6,6 +6,9 @@ const test = require('node:test')
 const { AiService, chatEndpoint, parsePlanContent } = require('../src/main/ai-service.cjs')
 const { SettingsStore } = require('../src/main/settings-store.cjs')
 
+const PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII='
+
 function createHarness(fetchImpl) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-ai-service-'))
   const settings = new SettingsStore(directory)
@@ -254,6 +257,92 @@ test('rejects empty or oversized notice text before calling the model', async (t
   await assert.rejects(() => service.extractAssignments('   '), /请先粘贴通知内容/)
   await assert.rejects(() => service.extractAssignments('x'.repeat(4001)), /最多 4000 字/)
   assert.equal(requests.length, 0)
+})
+
+test('sends screenshot content to a vision model and extracts drafts', async (t) => {
+  const requests = []
+  const content = JSON.stringify({
+    assignments: [{ title: '平台截图作业', course: '操作系统', dueAt: '2026-11-01' }],
+  })
+  const { directory, service } = createHarness(async (url, options) => {
+    requests.push({ url, options })
+    return jsonResponse({ choices: [{ message: { content } }] })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile(
+    {
+      label: '视觉模型',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'vision-model',
+      supportsVision: true,
+    },
+    'sk-test',
+  )
+
+  const result = await service.extractAssignments({
+    text: '',
+    images: [{ name: '平台通知.png', dataUrl: PNG_DATA_URL }],
+  })
+
+  assert.equal(result.assignments[0].title, '平台截图作业')
+  const body = JSON.parse(requests[0].options.body)
+  const userContent = body.messages.at(-1).content
+  assert.equal(Array.isArray(userContent), true)
+  const textPart = userContent.find((part) => part.type === 'text')
+  assert.match(textPart.text, /图片中/)
+  const imagePart = userContent.find((part) => part.type === 'image_url')
+  assert.equal(imagePart.image_url.url, PNG_DATA_URL)
+})
+
+test('rejects screenshots when the active model has not declared vision support', async (t) => {
+  const requests = []
+  const { directory, service } = createHarness(async () => {
+    requests.push(true)
+    return jsonResponse({})
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile(
+    { label: '纯文本模型', baseUrl: 'https://api.example.com/v1', model: 'text-model' },
+    'sk-test',
+  )
+
+  await assert.rejects(
+    () => service.extractAssignments({ images: [{ name: '通知.png', dataUrl: PNG_DATA_URL }] }),
+    /未开启视觉输入/,
+  )
+  assert.equal(requests.length, 0)
+})
+
+test('maps screenshots to input_image for the Responses protocol', async (t) => {
+  const requests = []
+  const content = JSON.stringify({ assignments: [{ title: '响应接口截图作业' }] })
+  const { directory, service } = createHarness(async (url, options) => {
+    requests.push({ url, options })
+    return jsonResponse({ output_text: content })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile(
+    {
+      label: '视觉 Responses',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'vision-responses',
+      protocol: 'responses',
+      supportsVision: true,
+    },
+    'sk-test',
+  )
+
+  const result = await service.extractAssignments({
+    text: '平台通知',
+    images: [{ name: '截图.png', dataUrl: PNG_DATA_URL }],
+  })
+
+  assert.equal(result.assignments[0].title, '响应接口截图作业')
+  const body = JSON.parse(requests[0].options.body)
+  assert.equal(Array.isArray(body.input), true)
+  const userMessage = body.input.find((message) => message.role === 'user')
+  const imagePart = userMessage.content.find((part) => part.type === 'input_image')
+  assert.equal(imagePart.image_url, PNG_DATA_URL)
 })
 
 test('rejects malformed plans and insecure remote HTTP endpoints', () => {
