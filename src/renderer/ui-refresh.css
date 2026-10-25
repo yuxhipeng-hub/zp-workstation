@@ -2343,13 +2343,14 @@ label.input-shell:not(.field):not(.toggle-row):has(input:focus-visible),
     color var(--motion-fast) var(--ease-out);
 }
 
-.experiment-group.selected,
-.experiment-group.is-drop-target {
+.experiment-group.selected {
+  background: var(--panel-hover);
   box-shadow: none;
 }
 
-.experiment-group.selected {
-  background: var(--panel-hover);
+.experiment-group.is-drop-target {
+  background: color-mix(in srgb, var(--info-soft) 52%, var(--panel));
+  box-shadow: inset 3px 0 0 var(--focus);
 }
 
 .experiment-group-copy strong {

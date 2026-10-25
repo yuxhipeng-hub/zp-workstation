@@ -116,7 +116,7 @@ export function createExperimentsPage({
                     .join('')}
                 </div>
               </aside>
-              <section class="experiment-explorer-main ${selectedGroup?.name === state.experimentDropTargetGroup ? 'is-drop-target' : ''}" aria-label="${escapeHtml(selectedGroup?.name || '资料文件')}" ${selectedGroup ? `data-experiment-group-drop="${escapeHtml(selectedGroup.name)}"` : ''}>
+              <section class="experiment-explorer-main" aria-label="${escapeHtml(selectedGroup?.name || '资料文件')}" ${selectedGroup ? `data-experiment-group-drop="${escapeHtml(selectedGroup.name)}"` : ''}>
                 ${
                   selectedGroup
                     ? `<header class="experiment-explorer-head">

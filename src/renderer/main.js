@@ -13,6 +13,7 @@ import { createAboutPage } from './pages/about.js'
 import { createEditors } from './components/editors.js'
 import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { keepFocusInDialog } from './lib/focus.js'
+import { resolveDroppedFileSource } from './lib/drop-file.js'
 import { createTodayPage } from './pages/today.js'
 import { createSchedulePage } from './pages/schedule.js'
 import '@fontsource-variable/inter/wght.css'
@@ -675,6 +676,7 @@ function openTextDialog({
 }) {
   const root = document.querySelector('#dialogRoot')
   if (!root) return Promise.resolve(null)
+  markUserInputWait()
 
   return new Promise((resolve) => {
     let settled = false
@@ -757,6 +759,7 @@ function openChoiceDialog({
 }) {
   const root = document.querySelector('#dialogRoot')
   if (!root) return Promise.resolve(null)
+  markUserInputWait()
 
   return new Promise((resolve) => {
     let settled = false
@@ -1476,6 +1479,27 @@ function scrollLogs() {
 
 let uiTaskSequence = 0
 let taskAutoHideTimer = null
+let userInputWaitCount = 0
+
+/**
+ * 对话框和系统文件选择器在等待用户操作时不算“任务进行中”。
+ * 点击动作的通用任务条据此跳过，避免用户点取消后仍提示“已完成”。
+ */
+function markUserInputWait() {
+  userInputWaitCount += 1
+}
+
+async function chooseWithUserInput(chooser) {
+  markUserInputWait()
+  return chooser()
+}
+
+function hideUiTask(taskId) {
+  if (taskId && state.activeTask?.taskId && state.activeTask.taskId !== taskId) return
+  window.clearTimeout(taskAutoHideTimer)
+  state.activeTask = null
+  document.querySelector('#taskStrip')?.classList.add('hidden')
+}
 
 function beginUiTask(label, detail = '', taskId = '') {
   const id = taskId || `ui-task-${Date.now()}-${++uiTaskSequence}`
@@ -1872,6 +1896,7 @@ function scrollToHighlightedScheduleCourse() {
 function openExperimentSuggestionDialog(suggestions) {
   const root = document.querySelector('#dialogRoot')
   if (!root) return Promise.resolve(null)
+  markUserInputWait()
   const knownGroups = [
     ...new Set([
       ...(state.workspace?.experiments || []).map((item) => item.group).filter(Boolean),
@@ -2437,7 +2462,7 @@ async function handleAction(action, element) {
       await guard(() => api.openExperimentDirectory(), '打开实验资料目录失败')
       break
     case 'choose-schedule-file': {
-      const selected = await api.chooseScheduleFile?.()
+      const selected = await chooseWithUserInput(() => api.chooseScheduleFile?.())
       if (selected) await importScheduleFile(selected)
       break
     }
@@ -2689,7 +2714,9 @@ async function handleAction(action, element) {
       break
     }
     case 'choose-experiment-files': {
-      const paths = (await api.chooseExperimentFiles?.()) || (await api.chooseExperimentPdfs())
+      const paths = await chooseWithUserInput(
+        async () => (await api.chooseExperimentFiles?.()) || (await api.chooseExperimentPdfs()),
+      )
       if (paths?.length) await importExperimentEntries(paths)
       break
     }
@@ -2931,7 +2958,10 @@ async function handleAction(action, element) {
       break
     }
     case 'choose-sync-dir': {
-      const directory = await guard(() => api.chooseSyncDir(), '选择同步文件夹失败')
+      const directory = await guard(
+        () => chooseWithUserInput(() => api.chooseSyncDir()),
+        '选择同步文件夹失败',
+      )
       if (directory) {
         const input = document.querySelector('#syncLocalDir')
         if (input) input.value = directory
@@ -3050,7 +3080,7 @@ async function handleAction(action, element) {
     }
     case 'choose-experiment-dir': {
       const current = state.settings?.experimentDir || ''
-      const selected = await api.chooseExperimentDir()
+      const selected = await chooseWithUserInput(() => api.chooseExperimentDir())
       if (!selected || selected === current) break
       if (
         !window.confirm(
@@ -3092,7 +3122,7 @@ async function handleAction(action, element) {
     }
     case 'choose-log-dir': {
       const current = state.status?.logsDir || state.settings?.logDir || ''
-      const selected = await api.chooseLogDir()
+      const selected = await chooseWithUserInput(() => api.chooseLogDir())
       if (!selected || selected === current) break
       if (
         !window.confirm(
@@ -3416,6 +3446,7 @@ document.addEventListener('click', async (event) => {
       '正在处理'
     const taskId = `ui-click-${Date.now()}-${++uiTaskSequence}`
     const activeTaskBefore = state.activeTask?.taskId || null
+    const inputWaitBefore = userInputWaitCount
     let taskFeedbackActive = false
     action.disabled = true
     action.classList.add('is-busy')
@@ -3423,12 +3454,16 @@ document.addEventListener('click', async (event) => {
     const taskTimer = window.setTimeout(() => {
       if (!action.isConnected) return
       if (state.activeTask?.taskId && state.activeTask.taskId !== activeTaskBefore) return
+      if (userInputWaitCount > inputWaitBefore) return
       taskFeedbackActive = true
       beginUiTask(`正在${actionLabel.replace(/^正在/, '')}`, '请稍候，正在完成本地操作…', taskId)
     }, 150)
     try {
       await handleAction(action.dataset.action, action)
-      if (taskFeedbackActive) completeUiTask(taskId, `${actionLabel}已完成`)
+      if (taskFeedbackActive) {
+        if (userInputWaitCount > inputWaitBefore) hideUiTask(taskId)
+        else completeUiTask(taskId, `${actionLabel}已完成`)
+      }
     } catch (error) {
       if (taskFeedbackActive) failUiTask(taskId, `${actionLabel}失败`, error.message)
       toast(error.message, 'error', 6500)
@@ -3575,7 +3610,7 @@ function setExperimentDropTargetGroup(group) {
   const nextGroup = state.page === 'experiments' ? group || null : null
   if (state.experimentDropTargetGroup === nextGroup) return
   state.experimentDropTargetGroup = nextGroup
-  document.querySelectorAll('[data-experiment-group-drop]').forEach((element) => {
+  document.querySelectorAll('.experiment-group[data-experiment-group-drop]').forEach((element) => {
     element.classList.toggle(
       'is-drop-target',
       Boolean(nextGroup) && element.dataset.experimentGroupDrop === nextGroup,
@@ -3648,21 +3683,11 @@ function droppedTypeSummary(event) {
   return types.length ? types.slice(0, 8).join('、') : '无'
 }
 
-async function resolveDroppedFilePath(file) {
-  const directPath = api.getPathForFile?.(file) || file.path || ''
-  if (directPath) return directPath
-  if (!api.stageDroppedFile) {
-    throw new Error('当前版本无法读取这个拖入文件，请先保存到本地。')
-  }
-  if (Number(file.size) > 200 * 1024 * 1024) {
-    throw new Error('拖入的单个文件超过 200 MB，请先保存到本地后再导入。')
-  }
-  const data = new Uint8Array(await file.arrayBuffer())
-  const staged = await api.stageDroppedFile({
-    name: file.name || 'dropped-file',
-    data,
+function resolveDroppedFilePath(file) {
+  return resolveDroppedFileSource(file, {
+    getPathForFile: api.getPathForFile,
+    stageDroppedFile: api.stageDroppedFile,
   })
-  return staged?.path || ''
 }
 
 document.addEventListener('dragstart', (event) => {

@@ -794,6 +794,153 @@ test('drops an external file directly into an existing course folder', async () 
   }
 })
 
+test('imports a dropped file that only exposes content but no local path', async () => {
+  const userDataDir = createUserDataDir()
+  const experimentDir = path.join(userDataDir, '实验资料')
+  const targetGroup = '计算机系统基础'
+  const existingFile = path.join(experimentDir, targetGroup, '课程笔记.txt')
+  const virtualName = 'WPS 虚拟实验.txt'
+  const imported = path.join(experimentDir, targetGroup, virtualName)
+
+  fs.mkdirSync(path.dirname(existingFile), { recursive: true })
+  fs.writeFileSync(existingFile, '课程笔记', 'utf8')
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ experimentDir, onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(userDataDir, 'workspace.json'),
+    JSON.stringify(
+      {
+        version: 2,
+        courses: [],
+        assignments: [],
+        knowledge: [],
+        experiments: [
+          {
+            id: 'experiment-target',
+            title: '课程笔记',
+            originalName: '课程笔记.txt',
+            filePath: existingFile,
+            group: targetGroup,
+            size: Buffer.byteLength('课程笔记'),
+            importedAt: new Date().toISOString(),
+          },
+        ],
+        schedule: null,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav').getByRole('button', { name: '资料库', exact: true }).click()
+    const targetGroupRow = window
+      .locator('.experiment-group')
+      .filter({ hasText: targetGroup })
+      .first()
+    await expect(targetGroupRow).toBeVisible()
+    await targetGroupRow.evaluate((target, name) => {
+      const dataTransfer = new globalThis.DataTransfer()
+      dataTransfer.items.add(
+        new globalThis.File(['WPS 虚拟文件内容'], name, { type: 'text/plain' }),
+      )
+      target.dispatchEvent(
+        new globalThis.DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+        }),
+      )
+    }, virtualName)
+
+    await expect.poll(() => fs.existsSync(imported), { timeout: 8_000 }).toBe(true)
+    assert.equal(fs.readFileSync(imported, 'utf8'), 'WPS 虚拟文件内容')
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('highlights only the library row when dropping onto the open library', async () => {
+  const userDataDir = createUserDataDir()
+  const experimentDir = path.join(userDataDir, '实验资料')
+  const targetGroup = '计算机系统基础'
+  const existingFile = path.join(experimentDir, targetGroup, '课程笔记.txt')
+
+  fs.mkdirSync(path.dirname(existingFile), { recursive: true })
+  fs.writeFileSync(existingFile, '课程笔记', 'utf8')
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ experimentDir, onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(userDataDir, 'workspace.json'),
+    JSON.stringify(
+      {
+        version: 2,
+        courses: [],
+        assignments: [],
+        knowledge: [],
+        experiments: [
+          {
+            id: 'experiment-target',
+            title: '课程笔记',
+            originalName: '课程笔记.txt',
+            filePath: existingFile,
+            group: targetGroup,
+            size: Buffer.byteLength('课程笔记'),
+            importedAt: new Date().toISOString(),
+          },
+        ],
+        schedule: null,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav').getByRole('button', { name: '资料库', exact: true }).click()
+    const targetGroupRow = window
+      .locator('.experiment-group')
+      .filter({ hasText: targetGroup })
+      .first()
+    const explorerMain = window.locator('.experiment-explorer-main')
+    await expect(targetGroupRow).toBeVisible()
+    await expect(explorerMain).toBeVisible()
+
+    await explorerMain.evaluate((target) => {
+      const dataTransfer = new globalThis.DataTransfer()
+      dataTransfer.setData('text/plain', '外部文件')
+      for (const type of ['dragenter', 'dragover']) {
+        target.dispatchEvent(
+          new globalThis.DragEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+          }),
+        )
+      }
+    })
+
+    await expect(targetGroupRow).toHaveClass(/is-drop-target/)
+    await expect(explorerMain).not.toHaveClass(/is-drop-target/)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
 test('shows a classification confirmation before importing an unassigned file', async () => {
   const userDataDir = createUserDataDir()
   const experimentDir = path.join(userDataDir, '实验资料')
@@ -1084,6 +1231,49 @@ test('creates a custom library and accepts files dropped onto it', async () => {
     const imported = path.join(experimentDir, '我的资料', path.basename(droppedSource))
     await expect.poll(() => fs.existsSync(imported), { timeout: 8_000 }).toBe(true)
     assert.equal(fs.existsSync(droppedSource), true)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('does not report success when new library creation is cancelled', async () => {
+  const userDataDir = createUserDataDir()
+  const experimentDir = path.join(userDataDir, '实验资料')
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ experimentDir, onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav').getByRole('button', { name: '资料库', exact: true }).click()
+    const openButton = window.getByRole('button', { name: '新建资料库', exact: true })
+
+    await openButton.click()
+    let dialog = window.getByRole('dialog', { name: '新建资料库' })
+    await expect(dialog).toBeVisible()
+    // 等过通用任务条的 150ms 延迟，确认等待输入期间不会伪装成“进行中”。
+    await window.waitForTimeout(400)
+    await dialog.getByRole('button', { name: '取消' }).click()
+    await expect(dialog).toHaveCount(0)
+    await window.waitForTimeout(400)
+    assert.notEqual(await window.locator('#taskTitle').textContent(), '新建资料库已完成')
+    await expect(window.locator('.toast.success')).toHaveCount(0)
+
+    await openButton.click()
+    dialog = window.getByRole('dialog', { name: '新建资料库' })
+    await expect(dialog).toBeVisible()
+    await window.waitForTimeout(400)
+    await window.locator('.dialog-layer').click({ position: { x: 6, y: 6 } })
+    await expect(dialog).toHaveCount(0)
+    await window.waitForTimeout(400)
+    assert.notEqual(await window.locator('#taskTitle').textContent(), '新建资料库已完成')
+    await expect(window.locator('.toast.success')).toHaveCount(0)
+
+    await expect(window.locator('.experiment-group')).toHaveCount(0)
+    assert.equal(fs.existsSync(experimentDir) ? fs.readdirSync(experimentDir).length : 0, 0)
   } finally {
     await closeWorkstation(app, userDataDir)
   }
