@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.renderer.json",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": ["src/renderer/globals.d.ts", "src/renderer/lib/**/*.js", "src/renderer/lib/**/*.d.ts"]
+}
