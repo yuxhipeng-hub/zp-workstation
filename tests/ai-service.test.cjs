@@ -197,6 +197,65 @@ test('turns a model JSON response into a structured assignment plan', async (t) 
   assert.ok(result.plan.generatedAt)
 })
 
+test('extracts assignment drafts from pasted text without sending workspace data', async (t) => {
+  const requests = []
+  const content = JSON.stringify({
+    assignments: [
+      {
+        title: '操作系统实验二报告',
+        course: '操作系统',
+        dueAt: '2026-10-30',
+        priority: '高',
+        notes: '包含源码和实验截图',
+      },
+      { title: '日期不明确的作业', dueAt: '下周五' },
+      { title: '' },
+    ],
+  })
+  const { directory, service } = createHarness(async (url, options) => {
+    requests.push({ url, options })
+    return jsonResponse({ choices: [{ message: { content } }] })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile(
+    { label: '本地模型', baseUrl: 'https://api.example.com/v1', model: 'entry-model' },
+    'sk-test',
+  )
+
+  const notice = '各位同学：本周五 23:59 前提交操作系统实验二报告，包含源码和截图。'
+  const result = await service.extractAssignments(notice)
+
+  assert.equal(result.assignments.length, 2)
+  assert.equal(result.assignments[0].title, '操作系统实验二报告')
+  assert.equal(result.assignments[0].priority, 'high')
+  assert.equal(result.assignments[0].dueAt, '2026-10-30')
+  assert.equal(result.assignments[1].dueAt, '')
+  assert.equal(result.profile.label, '本地模型')
+  assert.equal(result.profile.model, 'entry-model')
+
+  const body = JSON.parse(requests[0].options.body)
+  assert.equal(body.model, 'entry-model')
+  const userMessage = body.messages.at(-1).content
+  assert.match(userMessage, /本周五 23:59 前提交操作系统实验二报告/)
+  assert.match(userMessage, /今天是 \d{4}-\d{2}-\d{2}/)
+  assert.equal(userMessage.includes('workspace'), false)
+  assert.equal(userMessage.includes('资料库'), false)
+  assert.equal(userMessage.includes('sk-test'), false)
+})
+
+test('rejects empty or oversized notice text before calling the model', async (t) => {
+  const requests = []
+  const { directory, service } = createHarness(async () => {
+    requests.push(true)
+    return jsonResponse({})
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+
+  await assert.rejects(() => service.extractAssignments('   '), /请先粘贴通知内容/)
+  await assert.rejects(() => service.extractAssignments('x'.repeat(4001)), /最多 4000 字/)
+  assert.equal(requests.length, 0)
+})
+
 test('rejects malformed plans and insecure remote HTTP endpoints', () => {
   assert.throws(() => parsePlanContent('没有 JSON'), /没有返回 JSON/)
   assert.throws(() => parsePlanContent('{"summary":"缺少步骤"}'), /缺少有效步骤/)

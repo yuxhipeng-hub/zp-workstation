@@ -68,6 +68,11 @@ const state = {
   assignmentFilter: 'open',
   assignmentComposerOpen: false,
   editingAssignmentId: null,
+  smartEntryOpen: false,
+  smartEntryBusy: false,
+  smartEntryText: '',
+  smartEntryDrafts: [],
+  smartEntryError: '',
   highlightAssignmentId: null,
   experimentDropActive: false,
   experimentImporting: false,
@@ -228,6 +233,14 @@ function aiProfiles() {
 function activeAiProfile() {
   const activeId = state.aiConfig?.activeProfileId || ''
   return aiProfiles().find((profile) => profile.id === activeId) || null
+}
+
+function readableAiError(error) {
+  const message = String(error?.message || '').trim()
+  return (
+    message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') ||
+    '操作失败，请稍后重试。'
+  )
 }
 
 function aiProtocolLabel(protocol) {
@@ -2338,6 +2351,86 @@ async function handleAction(action, element) {
       state.editingAssignmentId = null
       render()
       break
+    case 'open-smart-entry':
+      state.smartEntryOpen = true
+      state.smartEntryBusy = false
+      state.smartEntryDrafts = []
+      state.smartEntryError = ''
+      state.assignmentComposerOpen = false
+      state.editingAssignmentId = null
+      render()
+      requestAnimationFrame(() => document.querySelector('#smartEntryText')?.focus())
+      break
+    case 'close-smart-entry':
+      state.smartEntryOpen = false
+      state.smartEntryBusy = false
+      state.smartEntryText = ''
+      state.smartEntryDrafts = []
+      state.smartEntryError = ''
+      render()
+      break
+    case 'parse-smart-entry': {
+      const text = document.querySelector('#smartEntryText')?.value?.trim() || ''
+      state.smartEntryText = text
+      state.smartEntryError = ''
+      state.smartEntryDrafts = []
+      if (!text) {
+        state.smartEntryError = '请先粘贴通知内容。'
+        render()
+        return
+      }
+      const profile = activeAiProfile()
+      if (!profile || !(profile.hasKey || !profile.requiresKey)) {
+        state.smartEntryError = '请先在「模型配置」里添加并启用一个可用模型。'
+        render()
+        return
+      }
+      state.smartEntryBusy = true
+      render()
+      try {
+        const result = await api.extractAssignments(text)
+        state.smartEntryDrafts = Array.isArray(result?.assignments) ? result.assignments : []
+        if (!state.smartEntryDrafts.length) {
+          state.smartEntryError = '模型没有识别出作业，请补充标题和截止时间后重试。'
+        }
+      } catch (error) {
+        state.smartEntryError = readableAiError(error)
+      } finally {
+        state.smartEntryBusy = false
+        render()
+      }
+      break
+    }
+    case 'add-smart-drafts': {
+      const selected = [...document.querySelectorAll('[data-smart-draft]:checked')]
+        .map((node) => Number(node.dataset.smartDraft))
+        .filter((index) => Number.isInteger(index))
+      const drafts = (state.smartEntryDrafts || []).filter((_, index) => selected.includes(index))
+      if (!drafts.length) {
+        state.smartEntryError = '请至少勾选一条作业。'
+        render()
+        return
+      }
+      let created = 0
+      try {
+        for (const draft of drafts) {
+          applyWorkspace(await api.createAssignment(draft))
+          created += 1
+          state.smartEntryDrafts = state.smartEntryDrafts.filter((item) => item !== draft)
+        }
+        state.smartEntryOpen = false
+        state.smartEntryText = ''
+        state.smartEntryDrafts = []
+        state.smartEntryError = ''
+        state.assignmentFilter = 'all'
+        render()
+        toast(`已添加 ${created} 条作业，记得核对截止时间和备注。`, 'success')
+      } catch (error) {
+        state.smartEntryError = `已添加 ${created} 条，剩余写入失败：${readableAiError(error)}`
+        render()
+      }
+      break
+    }
     case 'edit-assignment': {
       const assignment = state.workspace?.assignments.find((item) => item.id === element.dataset.id)
       if (!assignment) return

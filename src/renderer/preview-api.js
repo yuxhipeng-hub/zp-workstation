@@ -1236,6 +1236,24 @@ export function createPreviewLauncherApi() {
         throw new Error('没有找到这个模型配置。')
       return { ok: true, message: 'OK', profileId: id }
     },
+    async extractAssignments(text) {
+      const source = String(text || '').trim()
+      if (!source) throw new Error('请先粘贴通知内容。')
+      const profile = state.ai.profiles.find((item) => item.id === state.ai.activeProfileId)
+      if (!profile?.hasKey) throw new Error('当前模型还没有保存 API Key。')
+      return clone({
+        assignments: [
+          {
+            title: '示例作业：完成实验报告',
+            course: '示例课程',
+            dueAt: '',
+            priority: 'medium',
+            notes: '预览环境下的模拟抽取结果。',
+          },
+        ],
+        profile: { id: profile.id, label: profile.label, model: profile.model },
+      })
+    },
     async generateAssignmentPlan(id) {
       const assignment = state.workspace.assignments.find((item) => item.id === id)
       if (!assignment) throw new Error('没有找到这条作业。')

@@ -1,6 +1,11 @@
 const { randomUUID } = require('node:crypto')
 const { AiSecretStore } = require('./ai-secret-store.cjs')
 const { cleanAiPlan } = require('./ai-plan.cjs')
+const {
+  MAX_EXTRACT_TEXT_LENGTH,
+  buildExtractMessages,
+  parseExtractContent,
+} = require('./ai-extract.cjs')
 
 const MAX_PROFILES = 20
 const REQUEST_TIMEOUT_MS = 90_000
@@ -376,6 +381,29 @@ class AiService {
     )
     this.logger?.info('ai', `模型连接测试成功：${profile.label} / ${profile.model}`)
     return { ok: true, message: content.slice(0, 120), profileId: profile.id }
+  }
+
+  async extractAssignments(text) {
+    const source = String(text ?? '').trim()
+    if (!source) throw new Error('请先粘贴通知内容。')
+    if (source.length > MAX_EXTRACT_TEXT_LENGTH) {
+      throw new Error(`通知内容最多 ${MAX_EXTRACT_TEXT_LENGTH} 字，请分段处理。`)
+    }
+    const profile = this.resolveProfile()
+    this.logger?.info(
+      'ai',
+      `从通知中抽取作业草稿（${source.length} 字）：${profile.label} / ${profile.model}`,
+    )
+    const content = await this.requestChat(profile, buildExtractMessages(source), {
+      maxTokens: Math.min(profile.maxOutputTokens || 1400, 2000),
+      temperature: 0.1,
+    })
+    const assignments = parseExtractContent(content)
+    this.logger?.info('ai', `通知抽取完成：${assignments.length} 条作业草稿`)
+    return {
+      assignments,
+      profile: { id: profile.id, label: profile.label, model: profile.model },
+    }
   }
 
   async generateAssignmentPlan(assignment) {

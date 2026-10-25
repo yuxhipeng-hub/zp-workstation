@@ -93,6 +93,10 @@ function registerIpc({
     const nextWorkspace = workspace.updateAssignment(assignment.id, { aiPlan: result.plan })
     return { ...result, workspace: nextWorkspace }
   })
+  ipcMain.handle('ai:extract-assignments', (_event, text) => {
+    if (typeof text !== 'string') throw new Error('请先粘贴通知内容。')
+    return aiService.extractAssignments(text)
+  })
 
   ipcMain.handle('aihot:daily', (_event, options = {}) => {
     if (options && typeof options !== 'object') throw new Error('参数无效。')

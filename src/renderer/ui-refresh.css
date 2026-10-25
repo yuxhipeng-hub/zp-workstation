@@ -2210,6 +2210,147 @@ label.input-shell:not(.field):not(.toggle-row):has(input:focus-visible),
   padding: 20px 22px;
 }
 
+.smart-entry-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.smart-entry-panel .section-heading {
+  margin-bottom: 0;
+}
+
+.smart-entry-input {
+  margin: 0;
+}
+
+.smart-entry-input textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.smart-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.smart-entry-actions .setting-hint {
+  margin: 0;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.smart-entry-actions .button-row {
+  display: flex;
+  gap: 8px;
+}
+
+.smart-entry-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.smart-entry-result {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.smart-entry-result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.smart-entry-result-head strong {
+  font-size: 13px;
+}
+
+.smart-entry-result-head span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.smart-entry-drafts {
+  display: grid;
+  gap: 8px;
+}
+
+.smart-entry-draft {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.smart-entry-draft:hover {
+  border-color: var(--line-strong);
+}
+
+.smart-entry-draft input {
+  accent-color: var(--accent);
+}
+
+.smart-entry-draft-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.smart-entry-draft-main strong,
+.smart-entry-draft-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smart-entry-draft-main strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.smart-entry-draft-main small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.smart-entry-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.smart-entry-result-actions .setting-hint {
+  margin: 0;
+}
+
+@media (width <= 760px) {
+  .smart-entry-draft {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .smart-entry-draft .badge {
+    justify-self: start;
+  }
+}
+
 .view[data-page='updates'] > .section,
 .view[data-page='plugins'] > .section {
   padding: 22px 24px;

@@ -237,7 +237,7 @@ test('configures a model and runs AI assignment planning end to end', async () =
     JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
     'utf8',
   )
-  let requestBody = null
+  const requests = []
   const server = http.createServer((request, response) => {
     let body = ''
     request.setEncoding('utf8')
@@ -245,20 +245,35 @@ test('configures a model and runs AI assignment planning end to end', async () =
       body += chunk
     })
     request.on('end', () => {
-      requestBody = JSON.parse(body)
+      const payload = JSON.parse(body)
+      requests.push(payload)
+      const userText = String(payload.messages?.at(-1)?.content || '')
+      const content = userText.includes('通知原文')
+        ? JSON.stringify({
+            assignments: [
+              {
+                title: '概率论第 5 章习题',
+                course: '概率论',
+                dueAt: '',
+                priority: 'high',
+                notes: '拍照上传',
+              },
+            ],
+          })
+        : JSON.stringify({
+            summary: '完成操作系统实验',
+            prerequisites: ['阅读实验要求'],
+            steps: ['梳理调度目标', '实现算法', '运行边界测试'],
+            risks: ['忽略进程状态边界'],
+            checklist: ['提交实验报告'],
+          })
       response.writeHead(200, { 'Content-Type': 'application/json' })
       response.end(
         JSON.stringify({
           choices: [
             {
               message: {
-                content: JSON.stringify({
-                  summary: '完成操作系统实验',
-                  prerequisites: ['阅读实验要求'],
-                  steps: ['梳理调度目标', '实现算法', '运行边界测试'],
-                  risks: ['忽略进程状态边界'],
-                  checklist: ['提交实验报告'],
-                }),
+                content,
               },
             },
           ],
@@ -323,8 +338,27 @@ test('configures a model and runs AI assignment planning end to end', async () =
     await expect(window.locator('.assignment-ai-plan')).toBeVisible()
     await expect(window.locator('.assignment-ai-plan')).toContainText('3 步')
     await expect(window.locator('.assignment-ai-plan')).toContainText('梳理调度目标')
-    expect(requestBody.model).toBe('test-model')
-    expect(requestBody.messages.at(-1).content).toContain('进程调度实验')
+    expect(requests.at(-1).model).toBe('test-model')
+    expect(requests.at(-1).messages.at(-1).content).toContain('进程调度实验')
+
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await expect(window.locator('#smartEntryTitle')).toBeVisible()
+    await window
+      .locator('#smartEntryText')
+      .fill('各位同学：下周五前提交概率论第 5 章习题，拍照上传到学习通。')
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-draft')).toHaveCount(1)
+    await expect(window.locator('.smart-entry-draft')).toContainText('概率论第 5 章习题')
+    await expect(window.locator('.smart-entry-draft')).toContainText('高优先级')
+    await expect(window.locator('.smart-entry-draft')).toContainText('未设截止')
+    expect(requests.at(-1).messages.at(-1).content).toContain('通知原文')
+    expect(requests.at(-1).messages.at(-1).content).toContain('概率论第 5 章习题')
+
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(
+      window.locator('.assignment-card').filter({ hasText: '概率论第 5 章习题' }),
+    ).toBeVisible()
+    await expect(window.locator('#smartEntryTitle')).toHaveCount(0)
   } finally {
     await closeWorkstation(app, userDataDir)
     await new Promise((resolve) => server.close(resolve))
