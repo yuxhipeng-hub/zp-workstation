@@ -316,11 +316,14 @@ export function hashId(key) {
 }
 
 /**
- * 同步时间会写进便签正文。比对"vault 是否落后于仓库"时先把它抹平，
- * 否则每次重跑同步都会被判成内容有变化。
+ * 生成内容里有两类"每天都会变"的元数据：同步时间，以及按源文件 mtime 或生成当天算出的
+ * 内容更新日期。比对"vault 是否落后于仓库"时它们是噪声——隔天检查、换机器重新克隆都会
+ * 让日期漂移，正文却一字未改。这里统一抹平；正文、表格和链接仍然逐字比对。
  */
-export function normalizeSyncTime(text) {
+export function normalizeGeneratedMeta(text) {
   return String(text)
+    .replace(/(^updated: ")[^"]*(")$/gm, '$1<date>$2')
+    .replace(/(内容更新：)\d{4}-\d{2}-\d{2}/g, '$1<date>')
     .replace(/(同步时间：)[^\n]*/g, '$1<sync>')
     .replace(/(上次同步：)[^\n]*/g, '$1<sync>')
 }
@@ -628,7 +631,7 @@ function buildOutputs({ syncTime, vaultPath }) {
     syncTime,
     entries: entries.map((entry) => ({ title: entry.title, source: entry.source })),
   })
-  compose(syncEntry, normalizeHeading(noteBody, syncEntry.title), formatDate(new Date()))
+  compose(syncEntry, normalizeHeading(noteBody, syncEntry.title), stamp(syncEntry.source))
 
   return { outputs, warnings, syncEntry }
 }
@@ -717,8 +720,8 @@ export function syncVault({ vaultPath, syncTime, dryRun = false }) {
 }
 
 /**
- * 只读检查：仓库文档改完有没有同步进 vault。跳过同步时间那一行，
- * 所以"刚刚同步过"和"内容一致"都能算通过。
+ * 只读检查：仓库文档改完有没有同步进 vault。比对前先抹平同步时间和生成日期，
+ * 所以"刚刚同步过""隔天再检查""换机器克隆"都不会误报；正文漂移照常命中。
  */
 export function checkVault({ vaultPath, syncTime }) {
   const projectDir = path.join(vaultPath, PROJECT_FOLDER)
@@ -733,7 +736,7 @@ export function checkVault({ vaultPath, syncTime }) {
       continue
     }
     const actual = fs.readFileSync(absolutePath, 'utf8')
-    if (normalizeSyncTime(actual) !== normalizeSyncTime(content)) outdated.push(note)
+    if (normalizeGeneratedMeta(actual) !== normalizeGeneratedMeta(content)) outdated.push(note)
   }
 
   const stale = [...existingGeneratedNotes(projectDir)].filter((note) => !files.has(note))

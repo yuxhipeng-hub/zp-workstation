@@ -266,14 +266,41 @@ test('base file filters on the sync tag and groups by category', async () => {
   assert.match(base, /- type: table/)
 })
 
-test('normalizes the sync timestamp before comparing notes', async () => {
-  const { normalizeSyncTime } = await loadModule()
+test('normalizes generated dates and sync time before comparing notes', async () => {
+  const { normalizeGeneratedMeta } = await loadModule()
 
   assert.equal(
-    normalizeSyncTime('> 内容更新：2026-10-15 · 同步时间：2026-10-15 22:00'),
-    '> 内容更新：2026-10-15 · 同步时间：<sync>',
+    normalizeGeneratedMeta('> 内容更新：2026-10-15 · 同步时间：2026-10-15 22:00'),
+    '> 内容更新：<date> · 同步时间：<sync>',
   )
-  assert.equal(normalizeSyncTime('- 上次同步：2026-10-15 22:00'), '- 上次同步：<sync>')
+  assert.equal(normalizeGeneratedMeta('- 上次同步：2026-10-15 22:00'), '- 上次同步：<sync>')
+  assert.equal(
+    normalizeGeneratedMeta('updated: "2026-10-15"\ncategory: "产品"'),
+    'updated: "<date>"\ncategory: "产品"',
+  )
+})
+
+test('inspection tolerates generation dates from a different day', async (t) => {
+  const { checkVault, formatDate, syncVault } = await loadModule()
+  const vaultPath = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-vault-'))
+  t.after(() => fs.rmSync(vaultPath, { recursive: true, force: true }))
+  syncVault({ vaultPath, syncTime: '2026-10-15 22:00' })
+
+  const notePath = path.join(vaultPath, 'ZP Workbench', '99 元数据', '同步说明.md')
+  const synced = fs.readFileSync(notePath, 'utf8')
+  const scriptDate = formatDate(
+    fs.statSync(path.join(rootDir, 'scripts', 'sync-obsidian-vault.mjs')).mtime,
+  )
+  assert.match(synced, new RegExp(`内容更新：${scriptDate}`))
+  assert.match(synced, new RegExp(`updated: "${scriptDate}"`))
+
+  const yesterday = synced
+    .replace(/^updated: .*$/m, 'updated: "1970-01-01"')
+    .replace(/内容更新：\d{4}-\d{2}-\d{2}/, '内容更新：1970-01-01')
+  fs.writeFileSync(notePath, yesterday, 'utf8')
+
+  const report = checkVault({ vaultPath, syncTime: '2026-10-16 09:00' })
+  assert.equal(report.upToDate, true, report.outdated.join('、'))
 })
 
 test('inspection passes right after a sync and catches notes that drift', async () => {
