@@ -3274,6 +3274,7 @@ input::placeholder {
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: flex-start;
   gap: 9px;
+  pointer-events: auto;
   padding: 13px 14px;
   border: 1px solid var(--line-strong);
   border-left: 3px solid var(--info);
@@ -3292,6 +3293,23 @@ input::placeholder {
 
 .toast.error {
   border-left-color: var(--danger);
+}
+
+.toast-action {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 2px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  text-decoration: underline;
 }
 
 .toast svg {

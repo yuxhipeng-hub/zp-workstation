@@ -375,9 +375,60 @@ test('configures a model and runs AI assignment planning end to end', async () =
       window.locator('.assignment-card').filter({ hasText: '概率论第 5 章习题' }),
     ).toBeVisible()
     await expect(window.locator('#smartEntryTitle')).toHaveCount(0)
+
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await window
+      .locator('#smartEntryText')
+      .fill('各位同学：下周五前提交概率论第 5 章习题，拍照上传到学习通。')
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-duplicate')).toBeVisible()
+    await expect(window.locator('.smart-entry-draft')).toContainText('可能已存在')
+    await expect(window.locator('[data-smart-draft-decision]')).toHaveValue('skip')
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(window.locator('.smart-entry-notice')).toContainText('已跳过 1 条重复作业')
+    await expect(
+      window.locator('.assignment-card').filter({ hasText: '概率论第 5 章习题' }),
+    ).toHaveCount(1)
+    await window.locator('[data-smart-draft-decision]').selectOption('create')
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(
+      window.locator('.assignment-card').filter({ hasText: '概率论第 5 章习题' }),
+    ).toHaveCount(2)
   } finally {
     await closeWorkstation(app, userDataDir)
     await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test('restores a deleted assignment from the toast', async () => {
+  const userDataDir = createUserDataDir()
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({ onboarding: { welcomeSeen: true } }, null, 2),
+    'utf8',
+  )
+  const app = await launchWorkstation(userDataDir)
+
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav-item[data-page="assignments"]').click()
+    await window.getByRole('button', { name: '添加作业' }).click()
+    await window.locator('#assignmentTitle').fill('可撤销的作业')
+    await window.locator('#assignmentCourse').fill('测试课程')
+    await window.getByRole('button', { name: '添加到收件箱' }).click()
+
+    const card = window.locator('.assignment-card').filter({ hasText: '可撤销的作业' })
+    await expect(card).toBeVisible()
+
+    window.once('dialog', (dialog) => dialog.accept())
+    await card.locator('[data-action="delete-assignment"]').click()
+    await expect(card).toHaveCount(0)
+
+    await window.getByRole('button', { name: '撤销' }).click()
+    await expect(card).toBeVisible()
+    await expect(card).toContainText('测试课程')
+  } finally {
+    await closeWorkstation(app, userDataDir)
   }
 })
 

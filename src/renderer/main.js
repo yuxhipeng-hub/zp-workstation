@@ -13,6 +13,7 @@ import { createAboutPage } from './pages/about.js'
 import { createEditors } from './components/editors.js'
 import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { keepFocusInDialog } from './lib/focus.js'
+import { buildAssignmentMergePatch, findDuplicateAssignment } from './lib/assignment-duplicates.js'
 import { createTodayPage } from './pages/today.js'
 import { createSchedulePage } from './pages/schedule.js'
 import '@fontsource-variable/inter/wght.css'
@@ -72,6 +73,9 @@ const state = {
   smartEntryBusy: false,
   smartEntryText: '',
   smartEntryDrafts: [],
+  smartEntryMatches: [],
+  smartEntryDecisions: [],
+  smartEntryNotice: '',
   smartEntryImages: [],
   smartEntryImageBusy: false,
   smartEntryError: '',
@@ -345,6 +349,17 @@ async function addSmartEntryImages(files) {
     state.smartEntryImageBusy = false
     render({ anchor: '.smart-entry-panel' })
   }
+}
+
+function prepareSmartEntryDrafts(drafts) {
+  const assignments = state.workspace?.assignments || []
+  state.smartEntryDrafts = drafts
+  state.smartEntryMatches = drafts.map((draft) => findDuplicateAssignment(draft, assignments))
+  state.smartEntryDecisions = state.smartEntryMatches.map((match) => (match ? 'skip' : 'create'))
+  const duplicates = state.smartEntryMatches.filter(Boolean).length
+  state.smartEntryNotice = duplicates
+    ? `有 ${duplicates} 条可能已存在，默认跳过；可改成合并或仍要新建。`
+    : ''
 }
 
 function smartEntryDragHasFiles(event) {
@@ -767,18 +782,39 @@ async function copyPromptToClipboard(prompt, successMessage) {
   toast(`${successMessage}，提示词已复制到剪贴板。`, 'success', 7600)
 }
 
-function toast(message, tone = 'info', duration = 4200) {
+function toast(message, tone = 'info', duration = 4200, action = null) {
   const container = document.querySelector('#toasts')
   const node = document.createElement('div')
   node.className = `toast ${tone}`
   const icon = tone === 'error' ? 'circle-alert' : tone === 'success' ? 'circle-check' : 'info'
   node.innerHTML = `<i data-lucide="${icon}"></i><span>${escapeHtml(message)}</span>`
-  container.append(node)
-  refreshIcons()
-  setTimeout(() => {
+  let dismissed = false
+  let timer = null
+  const dismiss = () => {
+    if (dismissed) return
+    dismissed = true
+    clearTimeout(timer)
     node.classList.add('leaving')
     setTimeout(() => node.remove(), 220)
-  }, duration)
+  }
+  if (action?.label && typeof action.onClick === 'function') {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'toast-action'
+    button.textContent = action.label
+    button.addEventListener('click', () => {
+      dismiss()
+      Promise.resolve()
+        .then(() => action.onClick())
+        .catch((error) => {
+          toast(`操作失败：${error?.message || '请稍后重试'}`, 'error')
+        })
+    })
+    node.append(button)
+  }
+  container.append(node)
+  refreshIcons()
+  timer = setTimeout(dismiss, duration)
 }
 
 let quickTooltipTimer = null
@@ -2471,6 +2507,9 @@ async function handleAction(action, element) {
       state.smartEntryOpen = true
       state.smartEntryBusy = false
       state.smartEntryDrafts = []
+      state.smartEntryMatches = []
+      state.smartEntryDecisions = []
+      state.smartEntryNotice = ''
       state.smartEntryImages = []
       state.smartEntryImageBusy = false
       state.smartEntryError = ''
@@ -2484,6 +2523,9 @@ async function handleAction(action, element) {
       state.smartEntryBusy = false
       state.smartEntryText = ''
       state.smartEntryDrafts = []
+      state.smartEntryMatches = []
+      state.smartEntryDecisions = []
+      state.smartEntryNotice = ''
       state.smartEntryImages = []
       state.smartEntryImageBusy = false
       state.smartEntryError = ''
@@ -2502,7 +2544,10 @@ async function handleAction(action, element) {
       const images = state.smartEntryImages || []
       state.smartEntryText = text
       state.smartEntryError = ''
+      state.smartEntryNotice = ''
       state.smartEntryDrafts = []
+      state.smartEntryMatches = []
+      state.smartEntryDecisions = []
       if (!text && !images.length) {
         state.smartEntryError = '请先粘贴通知文字或添加通知截图。'
         render()
@@ -2527,8 +2572,9 @@ async function handleAction(action, element) {
           text,
           images: images.map(({ name, dataUrl }) => ({ name, dataUrl })),
         })
-        state.smartEntryDrafts = Array.isArray(result?.assignments) ? result.assignments : []
-        if (!state.smartEntryDrafts.length) {
+        const drafts = Array.isArray(result?.assignments) ? result.assignments : []
+        prepareSmartEntryDrafts(drafts)
+        if (!drafts.length) {
           state.smartEntryError = '模型没有识别出作业，请补充标题和截止时间后重试。'
         }
       } catch (error) {
@@ -2543,29 +2589,71 @@ async function handleAction(action, element) {
       const selected = [...document.querySelectorAll('[data-smart-draft]:checked')]
         .map((node) => Number(node.dataset.smartDraft))
         .filter((index) => Number.isInteger(index))
-      const drafts = (state.smartEntryDrafts || []).filter((_, index) => selected.includes(index))
-      if (!drafts.length) {
+      if (!selected.length) {
         state.smartEntryError = '请至少勾选一条作业。'
+        state.smartEntryNotice = ''
         render()
         return
       }
       let created = 0
+      let merged = 0
+      let skipped = 0
+      const handled = new Set()
       try {
-        for (const draft of drafts) {
+        for (const index of selected) {
+          const draft = state.smartEntryDrafts[index]
+          if (!draft) continue
+          const match = state.smartEntryMatches[index]
+          const decision = state.smartEntryDecisions[index] || (match ? 'skip' : 'create')
+          if (match && decision === 'skip') {
+            skipped += 1
+            handled.add(draft)
+            continue
+          }
+          if (match && decision === 'merge') {
+            const existing = state.workspace?.assignments.find(
+              (item) => item.id === match.assignment.id,
+            )
+            if (existing) {
+              applyWorkspace(
+                await api.updateAssignment(existing.id, buildAssignmentMergePatch(existing, draft)),
+              )
+              merged += 1
+              handled.add(draft)
+              continue
+            }
+          }
           applyWorkspace(await api.createAssignment(draft))
           created += 1
-          state.smartEntryDrafts = state.smartEntryDrafts.filter((item) => item !== draft)
+          handled.add(draft)
+        }
+        if (!created && !merged) {
+          state.smartEntryNotice = skipped
+            ? `已跳过 ${skipped} 条重复作业，没有写入新作业。可改成“合并”或“仍要新建”。`
+            : '没有需要写入的作业。'
+          state.smartEntryError = ''
+          render()
+          return
         }
         state.smartEntryOpen = false
         state.smartEntryText = ''
         state.smartEntryDrafts = []
+        state.smartEntryMatches = []
+        state.smartEntryDecisions = []
+        state.smartEntryNotice = ''
         state.smartEntryImages = []
         state.smartEntryError = ''
         state.assignmentFilter = 'all'
         render()
-        toast(`已添加 ${created} 条作业，记得核对截止时间和备注。`, 'success')
+        const parts = []
+        if (created) parts.push(`添加 ${created} 条`)
+        if (merged) parts.push(`合并 ${merged} 条`)
+        if (skipped) parts.push(`跳过 ${skipped} 条重复`)
+        toast(`已${parts.join('，')}，记得核对截止时间和备注。`, 'success', 6000)
       } catch (error) {
-        state.smartEntryError = `已添加 ${created} 条，剩余写入失败：${readableAiError(error)}`
+        state.smartEntryDrafts = state.smartEntryDrafts.filter((draft) => !handled.has(draft))
+        prepareSmartEntryDrafts(state.smartEntryDrafts)
+        state.smartEntryError = `已处理 ${created + merged} 条，剩余写入失败：${readableAiError(error)}`
         render()
       }
       break
@@ -2602,13 +2690,21 @@ async function handleAction(action, element) {
     case 'delete-assignment': {
       const assignment = state.workspace?.assignments.find((item) => item.id === element.dataset.id)
       if (!assignment || !window.confirm(`删除“${assignment.title}”吗？`)) return
+      const restorePoint = structuredClone(assignment)
       applyWorkspace(await api.deleteAssignment(assignment.id))
       if (state.editingAssignmentId === assignment.id) {
         state.assignmentComposerOpen = false
         state.editingAssignmentId = null
       }
       render()
-      toast('作业已删除。', 'success')
+      toast(`已删除“${assignment.title}”。`, 'success', 9000, {
+        label: '撤销',
+        onClick: async () => {
+          applyWorkspace(await api.createAssignment(restorePoint))
+          render()
+          toast('已恢复这条作业。', 'success')
+        },
+      })
       break
     }
     case 'copy-assignment-prompt': {
@@ -3747,6 +3843,13 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (event.target.matches?.('[data-smart-draft-decision]')) {
+    const index = Number(event.target.dataset.smartDraftDecision)
+    if (Number.isInteger(index)) {
+      state.smartEntryDecisions[index] = event.target.value
+    }
+    return
+  }
   if (event.target.id === 'smartEntryImages') {
     const input = /** @type {HTMLInputElement} */ (event.target)
     const files = [...(input.files || [])]

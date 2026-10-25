@@ -128,23 +128,47 @@ export function createAssignmentsPage({
                 <strong>识别到 ${drafts.length} 条作业</strong>
                 <span>取消勾选不想添加的条目，添加后可以逐条编辑。</span>
               </div>
+              ${
+                state.smartEntryNotice
+                  ? `<p class="smart-entry-notice" role="status">${escapeHtml(state.smartEntryNotice)}</p>`
+                  : ''
+              }
               <div class="smart-entry-drafts">
                 ${drafts
                   .map((draft, index) => {
                     const due = dueDateMeta(draft.dueAt)
                     const priority =
                       assignmentPriorityMeta[draft.priority] || assignmentPriorityMeta.medium
+                    const match = state.smartEntryMatches?.[index] || null
+                    const decision =
+                      state.smartEntryDecisions?.[index] || (match ? 'skip' : 'create')
+                    const matchDue = match ? dueDateMeta(match.assignment.dueAt) : null
                     return `
-                    <label class="smart-entry-draft">
-                      <input type="checkbox" data-smart-draft="${index}" checked />
-                      <span class="smart-entry-draft-main">
+                    <div class="smart-entry-draft ${match ? 'is-duplicate' : ''}">
+                      <label class="smart-entry-draft-check">
+                        <input id="smartDraft${index}" type="checkbox" data-smart-draft="${index}" checked aria-label="选择 ${escapeHtml(draft.title)}" />
+                      </label>
+                      <label class="smart-entry-draft-main" for="smartDraft${index}">
                         <strong>${escapeHtml(draft.title)}</strong>
                         ${draft.notes ? `<small>${escapeHtml(draft.notes)}</small>` : ''}
-                      </span>
+                        ${match ? '<span class="smart-entry-duplicate-flag"><i data-lucide="triangle-alert"></i>可能已存在</span>' : ''}
+                      </label>
                       <span class="badge neutral">${escapeHtml(draft.course || '未分类')}</span>
                       <span class="badge ${due.tone}">${escapeHtml(due.label)}</span>
                       <span class="badge ${priority.tone}">${escapeHtml(priority.label)}</span>
-                    </label>`
+                      ${
+                        match
+                          ? `<div class="smart-entry-duplicate">
+                              <span>已有“${escapeHtml(match.assignment.title)}”${match.assignment.dueAt ? ` · ${escapeHtml(matchDue.label)}` : ''}</span>
+                              <select data-smart-draft-decision="${index}" aria-label="处理与已有作业重复的 ${escapeHtml(draft.title)}">
+                                <option value="skip" ${decision === 'skip' ? 'selected' : ''}>跳过</option>
+                                <option value="merge" ${decision === 'merge' ? 'selected' : ''}>合并到已有</option>
+                                <option value="create" ${decision === 'create' ? 'selected' : ''}>仍要新建</option>
+                              </select>
+                            </div>`
+                          : ''
+                      }
+                    </div>`
                   })
                   .join('')}
               </div>
