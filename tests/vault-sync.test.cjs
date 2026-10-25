@@ -193,6 +193,9 @@ test('keeps root and directory-scoped agent rules within context budgets', () =>
   ]
 
   assert.ok(Buffer.byteLength(rootRules, 'utf8') < 8 * 1024)
+  assert.match(rootRules, /当前主开发 Agent 为 DSH，Codex 默认承担辅助角色/)
+  assert.match(rootRules, /同一工作区同一时间只允许一个 Agent 拥有写权限/)
+  assert.match(rootRules, /推送、创建 PR、合并、发布或修改远端状态仍只在用户明确要求时执行/)
   for (const relativePath of scopedRules) {
     assert.ok(fs.statSync(path.join(rootDir, relativePath)).isFile(), `缺少：${relativePath}`)
   }
