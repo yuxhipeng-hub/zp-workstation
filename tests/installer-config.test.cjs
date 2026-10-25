@@ -24,5 +24,16 @@ test('always upgrades as a per-user installation so shell identity is not split'
 
   assert.equal(nsis.perMachine, false)
   assert.equal(nsis.allowElevation, false)
-  assert.equal(nsis.allowToChangeInstallationDirectory, true)
+})
+
+test('keeps shortcuts when an older version starts the installer', () => {
+  const { nsis } = packageJson.build
+
+  // electron-builder 只在安装器不允许改安装目录时才启用 keep-shortcuts 机制。
+  // 旧版本的应用内更新不会给安装包传 `--updated`，若保留目录选择，升级时仍会
+  // 删除并重建快捷方式、注销 AppUserModelID，任务栏固定项随之失效。
+  // 已有自定义安装目录仍会从 InstallLocation 读取，升级不会搬家。
+  assert.equal(nsis.allowToChangeInstallationDirectory, false)
+  assert.equal(nsis.createDesktopShortcut, true)
+  assert.equal(nsis.createStartMenuShortcut, true)
 })

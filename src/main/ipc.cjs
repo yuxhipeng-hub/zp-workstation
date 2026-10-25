@@ -5,6 +5,7 @@ const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = requir
 const { THEME_VALUES } = require('./constants.cjs')
 const { collectDiagnostics } = require('./diagnostics.cjs')
 const { resolveDropReferences } = require('./drop-reference.cjs')
+const { launchUpdateInstaller } = require('./installer-launch.cjs')
 
 function isSafeExternalUrl(value) {
   try {
@@ -551,15 +552,19 @@ function registerIpc({
   ipcMain.handle('launcher:check-update', () => launcherUpdater.check())
   ipcMain.handle('launcher:download-update', async (_event, asset) => {
     const result = await launcherUpdater.download(asset)
-    launcherUpdater.markOpening(result.filePath)
-    const error = await shell.openPath(result.filePath)
-    if (error) {
+    try {
+      // 必须带 `--updated`，否则安装器走全新安装分支，删除并重建快捷方式、
+      // 注销 AppUserModelID，任务栏固定项随之失效。
+      launchUpdateInstaller(result.filePath, { logger })
+    } catch (error) {
       launcherUpdater.setState({
-        error,
-        message: `无法启动安装程序：${error}`,
+        error: error.message,
+        message: `无法启动安装程序：${error.message}`,
       })
-      throw new Error(error)
+      throw error
     }
+    launcherUpdater.markOpening(result.filePath)
+    logger.info('launcher-update', `安装程序已以更新模式启动：${result.filePath}`)
     setTimeout(() => app.quit(), 2400)
     return result
   })

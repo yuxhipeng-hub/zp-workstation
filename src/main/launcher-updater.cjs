@@ -764,7 +764,7 @@ class LauncherUpdater extends EventEmitter {
       at: new Date().toISOString(),
     }
     this.emit('download-progress', payload)
-    this.setState({ message: '安装程序已启动，ZP Workbench 即将退出。' })
+    this.setState({ message: '安装程序已启动，ZP Workbench 即将退出并自动完成更新。' })
     return payload
   }
 }

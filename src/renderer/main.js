@@ -1186,7 +1186,7 @@ function updateChrome() {
 
 function formatLauncherProgress(progress) {
   if (!progress) return ''
-  if (progress.phase === 'opening') return '安装程序已启动，工作站即将退出。'
+  if (progress.phase === 'opening') return '安装程序已启动，工作站即将退出并自动完成更新。'
   if (progress.phase === 'error') return progress.error || '更新下载失败，请检查网络后重试。'
   if (progress.phase === 'retrying') {
     return progress.nextSourceLabel
@@ -3881,7 +3881,7 @@ api.on('launcher:download-progress', (progress) => {
       ...taskProgress,
       state: 'success',
       label: '安装程序已启动',
-      detail: 'ZP Workbench 即将退出，请在安装向导中完成更新。',
+      detail: 'ZP Workbench 即将退出，安装程序会自动完成更新。',
     })
   } else if (progress.phase === 'completed') {
     showTask({
