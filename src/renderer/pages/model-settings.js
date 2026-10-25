@@ -233,6 +233,26 @@ export function createModelSettingsPage({
   function renderProfileEditor() {
     if (!state.aiProfileEditorOpen) return ''
     const editing = aiProfiles().find((profile) => profile.id === state.aiEditingProfileId)
+    const baseKey = (value) =>
+      String(value || '')
+        .trim()
+        .replace(/\/+$/, '')
+        .toLowerCase()
+    const selectedPresetId = editing
+      ? AI_PROVIDER_PRESETS.find(
+          (preset) =>
+            preset.model &&
+            preset.model === editing.model &&
+            baseKey(preset.baseUrl) === baseKey(editing.baseUrl),
+        )?.id ||
+        AI_PROVIDER_PRESETS.find(
+          (preset) =>
+            !preset.model &&
+            preset.id !== 'custom' &&
+            baseKey(preset.baseUrl) === baseKey(editing.baseUrl),
+        )?.id ||
+        'custom'
+      : ''
     return `
       <form class="ai-profile-editor" id="aiProfileForm">
         <div class="ai-profile-editor-head">
@@ -248,9 +268,10 @@ export function createModelSettingsPage({
           <label class="field">
             <span>服务商预设</span>
             <select id="aiProfilePreset">
+              <option value="" disabled ${selectedPresetId === '' ? 'selected' : ''}>选择服务商预设</option>
               ${AI_PROVIDER_PRESETS.map(
                 (preset) =>
-                  `<option value="${escapeHtml(preset.id)}" ${preset.id === 'custom' ? 'selected' : ''}>${escapeHtml(preset.label)}</option>`,
+                  `<option value="${escapeHtml(preset.id)}" ${preset.id === selectedPresetId ? 'selected' : ''}>${escapeHtml(preset.label)}</option>`,
               ).join('')}
             </select>
             <small class="setting-hint">预设只填接口地址；模型 ID 和视觉能力请按账号实际可用模型填写。</small>

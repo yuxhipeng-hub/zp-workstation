@@ -297,6 +297,8 @@ test('configures a model and runs AI assignment planning end to end', async () =
     await expect(window.locator('.page-intro h2').filter({ hasText: '模型配置' })).toBeVisible()
     await window.getByRole('button', { name: '添加模型' }).click()
     await expect(window.getByText('高级模型设置', { exact: true })).toBeVisible()
+    await expect(window.locator('#aiProfilePreset')).toHaveValue('')
+    await expect(window.locator('#aiProfilePreset option').first()).toHaveText('选择服务商预设')
     await window.locator('.ai-advanced-settings > summary').click()
     await expect(window.locator('#aiProfileProtocol')).toBeVisible()
     await expect(window.getByText('能力声明', { exact: true })).toBeVisible()
