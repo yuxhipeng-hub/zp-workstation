@@ -13,48 +13,63 @@ export const AI_PROVIDER_PRESETS = [
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-chat',
+    supportsVision: false,
+  },
+  {
+    id: 'deepseek-flash',
+    label: 'DeepSeek V4.1 Flash（视觉）',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-flash',
+    supportsVision: true,
   },
   {
     id: 'kimi',
     label: 'Kimi / Moonshot',
     baseUrl: 'https://api.moonshot.cn/v1',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'qwen',
     label: '通义千问',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'zhipu',
     label: '智谱 GLM',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'siliconflow',
     label: 'SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'openrouter',
     label: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'ollama',
     label: 'Ollama（本机）',
     baseUrl: 'http://127.0.0.1:11434/v1',
     model: '',
+    supportsVision: false,
   },
   {
     id: 'custom',
     label: '自定义 OpenAI Compatible',
     baseUrl: '',
     model: '',
+    supportsVision: false,
   },
 ]
 
@@ -312,6 +327,7 @@ export function createModelSettingsPage({
     const labelInput = document.querySelector('#aiProfileLabel')
     const baseUrlInput = document.querySelector('#aiProfileBaseUrl')
     const modelInput = document.querySelector('#aiProfileModel')
+    const visionInput = document.querySelector('#aiProfileSupportsVision')
     if (labelInput) labelInput.value = preset.label
     if (baseUrlInput) baseUrlInput.value = preset.baseUrl
     if (modelInput) {
@@ -320,6 +336,7 @@ export function createModelSettingsPage({
         ? '例如：deepseek-chat'
         : `输入 ${preset.label} 的模型 ID`
     }
+    if (visionInput) visionInput.checked = Boolean(preset.supportsVision)
   }
 
   /** 返回 true 表示这个动作属于模型配置页，main.js 不再处理。 */
