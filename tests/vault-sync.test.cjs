@@ -67,17 +67,17 @@ test('extracts a level-two section from a document', async () => {
   const text = [
     '# 标题',
     '',
-    '## 上次改动',
+    '## 最近任务',
     '',
     '| 日期 | 内容 |',
     '',
-    '## 待办 / 已知问题',
+    '## 当前待办',
     '',
     '- 事项',
   ].join('\n')
 
-  assert.equal(extractSection(text, '## 上次改动'), '| 日期 | 内容 |')
-  assert.equal(extractSection(text, '## 待办 / 已知问题'), '- 事项')
+  assert.equal(extractSection(text, '## 最近任务'), '| 日期 | 内容 |')
+  assert.equal(extractSection(text, '## 当前待办'), '- 事项')
   assert.equal(extractSection(text, '## 不存在的标题'), null)
 })
 
@@ -155,6 +155,66 @@ test('mirrors the DSH handoff into the engineering folder', async () => {
   assert.equal(note?.note, '20 工程/DSH 接手手册.md')
   assert.equal(note?.title, 'DSH 接手手册')
   assert.equal(note?.category, '工程')
+})
+
+test('keeps the handoff concise and mirrors its history archive', async () => {
+  const { MIRROR_NOTES, SECTION_NOTES } = await loadModule()
+  const handoff = fs.readFileSync(path.join(rootDir, 'docs', 'HANDOFF.md'), 'utf8')
+  const archive = fs.readFileSync(path.join(rootDir, 'docs', 'HANDOFF_ARCHIVE.md'), 'utf8')
+
+  assert.ok(Buffer.byteLength(handoff, 'utf8') < 10 * 1024)
+  assert.match(handoff, /^## 当前状态$/m)
+  assert.match(handoff, /^## 当前待办$/m)
+  assert.match(handoff, /^## 最近任务$/m)
+  assert.match(handoff, /HANDOFF_ARCHIVE\.md/)
+  assert.doesNotMatch(handoff, /^## 发布记录/m)
+  assert.match(archive, /^# 交接归档$/m)
+  assert.match(archive, /^## 历史变更表$/m)
+  assert.ok(
+    MIRROR_NOTES.some(
+      (entry) => entry.source === 'docs/HANDOFF_ARCHIVE.md' && entry.note === '10 产品/交接归档.md',
+    ),
+  )
+  assert.deepEqual(
+    SECTION_NOTES.filter((entry) => entry.source === 'docs/HANDOFF.md').map(
+      (entry) => entry.heading,
+    ),
+    ['## 最近任务', '## 当前待办'],
+  )
+})
+
+test('keeps root and directory-scoped agent rules within context budgets', () => {
+  const rootRules = fs.readFileSync(path.join(rootDir, 'AGENTS.md'), 'utf8')
+  const scopedRules = [
+    'src/main/AGENTS.md',
+    'src/renderer/AGENTS.md',
+    'tests/AGENTS.md',
+    '.dsh/skills/zp-workbench/SKILL.md',
+  ]
+
+  assert.ok(Buffer.byteLength(rootRules, 'utf8') < 8 * 1024)
+  for (const relativePath of scopedRules) {
+    assert.ok(fs.statSync(path.join(rootDir, relativePath)).isFile(), `缺少：${relativePath}`)
+  }
+
+  const skill = fs.readFileSync(
+    path.join(rootDir, '.dsh', 'skills', 'zp-workbench', 'SKILL.md'),
+    'utf8',
+  )
+  assert.match(skill, /^---\nname: zp-workbench\ndescription: .+\n---/m)
+})
+
+test('keeps DSH routes aligned with current renderer and safe Git/verification rules', () => {
+  const dsh = fs.readFileSync(path.join(rootDir, 'docs', 'DSH_HANDOFF.md'), 'utf8')
+
+  assert.match(dsh, /src\/renderer\/pages\/model-settings\.js/)
+  assert.match(dsh, /src\/renderer\/components\/editors\.js/)
+  assert.match(dsh, /当前分支是 `main` 且工作区干净时/)
+  assert.match(dsh, /绝不把\s+`origin\/main` merge/)
+  assert.match(dsh, /`npm run dev` 和 `npm run preview:ui` 都是常驻进程/)
+  assert.match(dsh, /状态：待用户验收/)
+  assert.match(dsh, /不得用“应该可以”/)
+  assert.doesNotMatch(dsh, /当前稳定版/)
 })
 
 test('vault note names and folder structure stay unique', async () => {

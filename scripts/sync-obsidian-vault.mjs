@@ -27,7 +27,14 @@ export const MIRROR_NOTES = [
     note: '10 产品/交接说明.md',
     title: '交接说明',
     category: '产品',
-    description: '当前状态、上次改动、待办与已知问题；每条线程收尾更新',
+    description: '当前状态、当前待办和最近任务；每条线程收尾更新',
+  },
+  {
+    source: 'docs/HANDOFF_ARCHIVE.md',
+    note: '10 产品/交接归档.md',
+    title: '交接归档',
+    category: '产品',
+    description: '历史发布记录、完整变更表和历史状态快照；只在追溯时查阅',
   },
   {
     source: 'docs/DSH_HANDOFF.md',
@@ -119,19 +126,19 @@ export const MIRROR_NOTES = [
 export const SECTION_NOTES = [
   {
     source: 'docs/HANDOFF.md',
-    heading: '## 上次改动',
-    note: '10 产品/变更时间线.md',
-    title: '变更时间线',
+    heading: '## 最近任务',
+    note: '10 产品/最近任务.md',
+    title: '最近任务',
     category: '产品',
-    description: '按时间倒序的改动记录，来自交接说明的「上次改动」表',
+    description: '最近 8-12 条任务及验证结果，来自交接说明的「最近任务」表',
   },
   {
     source: 'docs/HANDOFF.md',
-    heading: '## 待办 / 已知问题',
+    heading: '## 当前待办',
     note: '10 产品/待办与已知问题.md',
     title: '待办与已知问题',
     category: '产品',
-    description: '还没做完的事和已知缺陷，来自交接说明的待办段',
+    description: '还没做完的事和已知缺陷，来自交接说明的「当前待办」段',
   },
 ]
 
