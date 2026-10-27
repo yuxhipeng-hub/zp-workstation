@@ -39,9 +39,9 @@ export const MIRROR_NOTES = [
   {
     source: 'docs/DSH_HANDOFF.md',
     note: '20 工程/DSH 接手手册.md',
-    title: 'DSH 接手手册',
+    title: '开发操作手册',
     category: '工程',
-    description: 'DSH 开发环境、架构边界、数据红线、测试矩阵与首次接手检查表',
+    description: 'Codex 主开发约定、架构边界、数据红线、测试矩阵与 DSH 环境补充',
   },
   {
     source: 'docs/DECISIONS.md',

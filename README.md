@@ -90,7 +90,7 @@ docs/           工程规范、设计系统、决策记录、交接说明
 
 - [交接说明](docs/HANDOFF.md)：当前状态、当前待办和最近任务
 - [交接归档](docs/HANDOFF_ARCHIVE.md)：历史发布记录和完整变更表
-- [DSH 接手手册](docs/DSH_HANDOFF.md)：DSH 开发环境、架构边界、验证路由和交接协议
+- [开发操作手册](docs/DSH_HANDOFF.md)：Codex 主开发约定、架构边界、验证路由与 DSH 环境补充
 - [决策记录](docs/DECISIONS.md)：为什么这么定，以及被放弃的方案
 - [开发框架](docs/DEVELOPMENT_FRAMEWORK.md)：分层约定、数据规则和门禁
 - [设计系统](docs/DESIGN_SYSTEM.md) / [DESIGN.md](DESIGN.md)

@@ -6,7 +6,7 @@ description: ZP Workbench 仓库的开发任务配方，路由目录规则、危
 # ZP Workbench 开发配方
 
 这是一个仓库开发 skill，只约束在 ZP Workbench 中改代码、测试和文档的工作方式。DSH 是开发
-工具，不是应用运行时依赖。
+工具，不是应用运行时依赖。当前主开发为 Codex；DSH 默认只读辅助，写入前须由用户明确移交。
 
 ## 加载顺序
 
@@ -44,7 +44,7 @@ description: ZP Workbench 仓库的开发任务配方，路由目录规则、危
 - 发版前：`npm run verify`；更新器另需干净 Windows 环境真机升级验证。
 - 改过被镜像文档：`npm run sync:vault`，再用 `npm run sync:vault:check` 确认。
 
-DSH 无法完成的真机、视觉或人工检查必须标为“待用户验收”，不得声称通过。
+当前开发 Agent 无法完成的真机、视觉或人工检查必须标为“待用户验收”，不得声称通过。
 
 ## 收尾
 

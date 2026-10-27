@@ -153,7 +153,7 @@ test('mirrors the DSH handoff into the engineering folder', async () => {
   const note = MIRROR_NOTES.find((entry) => entry.source === 'docs/DSH_HANDOFF.md')
 
   assert.equal(note?.note, '20 工程/DSH 接手手册.md')
-  assert.equal(note?.title, 'DSH 接手手册')
+  assert.equal(note?.title, '开发操作手册')
   assert.equal(note?.category, '工程')
 })
 
@@ -193,7 +193,8 @@ test('keeps root and directory-scoped agent rules within context budgets', () =>
   ]
 
   assert.ok(Buffer.byteLength(rootRules, 'utf8') < 8 * 1024)
-  assert.match(rootRules, /当前主开发 Agent 为 DSH，Codex 默认承担辅助角色/)
+  assert.match(rootRules, /当前主开发 Agent 为 Codex，默认拥有本仓库开发写入权/)
+  assert.match(rootRules, /DSH 或其他辅助 Agent 默认只读审查/)
   assert.match(rootRules, /同一工作区同一时间只允许一个 Agent 拥有写权限/)
   assert.match(rootRules, /推送、创建 PR、合并、发布或修改远端状态仍只在用户明确要求时执行/)
   for (const relativePath of scopedRules) {

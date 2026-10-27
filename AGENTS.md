@@ -8,11 +8,11 @@
 
 1. 先读 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的“当前状态 / 当前待办 / 最近任务”。
 2. 只在任务相关时继续读：
-   - DSH 环境、架构、数据红线或验收协议：查 [`docs/DSH_HANDOFF.md`](docs/DSH_HANDOFF.md)
+   - 开发环境、架构、数据红线或验收协议：查 [`docs/DSH_HANDOFF.md`](docs/DSH_HANDOFF.md)
      对应章节，不整份预读。
    - 需求规格：`docs/specs/` 下对应文件；需要追溯原因时再查 `docs/DECISIONS.md`。
    - 历史发布或旧任务：才读 [`docs/HANDOFF_ARCHIVE.md`](docs/HANDOFF_ARCHIVE.md)。
-3. DSH 在读取或写入 `src/main/`、`src/renderer/`、`tests/` 时会自动加载对应目录规则；
+3. 读取或写入 `src/main/`、`src/renderer/`、`tests/` 前，先遵守对应目录的 `AGENTS.md`；
    不要把三份局部规则一次性载入。
 4. 读完 `docs/HANDOFF.md` 后，先用一句话说明当前进度和下一步，再开始动手。
 5. 用户已说明清楚的小任务不必逐份通读背景文档，也不要为“保险”预载无关资料。
@@ -27,11 +27,12 @@
 
 ## Agent 协作分工
 
-当前主开发 Agent 为 DSH，Codex 默认承担辅助角色。
+当前主开发 Agent 为 Codex，默认拥有本仓库开发写入权；DSH 或其他 Agent 默认承担辅助角色。
 
-- DSH 负责从最新 `main` 创建任务分支、实现功能、补测试、本地提交，并在收尾更新
+- Codex 负责从最新 `main` 创建任务分支、实现功能、补测试、本地提交，并在收尾更新
   `docs/HANDOFF.md`。
-- Codex 默认只读审查：检查 diff、复现问题、运行验证、核对风险与交接，不争抢同一分支的写入。
+- DSH 或其他辅助 Agent 默认只读审查：检查 diff、复现问题、运行验证、核对风险与交接，
+  不争抢同一分支的写入。
 - 同一工作区同一时间只允许一个 Agent 拥有写权限。移交前必须确认当前分支、工作区状态、
   提交和未完成事项；另一方不得在写入过程中并行修改文件。
 - 需要并行开发时，必须使用独立 worktree 和独立 `codex/*` 分支，不能在同一个 checkout
@@ -77,7 +78,7 @@
 - 改完必须跑 `npm test`；界面改动再跑 `npm run build` 和相关 E2E；发版前跑
   `npm run verify`。
 - 修 bug 先补能复现问题的测试，再改实现。不要通过放宽断言、跳过测试或伪造输出过关。
-- DSH 无法完成的真机、视觉或人工验证，标记“待用户验收”；不得写成已通过。
+- 当前开发 Agent 无法完成的真机、视觉或人工验证，标记“待用户验收”；不得写成已通过。
 
 ### 主进程、preload 与 IPC
 
