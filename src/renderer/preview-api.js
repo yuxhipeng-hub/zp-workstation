@@ -1252,6 +1252,7 @@ export function createPreviewLauncherApi() {
         throw new Error('当前模型未开启视觉输入。')
       }
       return clone({
+        incomplete: false,
         assignments: [
           {
             title: images.length ? '示例作业：从截图完成实验报告' : '示例作业：完成实验报告',

@@ -14,10 +14,12 @@
  * @property {string} [dueAt]
  * @property {string} [notes]
  * @property {string} [priority]
+ * @property {number} [batchIndex]
  */
 
 /**
  * @typedef {object} DuplicateMatch
+ * @property {number} [batchIndex]
  * @property {AssignmentLike} assignment
  * @property {'high' | 'medium'} confidence
  */

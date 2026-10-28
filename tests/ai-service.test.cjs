@@ -203,6 +203,7 @@ test('turns a model JSON response into a structured assignment plan', async (t) 
 test('extracts assignment drafts from pasted text without sending workspace data', async (t) => {
   const requests = []
   const content = JSON.stringify({
+    complete: true,
     assignments: [
       {
         title: '操作系统实验二报告',
@@ -333,7 +334,7 @@ test('rejects screenshots when the active model has not declared vision support'
 
 test('maps screenshots to input_image for the Responses protocol', async (t) => {
   const requests = []
-  const content = JSON.stringify({ assignments: [{ title: '响应接口截图作业' }] })
+  const content = JSON.stringify({ complete: true, assignments: [{ title: '响应接口截图作业' }] })
   const { directory, service } = createHarness(async (url, options) => {
     requests.push({ url, options })
     return jsonResponse({ output_text: content })
@@ -514,4 +515,57 @@ test('reports model timeouts and connection failures', async (t) => {
     () => offlineHarness.service.testProfile(seedProfile(offlineHarness.service)),
     /无法连接模型服务：ECONNREFUSED/,
   )
+})
+
+test('extractor detects provider truncation, incomplete JSON, and missing completeness without losing them as success', async (t) => {
+  for (const protocol of ['chat-completions', 'responses']) {
+    for (const mode of ['truncated', 'malformed', 'missing-complete', 'empty-complete']) {
+      await t.test(protocol + ': ' + mode, async (t) => {
+        let body
+        const content =
+          mode === 'malformed'
+            ? '{"assignments":['
+            : JSON.stringify({
+                assignments: mode === 'empty-complete' ? [] : [{ title: '未完整结果' }],
+                ...(mode === 'missing-complete' ? {} : { complete: true }),
+              })
+        const { directory, service } = createHarness(async (url, options) => {
+          body = JSON.parse(options.body)
+          return jsonResponse(
+            protocol === 'responses'
+              ? {
+                  output_text: content,
+                  status: mode === 'truncated' ? 'incomplete' : 'completed',
+                  ...(mode === 'truncated'
+                    ? { incomplete_details: { reason: 'max_output_tokens' } }
+                    : {}),
+                }
+              : {
+                  choices: [
+                    {
+                      message: { content },
+                      finish_reason: mode === 'truncated' ? 'length' : 'stop',
+                    },
+                  ],
+                },
+          )
+        })
+        t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+        service.saveProfile(
+          {
+            label: '批次测试',
+            baseUrl: 'https://api.example.com/v1',
+            model: 'test',
+            protocol,
+            maxOutputTokens: 16000,
+          },
+          'sk-test',
+        )
+        const result = await service.extractAssignments({ text: '通知' })
+        assert.equal(result.incomplete, mode !== 'empty-complete')
+        if (mode === 'empty-complete') assert.deepEqual(result.assignments, [])
+        assert.equal(body.max_tokens || body.max_output_tokens, 8000)
+      })
+    }
+  }
 })

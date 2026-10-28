@@ -1,5 +1,4 @@
 const MAX_EXTRACT_TEXT_LENGTH = 4000
-const MAX_EXTRACT_DRAFTS = 5
 const MAX_EXTRACT_IMAGES = 20
 const MAX_EXTRACT_IMAGE_BYTES = 5 * 1024 * 1024
 const IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/i
@@ -100,11 +99,16 @@ function cleanExtractedAssignments(input) {
   for (const item of source) {
     const draft = cleanAssignmentDraft(item)
     if (!draft) continue
-    const key = `${draft.title.toLowerCase()}|${draft.dueAt}`
+    const key = JSON.stringify([
+      draft.title.toLowerCase(),
+      draft.course.toLowerCase(),
+      draft.dueAt,
+      draft.priority,
+      draft.notes,
+    ])
     if (seen.has(key)) continue
     seen.add(key)
     drafts.push(draft)
-    if (drafts.length >= MAX_EXTRACT_DRAFTS) break
   }
   return drafts
 }
@@ -129,8 +133,8 @@ function buildExtractMessages(text, now = new Date(), images = [], noticeDate = 
     ...(hasImages ? [`随附 ${attachments.length} 张通知截图，请先读取截图中的文字。`] : []),
     '',
     '请严格输出以下结构：',
-    '{"assignments":[{"title":"作业标题","course":"课程名或空字符串","dueAt":"YYYY-MM-DD 或空字符串","priority":"low|medium|high","notes":"通知里的关键要求或空字符串","sourceQuote":"逐字摘录的通知原文片段，不翻译，不改写","sourceImage":0}]}',
-    `要求：最多 ${MAX_EXTRACT_DRAFTS} 条；合并重复作业；标题必须来自通知内容；相对日期（如“下周五”）按通知发布日期换算成 YYYY-MM-DD；作业字段用中文，sourceQuote 保留原文。sourceImage 为来源截图序号（1 起），文字来源填 0；无法确认来源时留空，不要编造。`,
+    '{"assignments":[{"title":"作业标题","course":"课程名或空字符串","dueAt":"YYYY-MM-DD 或空字符串","priority":"low|medium|high","notes":"通知里的关键要求或空字符串","sourceQuote":"逐字摘录的通知原文片段，不翻译，不改写","sourceImage":0}],"complete":true}',
+    '抽取本批全部作业，不限制条数，不凑数。只有本批全部内容都已处理才填写 complete:true；图片模糊、内容不全或输出空间不足时填写 complete:false。没有作业时返回空数组并填写 complete:true。标题必须来自通知内容；相对日期按通知发布日期换算；作业字段用中文，sourceQuote 保留原文。sourceImage 为本批截图序号（1 起），文字来源填 0；无法确认来源时留空，不要编造。',
   ].join('\n')
   return [
     {
@@ -155,7 +159,7 @@ function buildExtractMessages(text, now = new Date(), images = [], noticeDate = 
   ]
 }
 
-function parseExtractContent(content) {
+function parseExtractResult(content) {
   const raw = String(content || '')
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
@@ -172,14 +176,22 @@ function parseExtractContent(content) {
     throw new Error('模型返回的作业草稿无法解析，请重试或更换模型。')
   }
   const assignments = cleanExtractedAssignments(parsed)
-  if (!assignments.length) {
-    throw new Error('模型没有从这段文字里抽到可用作业，请补充作业标题和截止时间后重试。')
+  if (!Array.isArray(parsed.assignments)) {
+    throw new Error('模型返回的作业草稿缺少 assignments 数组。')
   }
-  return assignments
+  if (assignments.length < parsed.assignments.length) {
+    // 重复或无标题条目不能被当作整批完整，交给批次调度缩小重试。
+    const usable = parsed.assignments.filter((item) => cleanAssignmentDraft(item))
+    if (usable.length !== parsed.assignments.length) return { assignments, complete: false }
+  }
+  return { assignments, complete: parsed.complete === true }
+}
+
+function parseExtractContent(content) {
+  return parseExtractResult(content).assignments
 }
 
 module.exports = {
-  MAX_EXTRACT_DRAFTS,
   MAX_EXTRACT_IMAGE_BYTES,
   MAX_EXTRACT_IMAGES,
   MAX_EXTRACT_TEXT_LENGTH,
@@ -188,4 +200,5 @@ module.exports = {
   cleanExtractedAssignments,
   cleanDueDate,
   parseExtractContent,
+  parseExtractResult,
 }

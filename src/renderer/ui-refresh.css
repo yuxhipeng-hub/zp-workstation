@@ -3872,3 +3872,29 @@ textarea:focus-visible,
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.smart-entry-drafts {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.smart-entry-progress {
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.smart-entry-progress ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.smart-entry-progress li {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.smart-entry-progress small {
+  color: var(--text-secondary);
+}

@@ -255,6 +255,7 @@ test('configures a model and runs AI assignment planning end to end', async () =
       const userText = String(payload.messages?.at(-1)?.content || '')
       const content = userText.includes('通知原文')
         ? JSON.stringify({
+            complete: true,
             assignments: [
               {
                 title: '概率论第 5 章习题',
@@ -461,6 +462,7 @@ test('extracts assignment drafts from a platform screenshot', async () => {
             {
               message: {
                 content: JSON.stringify({
+                  complete: true,
                   assignments: [
                     {
                       title: '平台截图作业',
@@ -469,7 +471,7 @@ test('extracts assignment drafts from a platform screenshot', async () => {
                       priority: 'high',
                       notes: '从平台截图识别',
                       sourceQuote: '下周五交平台截图作业',
-                      sourceImage: 20,
+                      sourceImage: 4,
                     },
                   ],
                 }),
@@ -530,7 +532,7 @@ test('extracts assignment drafts from a platform screenshot', async () => {
     await expect(window.locator('.smart-entry-draft')).toContainText('高优先级')
 
     await window.locator('.smart-entry-review summary').click()
-    await expect(window.locator('.smart-entry-source')).toContainText('截图 20')
+    await expect(window.locator('.smart-entry-source')).toContainText('截图 4、8、12、16、20')
     await expect(window.locator('.smart-entry-source')).toContainText('下周五交平台截图作业')
     await window.locator('[data-smart-field="title"]').fill('')
     await window.getByRole('button', { name: '添加选中的作业' }).click()
@@ -543,7 +545,8 @@ test('extracts assignment drafts from a platform screenshot', async () => {
     await window.locator('[data-smart-field="priority"]').selectOption('low')
     const payload = requests.at(-1)
     const userContent = payload.messages.at(-1).content
-    expect(userContent.filter((part) => part.type === 'image_url')).toHaveLength(20)
+    expect(requests).toHaveLength(5)
+    expect(userContent.filter((part) => part.type === 'image_url')).toHaveLength(4)
     expect(userContent[0].text).toContain('换算基准）：2026-10-20')
     assert.equal(Array.isArray(userContent), true)
     const textPart = userContent.find((part) => part.type === 'text')
@@ -1483,5 +1486,194 @@ test('traps keyboard focus inside dialogs and closes them with Escape', async ()
     await expect(dialog).toHaveCount(0)
   } finally {
     await closeWorkstation(app, userDataDir)
+  }
+})
+
+test('batches twenty screenshots, preserves partial results, retries only failures and replaces dense images', async () => {
+  const userDataDir = createUserDataDir()
+  const imagePath = path.join(userDataDir, 'notice.png')
+  fs.writeFileSync(
+    imagePath,
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  )
+  let calls = 0
+  const server = http.createServer((request, response) => {
+    request.resume()
+    request.on('end', () => {
+      calls += 1
+      if (calls === 2) {
+        response.writeHead(503)
+        response.end('{}')
+        return
+      }
+      const counts = { 1: 6, 3: 4, 5: 2, 6: 3, 7: 2, 8: 4, 10: 2 }
+      const truncated = calls === 4 || calls === 9
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: truncated ? 'length' : 'stop',
+              message: {
+                content: JSON.stringify({
+                  complete: true,
+                  assignments: Array.from({ length: counts[calls] || 1 }, (_, index) => ({
+                    title: '批' + calls + '作业' + index,
+                    notes: '要求' + calls,
+                    sourceImage: 1,
+                  })),
+                }),
+              },
+            },
+          ],
+        }),
+      )
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const baseUrl = `http://127.0.0.1:${server.address().port}/v1`
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({
+      onboarding: { welcomeSeen: true },
+      aiProfiles: [
+        {
+          id: 'batches',
+          label: '批次模型',
+          baseUrl,
+          model: 'test',
+          supportsVision: true,
+          protocol: 'chat-completions',
+          maxOutputTokens: 8000,
+        },
+      ],
+      activeAiProfileId: 'batches',
+    }),
+  )
+  const app = await launchWorkstation(userDataDir)
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav-item[data-page="assignments"]').click()
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await window.locator('#smartEntryImages').setInputFiles(Array(20).fill(imagePath))
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-progress')).toContainText('已处理 16/20 张截图')
+    await expect(window.locator('.smart-entry-draft')).toHaveCount(17)
+    await expect(window.getByRole('button', { name: '重试本批', exact: true })).toBeEnabled()
+    expect(calls).toBe(7)
+    await window.locator('.smart-entry-review summary').first().click()
+    await window.locator('[data-smart-field="title"]').first().fill('人工核对过的标题')
+    await window.locator('[data-smart-draft]').first().uncheck()
+    await window.getByRole('button', { name: '重试本批', exact: true }).click()
+    await expect(window.locator('.smart-entry-draft')).toHaveCount(21)
+    await expect(window.locator('.smart-entry-progress')).toContainText('已处理 20/20 张截图')
+    expect(calls).toBe(8)
+    await expect(window.locator('[data-smart-draft]').first()).not.toBeChecked()
+    await expect(window.locator('.smart-entry-draft-main strong').first()).toHaveText(
+      '人工核对过的标题',
+    )
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(window.locator('.assignment-card')).toHaveCount(20)
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await window.locator('#smartEntryImages').setInputFiles(imagePath)
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-progress')).toContainText('可能未完整识别')
+    await expect(window.locator('.smart-entry-progress')).toContainText('已处理 0/1 张截图')
+    await window.locator('[data-smart-replace-image]').setInputFiles(imagePath)
+    await expect(window.locator('.smart-entry-draft')).toHaveCount(2)
+    await expect(window.locator('.smart-entry-progress')).toContainText('已处理 1/1 张截图')
+    expect(calls).toBe(10)
+  } finally {
+    await closeWorkstation(app, userDataDir)
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test('merges supplementary requirements across image batches after confirmation', async () => {
+  const userDataDir = createUserDataDir()
+  const imagePath = path.join(userDataDir, 'notice.png')
+  fs.writeFileSync(
+    imagePath,
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  )
+  let calls = 0
+  const server = http.createServer((request, response) => {
+    request.resume()
+    request.on('end', () => {
+      calls += 1
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  complete: true,
+                  assignments: [
+                    {
+                      title: '实验报告',
+                      course: '操作系统',
+                      notes: calls === 1 ? '提交PDF' : '附源代码',
+                      sourceImage: 1,
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+      )
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({
+      onboarding: { welcomeSeen: true },
+      aiProfiles: [
+        {
+          id: 'merge',
+          label: '合并测试',
+          baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+          model: 'test',
+          supportsVision: true,
+          protocol: 'chat-completions',
+        },
+      ],
+      activeAiProfileId: 'merge',
+    }),
+  )
+  const app = await launchWorkstation(userDataDir)
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav-item[data-page="assignments"]').click()
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await window.locator('#smartEntryImages').setInputFiles(Array(5).fill(imagePath))
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-draft')).toHaveCount(2)
+    await expect(window.locator('[data-smart-draft-decision]')).toHaveValue('skip')
+    await expect(window.locator('.smart-entry-duplicate:not([hidden])')).toContainText('本批草稿')
+    await window.locator('.smart-entry-review summary').first().click()
+    await window.locator('[data-smart-field="title"]').first().fill('另一份作业')
+    await window.locator('[data-smart-field="course"]').first().focus()
+    await expect(window.locator('.smart-entry-duplicate:not([hidden])')).toHaveCount(0)
+    await window.locator('[data-smart-field="title"]').first().fill('实验报告')
+    await window.locator('[data-smart-field="course"]').first().focus()
+    await expect(window.locator('[data-smart-draft-decision]')).toHaveValue('skip')
+    await window.locator('[data-smart-draft-decision]').selectOption('merge')
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(window.locator('.assignment-card')).toHaveCount(1)
+    const saved = JSON.parse(fs.readFileSync(path.join(userDataDir, 'workspace.json'), 'utf8'))
+      .assignments[0]
+    expect(saved.notes).toBe('提交PDF\n附源代码')
+  } finally {
+    await closeWorkstation(app, userDataDir)
+    await new Promise((resolve) => server.close(resolve))
   }
 })

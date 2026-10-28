@@ -2,7 +2,6 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const {
-  MAX_EXTRACT_DRAFTS,
   MAX_EXTRACT_IMAGE_BYTES,
   MAX_EXTRACT_IMAGES,
   MAX_EXTRACT_TEXT_LENGTH,
@@ -10,6 +9,7 @@ const {
   cleanExtractImages,
   cleanExtractedAssignments,
   parseExtractContent,
+  parseExtractResult,
 } = require('../src/main/ai-extract.cjs')
 
 const PNG_DATA_URL =
@@ -43,15 +43,15 @@ test('cleans extracted drafts and drops unusable rows', () => {
   assert.equal(drafts[3].priority, 'medium')
 })
 
-test('dedupes drafts, caps the list, and truncates long fields', () => {
-  const many = Array.from({ length: MAX_EXTRACT_DRAFTS + 3 }, (_, index) => ({
+test('keeps more than twenty drafts, dedupes by course, and truncates long fields', () => {
+  const many = Array.from({ length: 25 }, (_, index) => ({
     title: `作业 ${index}`,
     dueAt: '2026-11-01',
   }))
   many.push({ title: '作业 0', dueAt: '2026-11-01' })
 
   const drafts = cleanExtractedAssignments(many)
-  assert.equal(drafts.length, MAX_EXTRACT_DRAFTS)
+  assert.equal(drafts.length, 25)
   assert.equal(drafts[0].title, '作业 0')
   assert.equal(
     drafts.filter((draft) => draft.title === '作业 0' && draft.dueAt === '2026-11-01').length,
@@ -74,7 +74,11 @@ test('parses fenced JSON and reports unusable model output', () => {
   ])
 
   assert.throws(() => parseExtractContent('没有 JSON'), /没有返回 JSON/)
-  assert.throws(() => parseExtractContent('{"assignments":[]}'), /没有从这段文字里抽到可用作业/)
+  assert.deepEqual(parseExtractResult('{"assignments":[],"complete":true}'), {
+    assignments: [],
+    complete: true,
+  })
+  assert.equal(parseExtractResult('{"assignments":[]}').complete, false)
   assert.throws(() => parseExtractContent('{"assignments":[}'), /无法解析/)
 })
 
@@ -89,7 +93,7 @@ test('prompt sends only the pasted notice plus today and the strict schema', () 
   assert.match(messages[1].content, /今天是 2026-10-25/)
   assert.match(messages[1].content, /本周五前提交实验报告/)
   assert.match(messages[1].content, /"assignments"/)
-  assert.match(messages[1].content, /最多 5 条/)
+  assert.match(messages[1].content, /抽取本批全部作业/)
   // 不把工作区、资料库或 API Key 塞进提示词。
   assert.equal(messages[1].content.includes('workspace'), false)
   assert.equal(messages[1].content.includes('sk-'), false)
@@ -97,7 +101,6 @@ test('prompt sends only the pasted notice plus today and the strict schema', () 
 
 test('keeps the documented payload limit', () => {
   assert.equal(MAX_EXTRACT_TEXT_LENGTH, 4000)
-  assert.equal(MAX_EXTRACT_DRAFTS, 5)
   assert.equal(MAX_EXTRACT_IMAGES, 20)
 })
 

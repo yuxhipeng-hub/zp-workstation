@@ -10,6 +10,7 @@ import { createWelcomeOverlay } from './pages/welcome.js'
 import { createGuidePage } from './pages/guide.js'
 import { createLogsPage } from './pages/logs.js'
 import { createAboutPage } from './pages/about.js'
+import { createSmartEntrySession } from './components/smart-entry-batches.js'
 import { createEditors } from './components/editors.js'
 import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { keepFocusInDialog } from './lib/focus.js'
@@ -69,8 +70,10 @@ const state = {
   assignmentFilter: 'open',
   assignmentComposerOpen: false,
   editingAssignmentId: null,
+  smartEntryProgress: null,
   smartEntryOpen: false,
   smartEntryBusy: false,
+  smartEntrySaving: false,
   smartEntryText: '',
   smartEntryNoticeDate: '',
   smartEntryDrafts: [],
@@ -250,6 +253,7 @@ function readableAiError(error) {
   )
 }
 
+let smartEntrySession = null
 const SMART_ENTRY_MAX_IMAGES = 20
 const SMART_ENTRY_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const SMART_ENTRY_IMAGE_MAX_SIDE = 2000
@@ -319,7 +323,7 @@ async function prepareSmartEntryImage(file) {
 }
 
 async function addSmartEntryImages(files) {
-  if (!state.smartEntryOpen) return
+  if (!state.smartEntryOpen || state.smartEntryBusy || state.smartEntryProgress) return
   const sourceFiles = [...(files || [])].filter((file) =>
     String(file?.type || '').startsWith('image/'),
   )
@@ -354,11 +358,37 @@ async function addSmartEntryImages(files) {
   }
 }
 
+function findSmartEntryMatch(draft, index) {
+  const existing = findDuplicateAssignment(draft, state.workspace?.assignments || [])
+  if (existing) return existing
+  const batch = findDuplicateAssignment(
+    draft,
+    state.smartEntryDrafts
+      .slice(0, index)
+      .map((item, batchIndex) => ({ ...item, id: 'batch-' + batchIndex, batchIndex })),
+  )
+  return batch ? { ...batch, batchIndex: batch.assignment.batchIndex } : null
+}
+
 function prepareSmartEntryDrafts(drafts) {
-  const assignments = state.workspace?.assignments || []
+  const previousMatches = new Map(
+    state.smartEntryDrafts.map((draft, index) => [
+      draft,
+      state.smartEntryMatches[index]?.assignment.id,
+    ]),
+  )
+  const decisions = new Map(
+    state.smartEntryDrafts.map((draft, index) => [draft, state.smartEntryDecisions[index]]),
+  )
   state.smartEntryDrafts = drafts
-  state.smartEntryMatches = drafts.map((draft) => findDuplicateAssignment(draft, assignments))
-  state.smartEntryDecisions = state.smartEntryMatches.map((match) => (match ? 'skip' : 'create'))
+  state.smartEntryMatches = drafts.map((draft, index) => findSmartEntryMatch(draft, index))
+  state.smartEntryDecisions = state.smartEntryMatches.map((match, index) =>
+    previousMatches.get(drafts[index]) === match?.assignment.id
+      ? decisions.get(drafts[index]) || (match ? 'skip' : 'create')
+      : match
+        ? 'skip'
+        : 'create',
+  )
   const duplicates = state.smartEntryMatches.filter(Boolean).length
   state.smartEntryNotice = duplicates
     ? `有 ${duplicates} 条可能已存在，默认跳过；可改成合并或仍要新建。`
@@ -2507,6 +2537,10 @@ async function handleAction(action, element) {
       render()
       break
     case 'open-smart-entry':
+      if (state.smartEntrySaving) return
+      smartEntrySession?.cancel()
+      smartEntrySession = null
+      state.smartEntryProgress = null
       state.smartEntryNoticeDate = ''
       state.smartEntryOpen = true
       state.smartEntryBusy = false
@@ -2523,6 +2557,10 @@ async function handleAction(action, element) {
       requestAnimationFrame(() => document.querySelector('#smartEntryText')?.focus())
       break
     case 'close-smart-entry':
+      if (state.smartEntrySaving) return
+      smartEntrySession?.cancel()
+      smartEntrySession = null
+      state.smartEntryProgress = null
       state.smartEntryOpen = false
       state.smartEntryBusy = false
       state.smartEntryText = ''
@@ -2537,7 +2575,7 @@ async function handleAction(action, element) {
       break
     case 'remove-smart-image': {
       const index = Number(element.dataset.index)
-      if (!Number.isInteger(index)) break
+      if (!Number.isInteger(index) || state.smartEntryBusy || state.smartEntryProgress) break
       syncSmartEntryTextFromDom()
       state.smartEntryImages.splice(index, 1)
       render({ anchor: '.smart-entry-panel' })
@@ -2570,28 +2608,42 @@ async function handleAction(action, element) {
         render()
         return
       }
-      state.smartEntryBusy = true
+      smartEntrySession?.cancel()
+      const session = createSmartEntrySession(
+        { text, images, noticeDate: state.smartEntryNoticeDate },
+        (payload) => {
+          if (activeAiProfile()?.id !== profile.id)
+            throw new Error('启用模型已变化，请切回原模型后重试本批。')
+          return api.extractAssignments(payload)
+        },
+        (progress) => {
+          if (smartEntrySession !== session || !state.smartEntryOpen) return
+          state.smartEntryProgress = progress
+          state.smartEntryBusy = progress.running
+          prepareSmartEntryDrafts(progress.drafts)
+          render({ anchor: '.smart-entry-panel' })
+        },
+      )
+      smartEntrySession = session
+      await session.run()
+      break
+    }
+    case 'reset-smart-entry':
+      if (state.smartEntryBusy || state.smartEntrySaving) return
+      smartEntrySession?.cancel()
+      smartEntrySession = null
+      state.smartEntryProgress = null
+      prepareSmartEntryDrafts([])
+      state.smartEntryError = ''
       render()
-      try {
-        const result = await api.extractAssignments({
-          text,
-          noticeDate: state.smartEntryNoticeDate,
-          images: images.map(({ name, dataUrl }) => ({ name, dataUrl })),
-        })
-        const drafts = Array.isArray(result?.assignments) ? result.assignments : []
-        prepareSmartEntryDrafts(drafts)
-        if (!drafts.length) {
-          state.smartEntryError = '模型没有识别出作业，请补充标题和截止时间后重试。'
-        }
-      } catch (error) {
-        state.smartEntryError = readableAiError(error)
-      } finally {
-        state.smartEntryBusy = false
-        render()
-      }
+      break
+    case 'retry-smart-batch': {
+      if (!state.smartEntryBusy && !state.smartEntrySaving)
+        await smartEntrySession?.run(element.dataset.batchId)
       break
     }
     case 'add-smart-drafts': {
+      if (state.smartEntryBusy || state.smartEntrySaving) return
       const selected = [...document.querySelectorAll('[data-smart-draft]:checked')]
         .map((node) => Number(node.dataset.smartDraft))
         .filter((index) => Number.isInteger(index))
@@ -2610,11 +2662,18 @@ async function handleAction(action, element) {
       let merged = 0
       let skipped = 0
       const handled = new Set()
+      const createdByDraft = new Map()
+      // 在写入前固定核对关系，避免前一条刚入库后改变后一条已确认的合并选择。
+      const writeMatches = state.smartEntryDrafts.map((draft, index) =>
+        findSmartEntryMatch(draft, index),
+      )
+      state.smartEntrySaving = true
+      render()
       try {
         for (const index of selected) {
           const draft = state.smartEntryDrafts[index]
           if (!draft) continue
-          const match = findDuplicateAssignment(draft, state.workspace?.assignments || [])
+          const match = writeMatches[index]
           if (match?.assignment.id !== state.smartEntryMatches[index]?.assignment.id) {
             state.smartEntryDecisions[index] = match ? 'skip' : 'create'
           }
@@ -2625,22 +2684,37 @@ async function handleAction(action, element) {
             continue
           }
           if (match && decision === 'merge') {
-            const existing = state.workspace?.assignments.find(
-              (item) => item.id === match.assignment.id,
-            )
+            const targetId =
+              match.batchIndex !== undefined
+                ? createdByDraft.get(match.batchIndex)
+                : match.assignment.id
+            const existing = state.workspace?.assignments.find((item) => item.id === targetId)
             if (existing) {
+              const notes =
+                draft.notes && existing.notes && !existing.notes.includes(draft.notes)
+                  ? existing.notes + '\n' + draft.notes
+                  : ''
+              if (notes.length > 2000)
+                throw new Error('合并后的备注超过 2000 字，请缩短备注或选择“仍要新建”。')
               applyWorkspace(
-                await api.updateAssignment(existing.id, buildAssignmentMergePatch(existing, draft)),
+                await api.updateAssignment(existing.id, {
+                  ...buildAssignmentMergePatch(existing, draft),
+                  ...(notes ? { notes } : {}),
+                }),
               )
               merged += 1
+              createdByDraft.set(index, existing.id)
               handled.add(draft)
               continue
             }
           }
+          const previousIds = new Set(state.workspace.assignments.map((item) => item.id))
           const { title, course, dueAt, priority, notes } = draft
           applyWorkspace(
             await api.createAssignment({ title: title.trim(), course, dueAt, priority, notes }),
           )
+          const added = state.workspace.assignments.find((item) => !previousIds.has(item.id))
+          if (added) createdByDraft.set(index, added.id)
           created += 1
           handled.add(draft)
         }
@@ -2652,6 +2726,18 @@ async function handleAction(action, element) {
           render()
           return
         }
+        if (state.smartEntryProgress && !state.smartEntryProgress.complete) {
+          smartEntrySession.discardDrafts(handled)
+          state.smartEntryProgress = smartEntrySession.snapshot()
+          prepareSmartEntryDrafts(state.smartEntryProgress.drafts)
+          state.smartEntryError = ''
+          render()
+          toast('选中的作业已处理，未完成批次仍保留，可继续重试。', 'success')
+          return
+        }
+        smartEntrySession?.cancel()
+        smartEntrySession = null
+        state.smartEntryProgress = null
         state.smartEntryOpen = false
         state.smartEntryText = ''
         state.smartEntryDrafts = []
@@ -2668,9 +2754,13 @@ async function handleAction(action, element) {
         if (skipped) parts.push(`跳过 ${skipped} 条重复`)
         toast(`已${parts.join('，')}，记得核对截止时间和备注。`, 'success', 6000)
       } catch (error) {
+        smartEntrySession?.discardDrafts(handled)
         state.smartEntryDrafts = state.smartEntryDrafts.filter((draft) => !handled.has(draft))
         prepareSmartEntryDrafts(state.smartEntryDrafts)
         state.smartEntryError = `已处理 ${created + merged} 条，剩余写入失败：${readableAiError(error)}`
+        render()
+      } finally {
+        state.smartEntrySaving = false
         render()
       }
       break
@@ -3871,16 +3961,45 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (event.target.matches?.('[data-smart-draft]')) {
+    const draft = state.smartEntryDrafts[Number(event.target.dataset.smartDraft)]
+    if (draft) draft.selected = /** @type {HTMLInputElement} */ (event.target).checked
+    return
+  }
+  if (event.target.matches?.('[data-smart-replace-image]')) {
+    const input = /** @type {HTMLInputElement} */ (event.target)
+    const file = input.files?.[0]
+    if (!file || state.smartEntryBusy || state.smartEntrySaving) return
+    const id = input.dataset.smartReplaceImage
+    const session = smartEntrySession
+    try {
+      const image = await prepareSmartEntryImage(file)
+      if (session === smartEntrySession && session?.replaceImage(id, image)) {
+        const job = state.smartEntryProgress.jobs.find((item) => item.id === id)
+        state.smartEntryImages[job.images[0].number - 1] = image
+        await session.run(id)
+      }
+    } catch (error) {
+      if (session !== smartEntrySession) return
+      state.smartEntryError = readableAiError(error)
+      render()
+    }
+    return
+  }
   if (event.target.matches?.('[data-smart-field]')) {
     const index = Number(event.target.dataset.smartIndex)
     const draft = state.smartEntryDrafts[index]
     if (draft) {
-      const match = findDuplicateAssignment(draft, state.workspace?.assignments || [])
-      if (match?.assignment.id !== state.smartEntryMatches[index]?.assignment.id) {
-        state.smartEntryDecisions[index] = match ? 'skip' : 'create'
+      prepareSmartEntryDrafts(state.smartEntryDrafts)
+      const fields = document.querySelectorAll('.smart-entry-draft [data-smart-field="title"]')
+      for (let row = 0; row < fields.length; row += 1) {
+        getAssignmentsPage().refreshSmartEntryDraft(
+          fields[row],
+          row,
+          state.smartEntryDrafts[row],
+          state.smartEntryMatches[row],
+        )
       }
-      state.smartEntryMatches[index] = match
-      getAssignmentsPage().refreshSmartEntryDraft(event.target, index, draft, match)
     }
     return
   }

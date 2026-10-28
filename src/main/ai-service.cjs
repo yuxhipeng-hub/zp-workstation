@@ -6,7 +6,7 @@ const {
   buildExtractMessages,
   cleanExtractImages,
   cleanDueDate,
-  parseExtractContent,
+  parseExtractResult,
 } = require('./ai-extract.cjs')
 
 const MAX_PROFILES = 20
@@ -374,7 +374,11 @@ class AiService {
     return new Error(detail || `模型请求失败（${response.status}）。`)
   }
 
-  async requestChat(profile, messages, { maxTokens = 1600, temperature = 0.2 } = {}) {
+  async requestChat(
+    profile,
+    messages,
+    { maxTokens = 1600, temperature = 0.2, requireComplete = false } = {},
+  ) {
     const protocol = API_PROTOCOLS.has(profile.protocol) ? profile.protocol : 'chat-completions'
     const body = {
       model: profile.model,
@@ -430,6 +434,14 @@ class AiService {
       payload = null
     }
     if (!response.ok) throw this.errorFromResponse(response, raw, payload)
+    if (
+      requireComplete &&
+      (payload?.choices?.[0]?.finish_reason === 'length' ||
+        payload?.status === 'incomplete' ||
+        payload?.incomplete_details)
+    ) {
+      throw new Error('AI_OUTPUT_INCOMPLETE：模型输出达到上限，需要缩小批次。')
+    }
     const content = extractMessageContent(payload)
     if (!content) throw new Error('模型没有返回可用内容。')
     return content
@@ -539,15 +551,37 @@ class AiService {
       'ai',
       `从通知中抽取作业草稿（${source.length} 字，${images.length} 张截图）：${profile.label} / ${profile.model}`,
     )
-    const content = await this.requestChat(
-      profile,
-      buildExtractMessages(source, new Date(), images, noticeDate),
-      {
-        maxTokens: Math.min(profile.maxOutputTokens || 1400, 2000),
-        temperature: 0.1,
-      },
-    )
-    const assignments = parseExtractContent(content)
+    let extracted
+    try {
+      const content = await this.requestChat(
+        profile,
+        buildExtractMessages(source, new Date(), images, noticeDate),
+        {
+          maxTokens: Math.min(profile.maxOutputTokens || 4000, 8000),
+          temperature: 0.1,
+          requireComplete: true,
+        },
+      )
+      try {
+        extracted = parseExtractResult(content)
+      } catch {
+        return {
+          assignments: [],
+          incomplete: true,
+          warning: '模型结果无法完整解析，需要缩小批次重试。',
+        }
+      }
+    } catch (error) {
+      if (error.message.startsWith('AI_OUTPUT_INCOMPLETE')) {
+        return {
+          assignments: [],
+          incomplete: true,
+          warning: '模型输出达到上限，需要缩小批次重试。',
+        }
+      }
+      throw error
+    }
+    const { assignments, complete } = extracted
     for (const draft of assignments) {
       if (draft.sourceImage > images.length) delete draft.sourceImage
       if (!draft.sourceImage && draft.sourceQuote && !source.includes(draft.sourceQuote)) {
@@ -557,6 +591,7 @@ class AiService {
     this.logger?.info('ai', `通知抽取完成：${assignments.length} 条作业草稿`)
     return {
       assignments,
+      incomplete: !complete,
       profile: { id: profile.id, label: profile.label, model: profile.model },
     }
   }

@@ -59,8 +59,10 @@ export function createAssignmentsPage({
     const canUseVision = Boolean(profile?.supportsVision)
     const drafts = state.smartEntryDrafts || []
     const images = state.smartEntryImages || []
-    const busy = state.smartEntryBusy
+    const busy = state.smartEntryBusy || state.smartEntrySaving
     const imageBusy = state.smartEntryImageBusy
+    const progress = state.smartEntryProgress
+    const locked = busy || Boolean(progress)
     const hint = !profile
       ? '还没有启用模型，先到「模型配置」添加一个。'
       : !canUseModel
@@ -72,7 +74,7 @@ export function createAssignmentsPage({
       ? '添加并启用模型后，就可以识别通知截图。'
       : !canUseVision
         ? '当前模型未开启「支持视觉输入」，请先到「模型配置」勾选；文字录入仍然可用。'
-        : '可以粘贴、拖入或选择截图；最多 20 张，处理后单张不超过 5 MB。每次最多抽取 5 条作业，通知较多时请分批核对。'
+        : '最多 20 张，处理后单张不超过 5 MB；自动每批识别 4 张，不限制整次作业条数，结果仍需核对。'
     return `
     <section class="section smart-entry-panel" aria-labelledby="smartEntryTitle">
       <div class="section-heading">
@@ -80,17 +82,17 @@ export function createAssignmentsPage({
           <h2 id="smartEntryTitle">粘贴通知，自动拆成作业</h2>
           <p>只把这段文字和截图发给当前模型；解析结果要你勾选确认后才会写入收件箱。</p>
         </div>
-        <button class="icon-button compact" type="button" data-action="close-smart-entry" title="关闭">
+        <button class="icon-button compact" type="button" data-action="close-smart-entry" ${state.smartEntrySaving ? 'disabled' : ''} title="关闭">
           <i data-lucide="x"></i>
         </button>
       </div>
       <label class="field smart-entry-input" for="smartEntryText">
         <span>通知原文</span>
-        <textarea id="smartEntryText" rows="5" maxlength="4000" placeholder="可以粘贴通知文字，也可以不写字、直接添加平台截图。">${escapeHtml(state.smartEntryText || '')}</textarea>
+        <textarea id="smartEntryText" ${locked ? 'disabled' : ''} rows="5" maxlength="4000" placeholder="可以粘贴通知文字，也可以不写字、直接添加平台截图。">${escapeHtml(state.smartEntryText || '')}</textarea>
       </label>
       <label class="field" for="smartEntryNoticeDate">
         <span>通知发布日期</span>
-        <input id="smartEntryNoticeDate" type="date" value="${escapeHtml(state.smartEntryNoticeDate || '')}" />
+        <input id="smartEntryNoticeDate" ${locked ? 'disabled' : ''} type="date" value="${escapeHtml(state.smartEntryNoticeDate || '')}" />
         <small>留空按今天换算“明天、下周五”；旧通知请选择发布日期。不同截图有明确日期时优先各自日期。</small>
       </label>
       <div class="smart-entry-images ${imageBusy ? 'is-busy' : ''}" aria-label="通知截图">
@@ -100,7 +102,7 @@ export function createAssignmentsPage({
               <figure class="smart-entry-image">
                 <img src="${escapeHtml(image.dataUrl)}" alt="${escapeHtml(image.name || '通知截图')}" />
                 <figcaption>截图 ${index + 1}</figcaption>
-                <button class="icon-button compact" type="button" data-action="remove-smart-image" data-index="${index}" title="移除截图" aria-label="移除截图">
+                <button class="icon-button compact" type="button" data-action="remove-smart-image" ${locked ? 'disabled' : ''} data-index="${index}" title="移除截图" aria-label="移除截图">
                   <i data-lucide="x"></i>
                 </button>
               </figure>`,
@@ -108,24 +110,25 @@ export function createAssignmentsPage({
           .join('')}
         ${
           images.length < 20
-            ? `<label class="smart-entry-image-add ${canUseVision && !imageBusy ? '' : 'is-disabled'}" for="smartEntryImages">
+            ? `<label class="smart-entry-image-add ${canUseVision && !imageBusy && !locked ? '' : 'is-disabled'}" for="smartEntryImages">
                 <i data-lucide="${imageBusy ? 'loader' : 'image-plus'}"></i>
                 <span>${imageBusy ? '正在处理' : '添加截图'}</span>
               </label>`
             : ''
         }
-        <input id="smartEntryImages" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden ${canUseVision && !imageBusy ? '' : 'disabled'} />
+        <input id="smartEntryImages" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden ${canUseVision && !imageBusy && !locked ? '' : 'disabled'} />
       </div>
       <p class="smart-entry-image-hint">${escapeHtml(imageHint)}</p>
       <div class="smart-entry-actions">
         <span class="setting-hint">${escapeHtml(hint)}</span>
         <div class="button-row">
-          <button class="button secondary" type="button" data-action="close-smart-entry">取消</button>
-          <button class="button primary" type="button" data-action="parse-smart-entry" ${busy || imageBusy || !canUseModel || (images.length && !canUseVision) ? 'disabled' : ''}>
+          <button class="button secondary" type="button" data-action="close-smart-entry" ${state.smartEntrySaving ? 'disabled' : ''}>取消</button>
+          <button class="button primary" type="button" data-action="parse-smart-entry" ${locked || imageBusy || !canUseModel || (images.length && !canUseVision) ? 'disabled' : ''}>
             <i data-lucide="${busy ? 'loader' : 'sparkles'}"></i><span>${busy ? '正在解析' : '解析为作业'}</span>
           </button>
         </div>
       </div>
+      ${progress ? renderBatchProgress(progress) : ''}
       ${state.smartEntryError ? `<p class="smart-entry-error" role="alert">${escapeHtml(state.smartEntryError)}</p>` : ''}
       ${
         drafts.length
@@ -139,7 +142,7 @@ export function createAssignmentsPage({
                   ? `<p class="smart-entry-notice" role="status">${escapeHtml(state.smartEntryNotice)}</p>`
                   : ''
               }
-              <div class="smart-entry-drafts">
+              <fieldset class="smart-entry-drafts" ${busy ? 'disabled' : ''}>
                 ${drafts
                   .map((draft, index) => {
                     const due = dueDateMeta(draft.dueAt)
@@ -152,7 +155,7 @@ export function createAssignmentsPage({
                     return `
                     <div class="smart-entry-draft ${match ? 'is-duplicate' : ''}">
                       <label class="smart-entry-draft-check">
-                        <input id="smartDraft${index}" type="checkbox" data-smart-draft="${index}" checked aria-label="选择 ${escapeHtml(draft.title)}" />
+                        <input id="smartDraft${index}" type="checkbox" data-smart-draft="${index}" ${draft.selected === false ? '' : 'checked'} aria-label="选择 ${escapeHtml(draft.title)}" />
                       </label>
                       <label class="smart-entry-draft-main" for="smartDraft${index}">
                         <strong>${escapeHtml(draft.title)}</strong>
@@ -165,7 +168,7 @@ export function createAssignmentsPage({
                       ${
                         match
                           ? `<div class="smart-entry-duplicate">
-                              <span>已有“${escapeHtml(match.assignment.title)}”${match.assignment.dueAt ? ` · ${escapeHtml(matchDue.label)}` : ''}</span>
+                              <span>${match.batchIndex !== undefined ? '本批草稿' : '已有'}“${escapeHtml(match.assignment.title)}”${match.assignment.dueAt ? ` · ${escapeHtml(matchDue.label)}` : ''}</span>
                               <select data-smart-draft-decision="${index}" aria-label="处理与已有作业重复的 ${escapeHtml(draft.title)}">
                                 <option value="skip" ${decision === 'skip' ? 'selected' : ''}>跳过</option>
                                 <option value="merge" ${decision === 'merge' ? 'selected' : ''}>合并到已有</option>
@@ -192,17 +195,17 @@ export function createAssignmentsPage({
                         </div>
                         <p data-smart-edit-warning role="status"></p>
                         <div class="smart-entry-source">
-                          <strong>${draft.sourceImage ? `截图 ${Number(draft.sourceImage)} · 模型摘录，请对照图片核实` : '通知文字 · 原文依据'}</strong>
+                          <strong>${draft.sourceImage ? `截图 ${(draft.sourceImages || [draft.sourceImage]).map(Number).join('、')} · 模型摘录，请对照图片核实` : '通知文字 · 原文依据'}</strong>
                           <p>${escapeHtml(draft.sourceQuote || '模型未提供可核对的原文片段，请对照上方通知或截图确认。')}</p>
                         </div>
                       </details>
                     </div>`
                   })
                   .join('')}
-              </div>
+              </fieldset>
               <div class="smart-entry-result-actions">
                 <span class="setting-hint">请核对截止日期；无法确定的日期留空。原文摘录仅用于本次核对。</span>
-                <button class="button primary" type="button" data-action="add-smart-drafts">
+                <button class="button primary" type="button" data-action="add-smart-drafts" ${busy ? 'disabled' : ''}>
                   <i data-lucide="plus"></i><span>添加选中的作业</span>
                 </button>
               </div>
@@ -211,6 +214,35 @@ export function createAssignmentsPage({
       }
     </section>
   `
+  }
+
+  function renderBatchProgress(progress) {
+    const names = {
+      pending: '等待识别',
+      running: '正在识别',
+      done: '已处理',
+      failed: '失败',
+      incomplete: '可能未完整识别',
+    }
+    return `<div class="smart-entry-progress">
+      <p role="status">已处理 ${progress.doneImages}/${progress.totalImages} 张截图 · ${progress.doneBatches}/${progress.jobs.length} 批 · 识别到 ${state.smartEntryDrafts.length} 条作业${progress.complete ? ' · 全部批次已处理，请核对有无遗漏' : ' · 尚有批次未完成'}</p>
+      <ul>${progress.jobs
+        .map(
+          (job) => `<li>
+        <span>${escapeHtml(job.label)} · ${names[job.status]}${job.status === 'done' ? '（' + job.drafts.length + ' 条）' : ''}</span>
+        ${job.error ? `<p role="alert">${escapeHtml(job.error)}</p>` : ''}
+        ${
+          ['failed', 'incomplete'].includes(job.status)
+            ? `<button class="button secondary" data-action="retry-smart-batch" data-batch-id="${job.id}" ${progress.running ? 'disabled' : ''}>重试本批</button>
+          ${job.images.length === 1 ? `<label class="field"><span>替换裁剪后的截图并重试</span><input type="file" accept="image/png,image/jpeg,image/webp" data-smart-replace-image="${job.id}" ${progress.running ? 'disabled' : ''} /></label>` : ''}`
+            : ''
+        }
+      </li>`,
+        )
+        .join('')}</ul>
+      <button class="button secondary" data-action="reset-smart-entry" ${progress.running ? 'disabled' : ''}>调整输入，重新识别</button>
+      <small>只有成功批次计入已处理。模型声明完整不代表零遗漏，请对照原图核对；取消会停止后续批次。</small>
+    </div>`
   }
 
   function renderPage() {
