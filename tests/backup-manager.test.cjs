@@ -50,6 +50,9 @@ test('creates encrypted archives, includes materials, and restores workspace dat
   t.after(() => fs.rmSync(harness.root, { recursive: true, force: true }))
 
   harness.workspace.createAssignment({ title: '备份前作业', course: '算法设计与分析' })
+  const { createPresentation } = require('../src/shared/presentation.mjs')
+  const presentation = createPresentation({ title: '完整备份中的 PPT' })
+  harness.workspace.savePresentation(presentation)
   const material = path.join(harness.experimentDir, '算法实验', '报告.pdf')
   fs.mkdirSync(path.dirname(material), { recursive: true })
   fs.writeFileSync(material, 'fixture')
@@ -86,6 +89,8 @@ test('creates encrypted archives, includes materials, and restores workspace dat
   const restored = await harness.backups.restoreArchive(archive.fileName, 'correct-password')
   assert.equal(restored.workspace.assignments.length, 1)
   assert.equal(restored.workspace.assignments[0].title, '备份前作业')
+  assert.equal(restored.workspace.presentations[0].id, presentation.id)
+  assert.equal(restored.workspace.presentations[0].title, '完整备份中的 PPT')
   assert.equal(restored.workspace.experiments[0].filePath, material)
   assert.equal(
     fs.readFileSync(path.join(harness.dshHome, 'skills', 'writer', 'SKILL.md'), 'utf8'),

@@ -15,11 +15,13 @@ import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { keepFocusInDialog } from './lib/focus.js'
 import { createTodayPage } from './pages/today.js'
 import { createSchedulePage } from './pages/schedule.js'
+import { createPptStudioPage } from './pages/ppt-studio.js'
 import '@fontsource-variable/inter/wght.css'
 import '@fontsource-variable/noto-sans-sc/wght.css'
 import './styles.css'
 import './design-system.css'
 import './ui-refresh.css'
+import './ppt-studio.css'
 
 defineMorphIcon()
 
@@ -235,6 +237,22 @@ function aiProtocolLabel(protocol) {
 }
 
 let modelSettingsPage = null
+let pptStudioPage = null
+
+function getPptStudioPage() {
+  if (!pptStudioPage) {
+    pptStudioPage = createPptStudioPage({
+      state,
+      api,
+      escapeHtml,
+      render,
+      toast,
+      openChoiceDialog,
+      activeAiProfile,
+    })
+  }
+  return pptStudioPage
+}
 
 function getModelSettingsPage() {
   if (!modelSettingsPage) {
@@ -1403,6 +1421,7 @@ function render(options = {}) {
     experiments: () => getExperimentsPage().renderPage(),
     news: () => getNewsPage().renderPage(),
     ai: () => getModelSettingsPage().renderPage(),
+    ppt: () => getPptStudioPage().renderPage(),
     guide: () => getGuidePage().renderPage(),
     logs: () => getLogsPage().renderPage(),
     settings: () => getSettingsPage().renderPage(),
@@ -2325,6 +2344,7 @@ async function persistSettingField(element) {
 }
 
 async function handleAction(action, element) {
+  if (action.startsWith('ppt-') && (await getPptStudioPage().handleAction(action, element))) return
   if (await getModelSettingsPage().handleAction(action, element)) return
   switch (action) {
     case 'open-assignment-composer':
@@ -3458,6 +3478,7 @@ document.addEventListener(
 )
 
 document.addEventListener('keydown', (event) => {
+  if (state.page === 'ppt') getPptStudioPage().handleKeydown(event)
   if (event.key !== 'Escape') return
   if (state.scheduleTimeEditorOpen) {
     state.scheduleTimeEditorOpen = false
@@ -3473,6 +3494,7 @@ document.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('input', (event) => {
+  if (state.page === 'ppt' && getPptStudioPage().handleInput(event.target)) return
   if (event.target.id === 'scheduleCourseColor') {
     syncScheduleColorControls(event.target.value)
   }

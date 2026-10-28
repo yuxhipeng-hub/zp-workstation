@@ -2,6 +2,11 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { cleanAiPlan } = require('./ai-plan.cjs')
+const {
+  cleanPresentation,
+  validatePresentationInput,
+  PRESENTATION_LIMITS,
+} = require('../shared/presentation.mjs')
 
 const ASSIGNMENT_STATUSES = new Set(['inbox', 'doing', 'done'])
 const ASSIGNMENT_PRIORITIES = new Set(['low', 'medium', 'high'])
@@ -9,6 +14,7 @@ const DEFAULT_WORKSPACE = {
   version: 2,
   courses: [],
   assignments: [],
+  presentations: [],
   knowledge: [],
   experiments: [],
   experimentGroups: [],
@@ -278,6 +284,11 @@ class WorkspaceStore {
         .filter(Boolean)
         .slice(0, 300),
       assignments: Array.isArray(stored.assignments) ? stored.assignments : [],
+      presentations: (Array.isArray(stored.presentations) ? stored.presentations : [])
+        .map((item) => cleanPresentation(item))
+        .filter(Boolean)
+        .slice(0, PRESENTATION_LIMITS.projects)
+        .filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index),
       knowledge: Array.isArray(stored.knowledge) ? stored.knowledge : [],
       experiments,
       experimentGroups,
@@ -290,6 +301,41 @@ class WorkspaceStore {
     if (item.name && item.weekday) return item.name
     if (item.group !== undefined) return item.group
     return item.course || item.source?.group || ''
+  }
+
+  savePresentation(input) {
+    const cleaned = validatePresentationInput(input)
+    const index = this.data.presentations.findIndex((item) => item.id === cleaned.id)
+    if (index < 0 && this.data.presentations.length >= PRESENTATION_LIMITS.projects) {
+      throw new Error('最多保存 100 份作品，请先删除不再需要的作品。')
+    }
+    const previous = this.data.presentations
+    const deck = cleanPresentation(
+      { ...cleaned, updatedAt: new Date().toISOString() },
+      index >= 0 ? previous[index] : null,
+    )
+    this.data.presentations = [deck, ...previous.filter((item) => item.id !== deck.id)]
+    try {
+      this.save()
+    } catch (error) {
+      this.data.presentations = previous
+      throw error
+    }
+    return this.get()
+  }
+
+  deletePresentation(id) {
+    if (typeof id !== 'string' || !id || id.length > 80) throw new Error('作品编号无效。')
+    const previous = this.data.presentations
+    if (!previous.some((item) => item.id === id)) throw new Error('没有找到这份作品。')
+    this.data.presentations = previous.filter((item) => item.id !== id)
+    try {
+      this.save()
+    } catch (error) {
+      this.data.presentations = previous
+      throw error
+    }
+    return this.get()
   }
 
   linkCourses() {

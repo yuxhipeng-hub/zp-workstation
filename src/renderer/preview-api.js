@@ -1,4 +1,5 @@
 const listeners = new Map()
+import { createPresentation, cleanPresentation } from '../shared/presentation.mjs'
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
@@ -1462,6 +1463,37 @@ export function createPreviewLauncherApi() {
     },
     async importBackupArchive() {
       return clone({ fileName: 'ZP-Workbench-backup.zpbackup', workspace: state.workspace })
+    },
+    async savePresentation(input) {
+      const deck = cleanPresentation(input)
+      state.workspace.presentations = [
+        deck,
+        ...(state.workspace.presentations || []).filter((item) => item.id !== deck.id),
+      ]
+      return clone(state.workspace)
+    },
+    async setPresentationDirty() {
+      return true
+    },
+    async deletePresentation(id) {
+      state.workspace.presentations = (state.workspace.presentations || []).filter(
+        (item) => item.id !== id,
+      )
+      return clone(state.workspace)
+    },
+    async generatePresentation(input) {
+      const deck = createPresentation(input)
+      deck.slides = Array.from({ length: input.pageCount }, (_, index) => ({
+        ...clone(deck.slides[Math.min(index, 2)]),
+        id: createId(),
+        layout: index === 0 ? 'cover' : index === input.pageCount - 1 ? 'closing' : 'split',
+        title: index === 0 ? input.title : `示例大纲 · 第 ${index + 1} 页`,
+        body: '这是界面预览的示例内容，未调用真实模型。',
+      }))
+      return { deck, profile: { label: '预览示例', model: '未调用模型' } }
+    },
+    async exportPresentation() {
+      throw new Error('浏览器预览不提供本机文件导出，请在桌面应用中导出。')
     },
     async createAssignment(input) {
       const now = new Date().toISOString()

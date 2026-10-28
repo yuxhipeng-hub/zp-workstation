@@ -9,6 +9,11 @@ const rootDir = path.join(__dirname, '..')
 const moduleUrl = pathToFileURL(path.join(rootDir, 'scripts', 'sync-obsidian-vault.mjs')).href
 const loadModule = () => import(moduleUrl)
 
+test('mirrors the PPT studio specification so the product direction survives handoff', async () => {
+  const { MIRROR_NOTES } = await loadModule()
+  assert.ok(MIRROR_NOTES.some((item) => item.source === 'docs/specs/002-ppt-studio.md'))
+})
+
 test('rewrites repository document paths into wikilinks', async () => {
   const { rewriteLinks } = await loadModule()
   const targets = new Map([

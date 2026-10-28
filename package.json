@@ -36,8 +36,14 @@
     "jszip": "^3.10.1",
     "mammoth": "^1.12.3",
     "pdfjs-dist": "^5.4.296",
+    "pptxgenjs": "^4.0.1",
     "semver": "7.8.5",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "overrides": {
+    "pptxgenjs": {
+      "image-size": "2.0.4"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -133,8 +139,12 @@
       "dist/renderer/**/*",
       "src/main/**/*",
       "src/preload/**/*",
+      "src/shared/**/*",
       "package.json",
       "node_modules/jszip/**/*",
+      "node_modules/pptxgenjs/**/*",
+      "node_modules/image-size/**/*",
+      "node_modules/https/**/*",
       "node_modules/mammoth/**/*",
       "node_modules/pdfjs-dist/**/*",
       "node_modules/semver/**/*",

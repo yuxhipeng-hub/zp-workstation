@@ -1,6 +1,11 @@
 const { randomUUID } = require('node:crypto')
 const { AiSecretStore } = require('./ai-secret-store.cjs')
 const { cleanAiPlan } = require('./ai-plan.cjs')
+const {
+  cleanPresentationBrief,
+  presentationMessages,
+  parsePresentationContent,
+} = require('./presentation-ai.cjs')
 
 const MAX_PROFILES = 20
 const REQUEST_TIMEOUT_MS = 90_000
@@ -415,6 +420,27 @@ class AiService {
     return {
       plan,
       profile: { id: profile.id, label: profile.label, model: profile.model },
+    }
+  }
+
+  async generatePresentation(input) {
+    const brief = cleanPresentationBrief(input)
+    if (this.presentationBusy) throw new Error('已有一份大纲正在生成，请稍候。')
+    const profile = this.resolveProfile()
+    this.presentationBusy = true
+    try {
+      const content = await this.requestChat(profile, presentationMessages(brief), {
+        maxTokens: Math.min(
+          12000,
+          Math.max(profile.maxOutputTokens || 1800, brief.pageCount * 650),
+        ),
+        temperature: 0.5,
+      })
+      const deck = parsePresentationContent(content, brief)
+      this.logger?.info('ai', `PPT 大纲已生成：${deck.slides.length} 页`)
+      return { deck, profile: { label: profile.label, model: profile.model } }
+    } finally {
+      this.presentationBusy = false
     }
   }
 }

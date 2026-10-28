@@ -7,6 +7,7 @@ const {
   nativeImage,
   nativeTheme,
   safeStorage,
+  dialog,
 } = require('electron')
 const { APP_ID, APP_NAME } = require('./constants.cjs')
 const { SettingsStore } = require('./settings-store.cjs')
@@ -47,6 +48,27 @@ if (process.env.DSH_LAUNCHER_REMOTE_DEBUG) {
 let mainWindow = null
 let tray = null
 let quitting = false
+let presentationDirty = false
+
+function confirmPresentationClose() {
+  if (!presentationDirty) return true
+  const response = dialog.showMessageBoxSync(mainWindow, {
+    type: 'question',
+    title: 'PPT 作品尚未保存',
+    message: '当前作品有未保存的修改。',
+    detail: '返回工作室保存作品，或放弃本次修改后退出。',
+    buttons: ['返回保存', '放弃修改并退出'],
+    defaultId: 0,
+    cancelId: 0,
+  })
+  if (response !== 1) {
+    quitting = false
+    mainWindow?.show()
+    return false
+  }
+  presentationDirty = false
+  return true
+}
 let settings
 let workspace
 let experimentLibrary
@@ -156,6 +178,7 @@ function createMainWindow() {
       mainWindow.hide()
       return
     }
+    if (!quitting && !confirmPresentationClose()) event.preventDefault()
   })
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -223,6 +246,9 @@ async function bootstrap() {
   })
 
   registerIpc({
+    onPresentationDirty: (value) => {
+      presentationDirty = value
+    },
     app,
     settings,
     workspace,
@@ -265,7 +291,11 @@ app.on('window-all-closed', () => {
   if (!settings?.get().minimizeToTray) app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (!confirmPresentationClose()) {
+    event.preventDefault()
+    return
+  }
   quitting = true
   backupManager?.stopAuto()
 })

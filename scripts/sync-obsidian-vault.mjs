@@ -120,6 +120,13 @@ export const MIRROR_NOTES = [
     category: '规格',
     description: '已停止方向的历史规格，保留作为背景资料',
   },
+  {
+    source: 'docs/specs/002-ppt-studio.md',
+    note: '50 规格/002 PPT 工作室.md',
+    title: '002 PPT 工作室',
+    category: '规格',
+    description: '工具导航、PPT 工作室第一版及长期设计方向',
+  },
 ]
 
 /** 从仓库文档里抽一段出来单独成篇。 */

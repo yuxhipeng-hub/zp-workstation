@@ -4,6 +4,7 @@ const os = require('node:os')
 const path = require('node:path')
 const test = require('node:test')
 const { WorkspaceStore } = require('../src/main/workspace-store.cjs')
+const { createPresentation } = require('../src/shared/presentation.mjs')
 
 function createStore() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-workbench-'))
@@ -12,6 +13,49 @@ function createStore() {
     store: new WorkspaceStore(directory),
   }
 }
+
+test('persists PPT projects, updates without duplicates and preserves them through snapshot import', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  store.createAssignment({ title: '已有作业' })
+  const deck = createPresentation({ title: '商业提案' })
+  store.savePresentation(deck)
+  deck.title = '修改后的提案'
+  deck.slides[1].notes = '核实数据来源'
+  store.savePresentation(deck)
+  const reloaded = new WorkspaceStore(directory)
+  assert.equal(reloaded.get().presentations.length, 1)
+  assert.equal(reloaded.get().presentations[0].title, deck.title)
+  assert.equal(reloaded.get().presentations[0].slides[1].notes, '核实数据来源')
+  assert.equal(reloaded.get().assignments[0].title, '已有作业')
+  const snapshot = path.join(directory, 'snapshot.json')
+  reloaded.exportSnapshot(snapshot)
+  reloaded.deletePresentation(deck.id)
+  assert.equal(reloaded.get().presentations.length, 0)
+  reloaded.importSnapshot(snapshot)
+  assert.equal(reloaded.get().presentations[0].id, deck.id)
+  const oldBackup = reloaded.createBackup('ppt')
+  reloaded.deletePresentation(deck.id)
+  reloaded.restoreBackup(oldBackup.fileName)
+  assert.equal(reloaded.get().presentations[0].id, deck.id)
+})
+
+test('old workspaces default to no PPT projects and failed saves retain the previous deck', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  assert.deepEqual(store.normalizeData({ assignments: [] }).presentations, [])
+  const deck = createPresentation({ title: '原始作品' })
+  store.savePresentation(deck)
+  const before = store.get().presentations
+  store.save = () => {
+    throw new Error('模拟磁盘写入失败')
+  }
+  assert.throws(() => store.savePresentation({ ...deck, title: '未能保存的修改' }), /模拟磁盘/)
+  assert.deepEqual(store.get().presentations, before)
+  assert.throws(() => store.deletePresentation(deck.id), /模拟磁盘/)
+  assert.deepEqual(store.get().presentations, before)
+  assert.equal(new WorkspaceStore(directory).get().presentations[0].title, '原始作品')
+})
 
 test('persists assignments as local data', (t) => {
   const { directory, store } = createStore()

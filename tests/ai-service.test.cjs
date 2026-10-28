@@ -31,6 +31,55 @@ function jsonResponse(payload, status = 200) {
   }
 }
 
+test('generates a PPT draft using the selected model without returning keys or persisting materials', async (t) => {
+  const { createPresentation } = require('../src/shared/presentation.mjs')
+  const requests = []
+  const { directory, service } = createHarness(async (url, options) => {
+    requests.push(JSON.parse(options.body))
+    return jsonResponse({
+      choices: [{ message: { content: JSON.stringify({ slides: createPresentation().slides }) } }],
+    })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile(
+    { label: 'PPT 模型', baseUrl: 'https://example.com/v1', model: 'test' },
+    'secret-ppt-key',
+  )
+  const result = await service.generatePresentation({
+    title: '产品提案',
+    scene: 'proposal',
+    pageCount: 3,
+    material: '用户主动提供的材料',
+  })
+  assert.equal(result.deck.title, '产品提案')
+  assert.equal(result.deck.slides.length, 3)
+  assert.match(requests[0].messages[1].content, /用户主动提供的材料/)
+  assert.doesNotMatch(JSON.stringify(result), /secret-ppt-key|用户主动提供的材料/)
+  assert.ok(requests[0].max_tokens >= 1950)
+  assert.equal(fs.existsSync(path.join(directory, 'workspace.json')), false)
+})
+
+test('rejects concurrent PPT generation and releases the lock after a failed response', async (t) => {
+  let finish
+  const { directory, service } = createHarness(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile(
+    { label: 'PPT 模型', baseUrl: 'https://example.com/v1', model: 'test' },
+    'secret',
+  )
+  const brief = { title: '测试', scene: 'report', pageCount: 3 }
+  const running = service.generatePresentation(brief)
+  await assert.rejects(service.generatePresentation(brief), /正在生成/)
+  finish(jsonResponse({ choices: [{ message: { content: '{"slides":[]}' } }] }))
+  await assert.rejects(running, /页数不完整/)
+  assert.equal(service.presentationBusy, false)
+})
+
 test('stores model metadata without exposing the encrypted API key', (t) => {
   const { directory, service } = createHarness(async () => jsonResponse({}))
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

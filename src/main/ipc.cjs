@@ -5,6 +5,7 @@ const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = requir
 const { THEME_VALUES } = require('./constants.cjs')
 const { collectDiagnostics } = require('./diagnostics.cjs')
 const { resolveDropReferences } = require('./drop-reference.cjs')
+const { registerPresentationIpc } = require('./presentation-ipc.cjs')
 
 function isSafeExternalUrl(value) {
   try {
@@ -46,6 +47,7 @@ function registerIpc({
   reminderManager,
   startupTimer,
   getMainWindow,
+  onPresentationDirty,
 }) {
   const send = (channel, payload) => {
     for (const window of BrowserWindow.getAllWindows()) {
@@ -112,6 +114,15 @@ function registerIpc({
   })
 
   ipcMain.handle('workspace:get', () => workspace.get())
+  registerPresentationIpc({
+    ipcMain,
+    workspace,
+    aiService,
+    dialog,
+    getMainWindow,
+    onPresentationDirty,
+    getExportDirectory: () => defaultDownloadDir(app),
+  })
   ipcMain.handle('workspace:courses', () => workspace.listCourses())
   ipcMain.handle('workspace:course-create', (_event, input) => workspace.createCourse(input))
   ipcMain.handle('workspace:course-rename', async (_event, id, name) => {

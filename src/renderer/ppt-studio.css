@@ -1,0 +1,587 @@
+.ppt-studio {
+  min-width: 0;
+  color: var(--text);
+}
+
+.ppt-studio h2,
+.ppt-studio p {
+  margin: 0;
+}
+
+.ppt-kicker {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+.ppt-welcome {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 36px;
+  align-items: center;
+  min-height: 330px;
+  padding: 32px 8px 40px;
+}
+
+.ppt-welcome-copy h2 {
+  font-size: clamp(28px, 3.1vw, 46px);
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.ppt-welcome-copy p {
+  max-width: 330px;
+  margin: 20px 0 24px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  font-size: 12px;
+}
+
+.ppt-welcome-copy > small {
+  display: block;
+  margin-top: 20px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.ppt-welcome-art {
+  padding: 22px;
+  border: 1px solid var(--line);
+  background: var(--panel-raised);
+}
+
+.ppt-slide {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  container-type: inline-size;
+  text-align: left;
+  isolation: isolate;
+}
+
+.ppt-slide > span {
+  position: absolute;
+  display: block;
+}
+
+.ppt-text {
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  letter-spacing: 0;
+}
+
+.ppt-section-heading,
+.ppt-editor-bar,
+.ppt-editor-identity,
+.ppt-inline-actions,
+.ppt-brief-actions,
+.ppt-brief-actions > div,
+.ppt-stage-meta,
+.ppt-page-actions,
+.ppt-filmstrip-head,
+.ppt-presentation-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ppt-section-heading,
+.ppt-editor-bar,
+.ppt-brief-actions,
+.ppt-stage-meta,
+.ppt-filmstrip-head {
+  justify-content: space-between;
+}
+
+.ppt-section-heading {
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.ppt-section-heading h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ppt-section-heading p {
+  margin-top: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.ppt-section-heading > span,
+.ppt-filmstrip-head,
+.ppt-stage-meta {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.ppt-gallery {
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.ppt-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 20px;
+}
+
+.ppt-project {
+  position: relative;
+  min-width: 0;
+}
+
+.ppt-project-open {
+  width: 100%;
+  padding: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ppt-project-open:hover {
+  border-color: var(--line-strong);
+}
+
+.ppt-project-open > strong,
+.ppt-project-open > span {
+  display: block;
+  margin: 12px 40px 0 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ppt-project-open > strong {
+  font-size: 13px;
+}
+
+.ppt-project-open > span {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ppt-project > .ppt-icon-button {
+  position: absolute;
+  right: 8px;
+  bottom: 17px;
+}
+
+.ppt-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 42px 16px;
+  border: 1px dashed var(--line-strong);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ppt-empty > svg {
+  width: 28px;
+  height: 28px;
+}
+
+.ppt-empty > span {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.ppt-brief,
+.ppt-candidate {
+  padding: 24px 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ppt-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 24px;
+}
+
+.ppt-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 16px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ppt-field input,
+.ppt-field select,
+.ppt-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.ppt-field textarea {
+  resize: vertical;
+  min-height: 86px;
+}
+
+.ppt-field small {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.ppt-brief-actions {
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.ppt-brief-actions p {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ppt-error,
+.ppt-notice {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line-strong);
+  border-left-width: 3px;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.ppt-notice {
+  margin-top: 16px !important;
+}
+
+.ppt-candidate ol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 36px;
+  padding-left: 25px;
+  font-size: 12px;
+}
+
+.ppt-candidate li {
+  padding: 8px;
+}
+
+.ppt-candidate li > span {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.ppt-editor-bar {
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 4px 0 18px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+}
+
+.ppt-editor-identity {
+  min-width: 0;
+  max-width: 100%;
+  gap: 14px;
+}
+
+.ppt-editor-identity > div {
+  min-width: 0;
+}
+
+.ppt-editor-identity strong {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+}
+
+.ppt-editor-identity span {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.ppt-inline-actions {
+  flex-wrap: wrap;
+}
+
+.ppt-studio .button {
+  min-width: 0;
+  white-space: nowrap;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.ppt-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.ppt-icon-button:hover {
+  background: var(--panel-hover);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.ppt-icon-button > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ppt-studio button:disabled,
+.ppt-studio input:disabled,
+.ppt-studio textarea:disabled,
+.ppt-studio select:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ppt-editor-grid {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 240px;
+  align-items: start;
+  min-width: 0;
+}
+
+.ppt-filmstrip {
+  padding: 18px 16px 0 0;
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+}
+
+.ppt-filmstrip-head {
+  margin-bottom: 14px;
+}
+
+.ppt-thumbnail {
+  display: block;
+  width: 100%;
+  padding: 4px;
+  margin-bottom: 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ppt-thumbnail.is-selected {
+  border-color: var(--ink);
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.ppt-thumbnail > span {
+  display: flex;
+  gap: 8px;
+  padding: 8px 1px 3px;
+  font-size: 10px;
+}
+
+.ppt-thumbnail > span > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ppt-thumbnail-art {
+  overflow: hidden;
+}
+
+.ppt-stage-column {
+  min-width: 0;
+  min-height: 570px;
+  padding: 20px;
+  border-inline: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+.ppt-stage-meta {
+  margin-bottom: 14px;
+}
+
+.ppt-stage {
+  width: 100%;
+  min-width: 0;
+  outline: 1px solid var(--line);
+}
+
+.ppt-page-actions {
+  justify-content: center;
+  padding: 15px 0;
+}
+
+.ppt-checks {
+  margin: 6px 0 24px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.ppt-checks p {
+  margin-top: 5px;
+}
+
+.ppt-notes-label {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 12px;
+}
+
+.ppt-notes-label > span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.ppt-stage-column > .ppt-field > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.ppt-inspector {
+  padding: 24px 0 0 20px;
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.ppt-inspector-heading {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 24px;
+  font-size: 12px;
+}
+
+.ppt-inspector-heading > span {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.ppt-presentation {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 16px 0;
+}
+
+.ppt-presentation-controls {
+  justify-content: center;
+  padding: 20px 0;
+  font-size: 12px;
+}
+
+.ppt-presentation-notes {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1100px) {
+  .ppt-editor-grid {
+    grid-template-columns: 88px minmax(0, 1fr) 220px;
+  }
+  .ppt-stage-column {
+    padding: 16px;
+  }
+  .ppt-filmstrip {
+    padding-right: 10px;
+  }
+  .ppt-inspector {
+    padding-left: 14px;
+  }
+}
+
+@media (max-width: 960px) {
+  .ppt-editor-grid {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+  .ppt-stage-column {
+    min-height: 0;
+    border-right: 0;
+  }
+  .ppt-inspector {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px;
+    padding: 24px 0 0;
+    border-top: 1px solid var(--line);
+    max-height: none;
+    overflow: visible;
+  }
+  .ppt-inspector-heading {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 850px) {
+  .ppt-welcome {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .ppt-welcome-art {
+    max-width: 550px;
+  }
+  .ppt-brief-grid,
+  .ppt-candidate ol {
+    grid-template-columns: 1fr;
+  }
+  .ppt-stage-column {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ppt-studio * {
+    scroll-behavior: auto;
+    animation: none;
+    transition: none;
+  }
+}
