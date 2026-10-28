@@ -16,6 +16,7 @@ export function createPptStudioPage({
   render,
   toast,
   openChoiceDialog,
+  openSaveChangesDialog,
   activeAiProfile,
 }) {
   let draft = null
@@ -97,19 +98,9 @@ export function createPptStudioPage({
       render()
     }
   }
-  async function canReplace() {
+  async function canReplace(source) {
     if (!dirty()) return true
-    const choice = await openChoiceDialog({
-      title: '当前作品尚未保存',
-      description: '切换前，你可以保存这份作品，或放弃本次修改。',
-      label: '如何处理当前草稿',
-      options: [
-        { value: 'save', label: '保存后继续' },
-        { value: 'discard', label: '放弃修改' },
-      ],
-      value: 'save',
-      confirmLabel: '继续',
-    })
+    const choice = await openSaveChangesDialog({ returnFocus: source })
     if (choice === 'save') return save()
     return choice === 'discard'
   }
@@ -258,7 +249,7 @@ export function createPptStudioPage({
     editKey = ''
     const command = action.slice(4)
     if (command === 'new' || command === 'quick' || command === 'manual') {
-      if (!(await canReplace())) return true
+      if (!(await canReplace(element))) return true
       if (command === 'new') {
         briefOpen = true
         error = ''
@@ -274,12 +265,12 @@ export function createPptStudioPage({
     } else if (command === 'close-brief') {
       briefOpen = false
     } else if (command === 'home') {
-      if (!(await canReplace())) return true
+      if (!(await canReplace(element))) return true
       draft = null
       candidate = null
       briefOpen = false
     } else if (command === 'open') {
-      if (!(await canReplace())) return true
+      if (!(await canReplace(element))) return true
       const project = projects().find((item) => item.id === element.dataset.id)
       if (project) setDraft(project, true)
     } else if (command === 'delete-project') {

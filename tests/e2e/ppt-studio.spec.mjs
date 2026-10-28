@@ -124,11 +124,25 @@ test('PPT studio keeps drafts when leaving is canceled and confirms project dele
     await window.locator('.nav-item[data-page="ppt"]').click()
     await expect(window.locator('#ppt-slide-title')).toHaveValue('还没有保存的标题')
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
+    await expect(window.getByRole('dialog').getByRole('combobox')).toHaveCount(0)
+    await expect(window.getByRole('dialog').getByRole('button')).toHaveCount(3)
+    await expect(
+      window.getByRole('dialog').getByRole('button', { name: '保存', exact: true }),
+    ).toBeVisible()
+    await expect(
+      window.getByRole('dialog').getByRole('button', { name: '不保存', exact: true }),
+    ).toBeVisible()
     await window.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
     await expect(window.locator('#ppt-slide-title')).toHaveValue('还没有保存的标题')
+    await expect(window.getByRole('button', { name: '返回作品', exact: true })).toBeFocused()
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
-    await window.locator('#dialogChoice').selectOption('discard')
-    await window.getByRole('dialog').getByRole('button', { name: '继续', exact: true }).click()
+    await window.keyboard.press('Escape')
+    await expect(window.locator('#ppt-slide-title')).toHaveValue('还没有保存的标题')
+    await window.getByRole('button', { name: '返回作品', exact: true }).click()
+    await window.getByRole('dialog').getByRole('button', { name: '不保存', exact: true }).click()
+    await window.locator('.ppt-project-open').click()
+    await expect(window.locator('#ppt-slide-title')).toHaveValue('从一个好想法开始')
+    await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await window.getByRole('button', { name: '删除作品：保留作品', exact: true }).click()
     await window.getByRole('dialog').getByRole('button', { name: '确定', exact: true }).click()
     await expect(window.locator('.ppt-project')).toHaveCount(1)
@@ -137,6 +151,58 @@ test('PPT studio keeps drafts when leaving is canceled and confirms project dele
     await window.getByRole('dialog').getByRole('button', { name: '确定', exact: true }).click()
     await expect(window.locator('.ppt-project')).toHaveCount(0)
   } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('PPT studio saves directly from its three-button dialog and keeps the draft on write failure', async () => {
+  const directory = temporaryDirectory()
+  let app
+  const temporaryPath = path.join(directory, 'workspace.json.tmp')
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await window.getByRole('button', { name: '试试手动编辑', exact: true }).click()
+    await window.locator('#ppt-deck-title').fill('直接保存的作品')
+    await window.locator('#ppt-slide-title').fill('需要保存的新标题')
+    await window.getByRole('button', { name: '返回作品', exact: true }).click()
+    const dialog = window.getByRole('dialog')
+    const saveButton = dialog.getByRole('button', { name: '保存', exact: true })
+    await expect(saveButton).toBeFocused()
+    await window.keyboard.press('Shift+Tab')
+    await expect(dialog.getByRole('button', { name: '取消', exact: true })).toBeFocused()
+    await window.keyboard.press('Tab')
+    await expect(saveButton).toBeFocused()
+    fs.mkdirSync(screenshotDir, { recursive: true })
+    for (const theme of ['dark', 'light']) {
+      await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+      await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
+      await dialog.screenshot({
+        path: path.join(screenshotDir, `save-dialog-${theme}.png`),
+        animations: 'disabled',
+      })
+    }
+    // 用测试临时目录中的同名文件夹模拟写入失败，不触碰真实工作区。
+    fs.mkdirSync(temporaryPath)
+    await saveButton.click()
+    await expect(window.locator('.ppt-error')).toContainText('保存失败')
+    await expect(window.locator('#ppt-slide-title')).toHaveValue('需要保存的新标题')
+    await expect(window.locator('.ppt-gallery')).toHaveCount(0)
+    expect(
+      (await window.evaluate(() => window.launcher.getWorkspace())).presentations,
+    ).toHaveLength(0)
+    fs.rmdirSync(temporaryPath)
+    await window.getByRole('button', { name: '返回作品', exact: true }).click()
+    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(window.locator('.ppt-project-open')).toContainText('直接保存的作品')
+    await window.locator('.ppt-project-open').click()
+    await expect(window.locator('#ppt-slide-title')).toHaveValue('需要保存的新标题')
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+  } finally {
+    if (fs.existsSync(temporaryPath) && fs.statSync(temporaryPath).isDirectory())
+      fs.rmdirSync(temporaryPath)
     if (app) await close(app)
     fs.rmSync(directory, { recursive: true, force: true })
   }

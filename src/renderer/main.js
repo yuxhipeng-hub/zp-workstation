@@ -11,6 +11,7 @@ import { createGuidePage } from './pages/guide.js'
 import { createLogsPage } from './pages/logs.js'
 import { createAboutPage } from './pages/about.js'
 import { createEditors } from './components/editors.js'
+import { openSaveChangesDialog } from './components/save-changes-dialog.js'
 import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { keepFocusInDialog } from './lib/focus.js'
 import { createTodayPage } from './pages/today.js'
@@ -248,6 +249,7 @@ function getPptStudioPage() {
       render,
       toast,
       openChoiceDialog,
+      openSaveChangesDialog,
       activeAiProfile,
     })
   }
