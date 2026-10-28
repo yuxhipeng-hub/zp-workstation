@@ -1,6 +1,6 @@
 const MAX_EXTRACT_TEXT_LENGTH = 4000
 const MAX_EXTRACT_DRAFTS = 5
-const MAX_EXTRACT_IMAGES = 6
+const MAX_EXTRACT_IMAGES = 20
 const MAX_EXTRACT_IMAGE_BYTES = 5 * 1024 * 1024
 const IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/i
 

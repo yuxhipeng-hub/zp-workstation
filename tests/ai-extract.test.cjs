@@ -98,7 +98,7 @@ test('prompt sends only the pasted notice plus today and the strict schema', () 
 test('keeps the documented payload limit', () => {
   assert.equal(MAX_EXTRACT_TEXT_LENGTH, 4000)
   assert.equal(MAX_EXTRACT_DRAFTS, 5)
-  assert.equal(MAX_EXTRACT_IMAGES, 6)
+  assert.equal(MAX_EXTRACT_IMAGES, 20)
 })
 
 test('validates screenshot data and builds multimodal prompts', () => {
@@ -122,7 +122,7 @@ test('validates screenshot data and builds multimodal prompts', () => {
       cleanExtractImages(
         Array.from({ length: MAX_EXTRACT_IMAGES + 1 }, () => ({ dataUrl: PNG_DATA_URL })),
       ),
-    /最多识别 6 张截图/,
+    /最多识别 20 张截图/,
   )
   assert.throws(
     () =>
@@ -135,24 +135,24 @@ test('validates screenshot data and builds multimodal prompts', () => {
   )
 })
 
-test('accepts six ordered screenshots and uses the notice date as the relative-date reference', () => {
+test('accepts twenty ordered screenshots and uses the notice date as the relative-date reference', () => {
   const images = cleanExtractImages(
-    Array.from({ length: 6 }, (_, i) => ({ name: String(i), dataUrl: PNG_DATA_URL })),
+    Array.from({ length: 20 }, (_, i) => ({ name: String(i), dataUrl: PNG_DATA_URL })),
   )
   const messages = buildExtractMessages('明天交报告', new Date(2026, 9, 28), images, '2026-10-20')
   const parts = messages[1].content
-  assert.equal(parts.filter((part) => part.type === 'image_url').length, 6)
+  assert.equal(parts.filter((part) => part.type === 'image_url').length, 20)
   assert.match(parts[0].text, /换算基准）：2026-10-20/)
-  assert.equal(parts[11].text, '截图 6')
+  assert.equal(parts[39].text, '截图 20')
   assert.match(parts[0].text, /不要编造/)
 })
 
 test('cleans source evidence without treating invalid image numbers as evidence', () => {
   const [draft, invalid] = cleanExtractedAssignments([
-    { title: '报告', sourceQuote: ' 明天交报告 ', sourceImage: 6 },
-    { title: '其他', sourceImage: 7 },
+    { title: '报告', sourceQuote: ' 明天交报告 ', sourceImage: 20 },
+    { title: '其他', sourceImage: 21 },
   ])
   assert.equal(draft.sourceQuote, '明天交报告')
-  assert.equal(draft.sourceImage, 6)
+  assert.equal(draft.sourceImage, 20)
   assert.equal(invalid.sourceImage, undefined)
 })

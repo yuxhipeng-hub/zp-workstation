@@ -250,7 +250,7 @@ function readableAiError(error) {
   )
 }
 
-const SMART_ENTRY_MAX_IMAGES = 6
+const SMART_ENTRY_MAX_IMAGES = 20
 const SMART_ENTRY_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const SMART_ENTRY_IMAGE_MAX_SIDE = 2000
 

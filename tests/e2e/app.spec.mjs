@@ -469,7 +469,7 @@ test('extracts assignment drafts from a platform screenshot', async () => {
                       priority: 'high',
                       notes: '从平台截图识别',
                       sourceQuote: '下周五交平台截图作业',
-                      sourceImage: 6,
+                      sourceImage: 20,
                     },
                   ],
                 }),
@@ -518,9 +518,9 @@ test('extracts assignment drafts from a platform screenshot', async () => {
     await expect(window.locator('#smartEntryTitle')).toBeVisible()
 
     await window.locator('#smartEntryNoticeDate').fill('2026-10-20')
-    await window.locator('#smartEntryImages').setInputFiles(Array(7).fill(imagePath))
-    await expect(window.locator('.smart-entry-image')).toHaveCount(6)
-    await expect(window.locator('.smart-entry-error')).toContainText('最多添加 6 张')
+    await window.locator('#smartEntryImages').setInputFiles(Array(21).fill(imagePath))
+    await expect(window.locator('.smart-entry-image')).toHaveCount(20)
+    await expect(window.locator('.smart-entry-error')).toContainText('最多添加 20 张')
     await expect(window.locator('.smart-entry-image img').first()).toBeVisible()
     await expect(window.locator('.smart-entry-image-add')).toHaveCount(0)
     await expect(window.locator('#smartEntryNoticeDate')).toHaveValue('2026-10-20')
@@ -530,7 +530,7 @@ test('extracts assignment drafts from a platform screenshot', async () => {
     await expect(window.locator('.smart-entry-draft')).toContainText('高优先级')
 
     await window.locator('.smart-entry-review summary').click()
-    await expect(window.locator('.smart-entry-source')).toContainText('截图 6')
+    await expect(window.locator('.smart-entry-source')).toContainText('截图 20')
     await expect(window.locator('.smart-entry-source')).toContainText('下周五交平台截图作业')
     await window.locator('[data-smart-field="title"]').fill('')
     await window.getByRole('button', { name: '添加选中的作业' }).click()
@@ -543,7 +543,7 @@ test('extracts assignment drafts from a platform screenshot', async () => {
     await window.locator('[data-smart-field="priority"]').selectOption('low')
     const payload = requests.at(-1)
     const userContent = payload.messages.at(-1).content
-    expect(userContent.filter((part) => part.type === 'image_url')).toHaveLength(6)
+    expect(userContent.filter((part) => part.type === 'image_url')).toHaveLength(20)
     expect(userContent[0].text).toContain('换算基准）：2026-10-20')
     assert.equal(Array.isArray(userContent), true)
     const textPart = userContent.find((part) => part.type === 'text')

@@ -72,7 +72,7 @@ export function createAssignmentsPage({
       ? '添加并启用模型后，就可以识别通知截图。'
       : !canUseVision
         ? '当前模型未开启「支持视觉输入」，请先到「模型配置」勾选；文字录入仍然可用。'
-        : '可以粘贴、拖入或选择截图；最多 6 张，处理后单张不超过 5 MB。每次最多抽取 5 条作业，通知较多时请分批核对。'
+        : '可以粘贴、拖入或选择截图；最多 20 张，处理后单张不超过 5 MB。每次最多抽取 5 条作业，通知较多时请分批核对。'
     return `
     <section class="section smart-entry-panel" aria-labelledby="smartEntryTitle">
       <div class="section-heading">
@@ -107,7 +107,7 @@ export function createAssignmentsPage({
           )
           .join('')}
         ${
-          images.length < 6
+          images.length < 20
             ? `<label class="smart-entry-image-add ${canUseVision && !imageBusy ? '' : 'is-disabled'}" for="smartEntryImages">
                 <i data-lucide="${imageBusy ? 'loader' : 'image-plus'}"></i>
                 <span>${imageBusy ? '正在处理' : '添加截图'}</span>
