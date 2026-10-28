@@ -8,6 +8,8 @@ const path = require('node:path')
 const os = require('node:os')
 const process = require('node:process')
 const console = require('node:console')
+const { Buffer } = require('node:buffer')
+const { URL } = require('node:url')
 const { isDeepStrictEqual } = require('node:util')
 const { SettingsStore } = require('../src/main/settings-store.cjs')
 const { AiService } = require('../src/main/ai-service.cjs')
@@ -93,9 +95,114 @@ async function main() {
             settings: new SettingsStore(userData),
             safeStorage,
           })
+    if (process.argv.includes('--model-status')) {
+      const config = service.getConfig()
+      console.log(
+        JSON.stringify({
+          profiles: config.profiles.map((p) => ({
+            label: p.label,
+            model: p.model,
+            protocol: p.protocol,
+            supportsVision: p.supportsVision,
+            hasKey: p.hasKey,
+            requiresKey: p.requiresKey,
+            active: p.id === config.activeProfileId,
+            officialDeepSeek: new URL(p.baseUrl).hostname === 'api.deepseek.com',
+          })),
+        }),
+      )
+      return
+    }
+    if (process.argv.includes('--vision-probe') || process.argv.includes('--connection-probe')) {
+      const modelIndex = process.argv.indexOf('--model')
+      const model = modelIndex >= 0 ? process.argv[modelIndex + 1] : ''
+      const configured = service.getConfig().profiles.find((p) => p.model === model)
+      if (!configured) throw new Error('未找到指定模型 ID 的已保存配置。')
+      const result = process.argv.includes('--connection-probe')
+        ? { ...(await service.testProfile(configured.id)), model: configured.model }
+        : await service.testVisionProfile(configured.id)
+      await fs.mkdir(output, { recursive: true })
+      await fs.writeFile(
+        path.join(
+          output,
+          process.argv.includes('--connection-probe')
+            ? 'connection-probe.json'
+            : 'vision-probe.json',
+        ),
+        JSON.stringify(result, null, 2),
+      )
+      console.log(JSON.stringify(result))
+      if (!(result.passed || result.ok)) process.exitCode = 1
+      return
+    }
     const profile = reference || renderOnly ? null : service.resolveProfile()
     if (!reference && !renderOnly && !profile) throw new Error('桌面应用尚未配置可用模型。')
     await fs.mkdir(output, { recursive: true })
+    if (process.argv.includes('--visual-workflow') || process.argv.includes('--visual-existing')) {
+      const originalRequest = service.requestChat.bind(service)
+      let callIndex = 0
+      service.requestChat = async (...args) => {
+        const content = await originalRequest(...args)
+        await fs.writeFile(path.join(output, `model-call-${++callIndex}.txt`), content)
+        return content
+      }
+      const { PresentationQuality } = require('../src/main/presentation-quality.cjs')
+      const { renderPresentationPages } = require('../src/main/presentation-render.cjs')
+      const sample = cases.find((c) => c.id === 'proposal')
+      const started = Date.now()
+      let full, previews
+      if (process.argv.includes('--visual-existing'))
+        full = JSON.parse(await fs.readFile(path.join(output, 'before-visual.json'), 'utf8'))
+      else {
+        previews = await service.designPresentation({
+          action: 'samples',
+          message: sample.message,
+          direction: 'precision',
+        })
+        await fs.writeFile(path.join(output, 'samples.json'), JSON.stringify(previews, null, 2))
+        await fs.writeFile(
+          path.join(output, 'samples.pptx'),
+          await presentationBuffer(previews.deck),
+        )
+        full = await service.designPresentation({
+          action: 'complete',
+          message: sample.message,
+          plan: previews.plan,
+          direction: 'precision',
+        })
+        await fs.writeFile(path.join(output, 'before-visual.json'), JSON.stringify(full, null, 2))
+      }
+      const quality = new PresentationQuality({
+        aiService: {
+          getConfig: () => ({ visionProfileId: profile.id }),
+          resolveProfile: () => ({ ...profile, supportsVision: true }),
+          requestVision: service.requestVision.bind(service),
+        },
+        renderPages: async (deck, options) => {
+          const pages = await renderPresentationPages(deck, options)
+          const round = (quality.renderCount || 0) + 1
+          quality.renderCount = round
+          for (const page of pages)
+            await fs.writeFile(
+              path.join(output, `round-${round}-page-${page.page}.jpg`),
+              Buffer.from(page.data.split(',')[1], 'base64'),
+            )
+          return pages
+        },
+      })
+      const checked = await quality.inspect({ deck: full.deck })
+      await fs.writeFile(path.join(output, 'visual-result.json'), JSON.stringify(checked, null, 2))
+      await fs.writeFile(path.join(output, 'complete.pptx'), await presentationBuffer(checked.deck))
+      console.log(
+        JSON.stringify({
+          elapsedMs: Date.now() - started,
+          samples: previews?.deck.slides.length || 3,
+          pages: checked.deck.slides.length,
+          report: checked.report,
+        }),
+      )
+      return
+    }
     if (process.argv.includes('--object-edit')) {
       if (!service) throw new Error('对象修改评测需要 --configured-model。')
       const deck = validatePresentationInput(referenceDeck('proposal'))

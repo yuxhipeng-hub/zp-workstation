@@ -19,6 +19,25 @@ const { presentationBuffer } = require('../src/main/presentation-export.cjs')
 const JSZip = require('jszip')
 const sharp = require('sharp')
 
+test('legacy chart edits remain visible after a page has materialized editable objects', () => {
+  const { referenceDeck } = require('./fixtures/presentation-reference.cjs')
+  const { materializeDesign } = require('../src/shared/presentation-design.mjs')
+  const deck = materializeDesign(referenceDeck('proposal'))
+  const slide = deck.slides[2],
+    chart = { ...slide.chart, type: 'line' }
+  const reply = JSON.stringify({
+    action: 'edit',
+    message: '改折线图',
+    changes: { slides: [{ id: slide.id, chart }] },
+  })
+  const result = parsePresentationChat(reply, {
+    message: '改成折线图',
+    deck,
+    selectedSlideId: slide.id,
+  })
+  assert.equal(result.deck.slides[2].canvas.find((n) => n.type === 'chart').chart.type, 'line')
+})
+
 test('canvas images export using supported sizing and preserve transparent PNG media', async () => {
   const png = await sharp({
     create: {

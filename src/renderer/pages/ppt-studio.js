@@ -8,6 +8,7 @@ import {
   getPresentationIssues,
 } from '../../shared/presentation.mjs'
 import { createPptCanvasEditor } from '../components/ppt-canvas-editor.js'
+import { DESIGN_DIRECTIONS, materializeDesign } from '../../shared/presentation-design.mjs'
 
 /** 独立 PPT 页面：手动和 AI 共同编辑结构化作品，只有显式保存才写入工作区。 */
 export function createPptStudioPage({
@@ -34,6 +35,11 @@ export function createPptStudioPage({
   let messages = []
   let reportedDirty = false
   let canvasChatOpen = false
+  let pendingDesign = null
+  let visualReport = null
+  let visualSignature = ''
+  let visualJob = null
+  const visualRevision = (deck) => signature({ ...deck, updatedAt: '', createdAt: '' })
   const canvasEditor = createPptCanvasEditor({
     getDeck: () => draft,
     getIndex: () => selected,
@@ -49,7 +55,7 @@ export function createPptStudioPage({
   const dirty = () => Boolean(draft && signature(draft) !== saved)
   const projects = () => state.workspace?.presentations || []
   function reportDirty() {
-    const value = dirty()
+    const value = dirty() || Boolean(pendingDesign)
     if (reportedDirty === value) return
     reportedDirty = value
     api.setPresentationDirty(value).catch(() => {
@@ -71,6 +77,9 @@ export function createPptStudioPage({
     return `<button type="button" class="ppt-icon-button" data-action="ppt-${action}" title="${esc(label)}" aria-label="${esc(label)}" ${attrs}><i data-lucide="${icon}"></i></button>`
   }
   function setDraft(value, isSaved = false) {
+    pendingDesign = null
+    visualReport = null
+    visualSignature = ''
     canvasEditor.reset()
     canvasChatOpen = false
     draft = copy(value)
@@ -115,9 +124,12 @@ export function createPptStudioPage({
     }
   }
   async function canReplace(source) {
-    if (!dirty()) return true
+    if (!dirty() && !pendingDesign) return true
     const choice = await openSaveChangesDialog({ returnFocus: source })
-    if (choice === 'save') return save()
+    if (choice === 'save') {
+      if (pendingDesign && !(await completeDesign())) return false
+      return save()
+    }
     return choice === 'discard'
   }
   function chatContext() {
@@ -145,13 +157,33 @@ export function createPptStudioPage({
     error = ''
     render()
     try {
-      const result = await api.chatPresentation({
-        message,
-        history: context,
-        deck: current,
-        selectedSlideId: current?.slides[selected]?.id || null,
-        selectedObjectId: canvasEditor.selectedId(),
-      })
+      const result = await (current
+        ? api.chatPresentation({
+            message,
+            history: context,
+            deck: current,
+            selectedSlideId: current?.slides[selected]?.id || null,
+            selectedObjectId: canvasEditor.selectedId(),
+          })
+        : api.designPresentation({
+            action: 'samples',
+            message,
+            history: context,
+            direction: pendingDesign?.direction || 'precision',
+          }))
+      if (result.action === 'samples') {
+        pendingDesign = {
+          deck: result.deck,
+          plan: result.plan,
+          direction: result.deck.designDirection || 'precision',
+          message,
+        }
+        messages.push({
+          role: 'assistant',
+          content: '三页设计样稿已准备好。可以切换视觉方向，或继续说明修改要求；满意后生成整套。',
+        })
+        return
+      }
       if (result.deck) {
         if (draft) {
           const selectedId = draft.slides[selected]?.id
@@ -184,6 +216,115 @@ export function createPptStudioPage({
         })
       }
     }
+  }
+  async function completeDesign() {
+    if (!pendingDesign || busy) return false
+    const snapshot = copy(pendingDesign),
+      conversation = copy(messages)
+    let inspectAfter = false
+    busy = 'design'
+    error = ''
+    render()
+    try {
+      const result = await api.designPresentation({
+        action: 'complete',
+        message: snapshot.message,
+        history: chatContext(),
+        plan: snapshot.plan,
+        direction: snapshot.direction,
+      })
+      if (!result.deck) throw new Error('未返回完整作品。')
+      setDraft(result.deck)
+      messages = conversation
+      if (messages.at(-1)?.role === 'assistant')
+        messages[messages.length - 1] = { role: 'assistant', content: result.message }
+      else messages.push({ role: 'assistant', content: result.message })
+      visualReport = result.visualReport || null
+      visualSignature = visualRevision(draft)
+      inspectAfter = Boolean(result.autoInspect)
+      return true
+    } catch (err) {
+      error = `整套生成失败：${err.message}。设计样稿与材料已保留。`
+      return false
+    } finally {
+      busy = ''
+      reportDirty()
+      render()
+      if (inspectAfter) void inspectInBackground()
+    }
+  }
+  async function inspectInBackground(pageId = null) {
+    if (!draft) return
+    if (visualJob) {
+      if (visualJob.projectId !== draft.id) {
+        visualReport = { status: 'deferred', message: '另一份作品正在检查，完成后可检查当前作品。' }
+        visualSignature = visualRevision(draft)
+        render()
+      }
+      return
+    }
+    const snapshot = copy(draft)
+    const job = { projectId: snapshot.id, revision: visualRevision(snapshot) }
+    visualJob = job
+    visualReport = { status: 'pending', message: '正在后台检查实际 PPTX 渲染，可以继续编辑。' }
+    visualSignature = job.revision
+    render()
+    try {
+      const result = await api.inspectPresentation({
+        deck: snapshot,
+        ...(pageId ? { pageId } : {}),
+      })
+      if (draft?.id !== job.projectId) return
+      if (busy || visualRevision(draft) !== job.revision) {
+        visualReport = {
+          status: 'stale',
+          message: '检查期间作品已修改，检查结果未自动应用，请重新检查。',
+        }
+        return
+      }
+      checkpoint()
+      draft = copy(result.deck)
+      visualReport = result.report
+      visualSignature = visualRevision(draft)
+    } catch (error) {
+      if (draft?.id === job.projectId)
+        visualReport = { status: 'failed', message: `视觉检查失败：${error.message}。原稿已保留。` }
+    } finally {
+      if (visualJob === job) visualJob = null
+      reportDirty()
+      render()
+    }
+  }
+  function designSamplesMarkup() {
+    if (!pendingDesign) return ''
+    return `<section class="ppt-design-samples" aria-label="三页设计样稿"><div class="ppt-section-heading"><div><h3>先确定设计方向</h3><p>从 ${pendingDesign.plan.pages.length} 页策划中抽取的三页样稿。当前为 ${esc(DESIGN_DIRECTIONS[pendingDesign.direction].name)}。</p></div>${button('complete-design', busy === 'design' ? '生成与检查中…' : '按此方向生成整套', 'sparkles', disabled(Boolean(busy)), false)}</div><div class="ppt-design-directions">${Object.entries(
+      DESIGN_DIRECTIONS,
+    )
+      .map(
+        ([id, value]) =>
+          `<button type="button" class="button secondary" data-action="ppt-design-direction" data-direction="${id}" aria-pressed="${pendingDesign.direction === id}" ${disabled(Boolean(busy))}>${esc(value.name)}<small>${esc(value.description)}</small></button>`,
+      )
+      .join(
+        '',
+      )}</div><div class="ppt-sample-grid">${pendingDesign.deck.slides.map((slide, i) => `<article>${slideMarkup(slide, pendingDesign.deck.theme, i, 3)}<p>${esc(slide.title)}</p></article>`).join('')}</div></section>`
+  }
+  function visualReportMarkup() {
+    const visualBusy = Boolean(busy) || Boolean(visualJob)
+    const controls = `<details class="ppt-visual-actions" data-disclosure-id="ppt-visual-actions"><summary>图片理解与视觉检查</summary><p>将本次作品截图或选中图片发送给设置中的 PPT 视觉模型。视觉修正只调整布局和样式。</p><div class="ppt-inline-actions">${button('inspect-page', '检查当前页', 'scan-eye', disabled(visualBusy))}${button('inspect-deck', '检查整套', 'gallery-vertical-end', disabled(visualBusy || draft.slides.length > 16))}${canvasEditor.selectedNode()?.type === 'image' ? button('describe-image', '理解选中图片', 'image', disabled(visualBusy)) : ''}</div></details>`
+    if (!visualReport) return controls
+    const stale = visualSignature !== visualRevision(draft)
+    const scope =
+      visualReport.checkedPageIds?.length === draft.slides.length
+        ? `整套 ${draft.slides.length} 页`
+        : `第 ${visualReport.checkedPageIds?.map((id) => draft.slides.findIndex((s) => s.id === id) + 1).join('、')} 页`
+    const summary = stale
+      ? '作品已修改，建议重新检查。'
+      : visualReport.status === 'pass'
+        ? `已检查${scope}，未发现明显视觉问题。`
+        : visualReport.status === 'issues'
+          ? `已检查${scope}，仍有 ${visualReport.issues.length} 项需要调整。`
+          : visualReport.message
+    return `${controls}<div class="ppt-visual-report" role="status"><strong>${esc(summary)}</strong>${visualReport.correctionCount ? `<p>已自动调整 ${visualReport.correctionCount} 个对象，并重新渲染检查。</p>` : ''}${!stale && visualReport.issues?.length ? `<ul>${visualReport.issues.map((issue) => `<li>第 ${draft.slides.findIndex((s) => s.id === issue.pageId) + 1} 页：${esc(issue.message)}</li>`).join('')}</ul>` : ''}</div>`
   }
   function slideMarkup(slide, theme, index, total, interactive = false) {
     const scene = buildSlideScene(slide, theme, index, total)
@@ -234,7 +375,18 @@ export function createPptStudioPage({
       : '<div class="ppt-checks ppt-checks-ok">文字容量检查通过 · 导出后建议检查字体与换行</div>'
   }
   function field(scope, key, label, value, max, multiline = false, hint = '') {
-    const attrs = `id="ppt-${scope}-${key}" data-ppt-scope="${scope}" data-ppt-field="${key}" maxlength="${max}" ${disabled(Boolean(busy))}`
+    if (
+      scope === 'slide' &&
+      key !== 'notes' &&
+      draft.slides[selected].canvas &&
+      !draft.slides[selected].canvas.some((n) => n.field === key)
+    )
+      return ''
+    const locked =
+      scope === 'slide' &&
+      (draft.slides[selected].locked ||
+        draft.slides[selected].canvas?.some((node) => node.field === key && node.locked))
+    const attrs = `id="ppt-${scope}-${key}" data-ppt-scope="${scope}" data-ppt-field="${key}" maxlength="${max}" ${disabled(Boolean(busy) || locked)}`
     return `<label class="ppt-field" for="ppt-${scope}-${key}"><span>${esc(label)}</span>${multiline ? `<textarea ${attrs} rows="${key === 'notes' || key === 'material' ? 5 : 3}">${esc(value)}</textarea>` : `<input ${attrs} value="${esc(value)}" autocomplete="off">`}${hint ? `<small>${esc(hint)}</small>` : ''}</label>`
   }
   function strategyMarkup() {
@@ -284,8 +436,8 @@ export function createPptStudioPage({
         manualOpen
           ? `<aside class="ppt-inspector" aria-label="页面内容与设计" data-scroll-preserve="ppt-inspector"><div class="ppt-inspector-heading"><strong>手动编辑 · 第 ${selected + 1} 页</strong><span>也可以直接在对话中提出修改</span></div>
           ${field('deck', 'title', '作品名称', draft.title, 100)}
-          <label class="ppt-field"><span>视觉主题</span><select data-ppt-scope="deck" data-ppt-field="theme" ${disabled(Boolean(busy))}>${options(Object.fromEntries(Object.entries(PRESENTATION_THEMES).map(([id, theme]) => [id, theme.name])), draft.theme)}</select><small data-ppt-theme-description>${esc(PRESENTATION_THEMES[draft.theme].description)}</small></label>
-          <label class="ppt-field"><span>页面版式</span><select data-ppt-scope="slide" data-ppt-field="layout" ${disabled(Boolean(busy))}>${options(PRESENTATION_LAYOUTS, slide.layout)}</select></label>
+          ${draft.slides.some((page) => page.canvas) ? `<div class="ppt-field"><span>设计方向</span><strong>${esc(DESIGN_DIRECTIONS[draft.designDirection]?.name || '自由对象设计')}</strong><small>在直接编辑中调整对象颜色与布局。</small></div>` : `<label class="ppt-field"><span>视觉主题</span><select data-ppt-scope="deck" data-ppt-field="theme" ${disabled(Boolean(busy))}>${options(Object.fromEntries(Object.entries(PRESENTATION_THEMES).map(([id, theme]) => [id, theme.name])), draft.theme)}</select><small data-ppt-theme-description>${esc(PRESENTATION_THEMES[draft.theme].description)}</small></label>`}
+          ${!slide.canvas ? `<label class="ppt-field"><span>页面版式</span><select data-ppt-scope="slide" data-ppt-field="layout" ${disabled(Boolean(busy) || slide.locked)}>${options(PRESENTATION_LAYOUTS, slide.layout)}</select></label>` : ''}
           ${field('slide', 'eyebrow', '页眉', slide.eyebrow, 60)}
           ${field('slide', 'title', '页面标题', slide.title, 100, true)}
           ${field('slide', 'body', '正文', slide.body, 1200, true)}
@@ -295,7 +447,7 @@ export function createPptStudioPage({
         </aside>`
           : ''
       }
-      ${canvasEditor.markup()}${strategyMarkup()}</div></div>
+      ${canvasEditor.markup()}${visualReportMarkup()}${strategyMarkup()}</div></div>
     </section>`
   }
   function presentationMarkup() {
@@ -304,9 +456,16 @@ export function createPptStudioPage({
   function renderPage() {
     if (!draft?.slides[selected]?.canvas) canvasEditor.reset()
     reportDirty()
-    return `<div class="ppt-studio">${presenting && draft ? presentationMarkup() : draft ? editorMarkup() : `${landingMarkup()}${projects().length ? galleryMarkup() : ''}`}</div>`
+    return `<div class="ppt-studio">${presenting && draft ? presentationMarkup() : draft ? editorMarkup() : `${landingMarkup()}${designSamplesMarkup()}${projects().length ? galleryMarkup() : ''}`}</div>`
   }
   function refreshPreview() {
+    if (visualReport && visualSignature !== visualRevision(draft)) {
+      const report = document.querySelector('.ppt-visual-report')
+      const summary = report?.querySelector('strong')
+      if (summary) summary.textContent = '作品已修改，建议重新检查。'
+      const list = report?.querySelector('ul')
+      if (list) list.hidden = true
+    }
     reportDirty()
     if (!draft) return
     const preview = document.querySelector('[data-ppt-preview]')
@@ -349,6 +508,11 @@ export function createPptStudioPage({
     }
     if (!draft) return true
     if (scope === 'slide' && draft.slides[selected].locked) return true
+    if (
+      scope === 'slide' &&
+      draft.slides[selected].canvas?.some((n) => n.field === key && n.locked)
+    )
+      return true
     const nextKey = `${scope}:${selected}:${key}`
     if (editKey !== nextKey) {
       checkpoint()
@@ -356,12 +520,67 @@ export function createPptStudioPage({
     }
     const target = scope === 'deck' ? draft : draft.slides[selected]
     target[key] = key === 'points' ? element.value.split('\n') : element.value
+    if (scope === 'slide' && target.canvas)
+      for (const node of target.canvas) if (node.field === key) node.text = element.value
     refreshPreview()
     return true
   }
   async function handleAction(action, element) {
     if (!action.startsWith('ppt-')) return false
     if (busy) return true
+    if (action === 'ppt-complete-design') {
+      await completeDesign()
+      return true
+    }
+    if (action === 'ppt-design-direction' && pendingDesign) {
+      if (!Object.hasOwn(DESIGN_DIRECTIONS, element.dataset.direction)) return true
+      pendingDesign.direction = element.dataset.direction
+      pendingDesign.deck = materializeDesign(pendingDesign.deck, pendingDesign.direction, {
+        replace: true,
+      })
+      render()
+      return true
+    }
+    if (action === 'ppt-inspect-page' || action === 'ppt-inspect-deck') {
+      void inspectInBackground(action === 'ppt-inspect-page' ? draft.slides[selected].id : null)
+      return true
+    }
+    if (action === 'ppt-describe-image') {
+      const snapshot = copy(draft)
+      busy = 'visual'
+      error = ''
+      render()
+      try {
+        if (action === 'ppt-describe-image') {
+          const result = await api.describePresentationImage({
+            deck: snapshot,
+            pageId: snapshot.slides[selected].id,
+            objectId: canvasEditor.selectedId(),
+          })
+          messages.push({
+            role: 'assistant',
+            content: `图片理解（${result.model}）：${result.message}`,
+          })
+          canvasChatOpen = true
+        } else {
+          const result = await api.inspectPresentation({
+            deck: snapshot,
+            ...(action === 'ppt-inspect-page' ? { pageId: snapshot.slides[selected].id } : {}),
+          })
+          checkpoint()
+          draft = copy(result.deck)
+          visualReport = result.report
+          visualSignature = visualRevision(draft)
+        }
+      } catch (err) {
+        error = `视觉任务失败：${err.message}。原稿已保留。`
+      } finally {
+        busy = ''
+        reportDirty()
+        render()
+      }
+      return true
+    }
     if (action === 'ppt-canvas-image' || action === 'ppt-canvas-replace-image') {
       const original = canvasEditor.selectedNode()
       busy = 'image'
@@ -403,6 +622,7 @@ export function createPptStudioPage({
       render()
       return true
     }
+    if (action === 'ppt-canvas-mode' && !canvasEditor.isActive()) manualOpen = false
     if (canvasEditor.handleAction(action, element)) return true
     editKey = ''
     const command = action.slice(4)
@@ -424,6 +644,7 @@ export function createPptStudioPage({
       canvasEditor.reset()
       canvasChatOpen = false
       draft = null
+      pendingDesign = null
       messages = []
       composer = ''
       manualOpen = false

@@ -12,7 +12,8 @@ export const AI_PROVIDER_PRESETS = [
     id: 'deepseek',
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
+    model: 'deepseek-flash',
+    supportsVision: true,
   },
   {
     id: 'kimi',
@@ -68,6 +69,8 @@ export function createModelSettingsPage({
   activeAiProfile,
   aiProtocolLabel,
 }) {
+  const visionResults = new Map()
+  const verifiedProfiles = new Set()
   function renderProfileEditor() {
     if (!state.aiProfileEditorOpen) return ''
     const editing = aiProfiles().find((profile) => profile.id === state.aiEditingProfileId)
@@ -227,6 +230,9 @@ export function createModelSettingsPage({
                           <button class="icon-button compact" type="button" data-action="test-ai-profile" data-id="${escapeHtml(profile.id)}" title="测试连接">
                             <i data-lucide="plug-zap"></i>
                           </button>
+                          <button class="icon-button compact" type="button" data-action="test-vision-profile" data-id="${escapeHtml(profile.id)}" title="测试图片识别" aria-label="测试图片识别" ${visionResults.get(profile.id)?.startsWith('正在') ? 'disabled aria-busy="true"' : ''}>
+                            <i data-lucide="scan-eye"></i>
+                          </button>
                           <button class="icon-button compact" type="button" data-action="edit-ai-profile" data-id="${escapeHtml(profile.id)}" title="编辑模型">
                             <i data-lucide="pencil"></i>
                           </button>
@@ -235,6 +241,7 @@ export function createModelSettingsPage({
                           </button>
                         </div>
                       </div>
+                      ${visionResults.has(profile.id) ? `<p class="setting-hint" role="status">${escapeHtml(visionResults.get(profile.id))}</p>${verifiedProfiles.has(profile.id) ? `<button type="button" class="button secondary" data-action="use-tested-vision-profile" data-id="${escapeHtml(profile.id)}">用于 PPT 视觉检查</button>` : ''}` : ''}
                     `
                   })
                   .join('')}
@@ -246,6 +253,16 @@ export function createModelSettingsPage({
             ? `<p class="setting-hint ai-profile-summary">当前：${escapeHtml(active.label)} · ${escapeHtml(active.model)} · ${escapeHtml(aiProtocolLabel(active.protocol))}${active.hasKey || !active.requiresKey ? '' : ' · 请补充 API Key'}</p>`
             : ''
         }
+        <div class="settings-group-head"><h2>PPT 视觉模型</h2><p>用于图片理解和页面视觉检查。检查会把本次作品的页面截图发送给所选模型，默认文字模型继续负责内容策划。</p></div>
+        <label class="field"><span>视觉模型</span><select id="pptVisionProfile"><option value="">暂不启用</option>${profiles
+          .filter((p) => p.supportsVision)
+          .map(
+            (p) =>
+              `<option value="${escapeHtml(p.id)}" ${state.aiConfig?.visionProfileId === p.id ? 'selected' : ''}>${escapeHtml(p.label)} · ${escapeHtml(p.model)}</option>`,
+          )
+          .join('')}</select></label>
+        <p class="setting-hint">先在模型编辑中的「能力声明」勾选支持视觉输入，再用眼睛图标实际测试图片识别。声明不等于验证通过。</p>
+        <button type="button" class="button secondary" data-action="save-vision-profile">保存 PPT 视觉模型</button>
         ${renderProfileEditor()}
       </div>
     `
@@ -320,11 +337,48 @@ export function createModelSettingsPage({
         ? '例如：deepseek-chat'
         : `输入 ${preset.label} 的模型 ID`
     }
+    const visionInput = document.querySelector('#aiProfileSupportsVision')
+    if (visionInput) visionInput.checked = Boolean(preset.supportsVision)
   }
 
   /** 返回 true 表示这个动作属于模型配置页，main.js 不再处理。 */
   async function handleAction(action, element) {
     switch (action) {
+      case 'use-tested-vision-profile': {
+        const profile = aiProfiles().find((p) => p.id === element.dataset.id)
+        if (!profile || !verifiedProfiles.has(profile.id))
+          throw new Error('请先完成这个模型的识图测试。')
+        state.aiConfig = await api.saveAiProfile({ ...profile, supportsVision: true }, '', false)
+        state.aiConfig = await api.setVisionProfile(profile.id)
+        render()
+        toast('已将通过识图测试的模型用于 PPT 视觉检查。', 'success')
+        break
+      }
+      case 'save-vision-profile':
+        state.aiConfig = await api.setVisionProfile(
+          document.querySelector('#pptVisionProfile')?.value || '',
+        )
+        render()
+        toast('PPT 视觉模型已保存。', 'success')
+        break
+      case 'test-vision-profile': {
+        const id = element.dataset.id
+        verifiedProfiles.delete(id)
+        visionResults.set(id, '正在发送两张合成测试图，验证图片识别…')
+        render()
+        try {
+          const result = await api.testVisionProfile(id)
+          if (result.passed) verifiedProfiles.add(id)
+          visionResults.set(
+            id,
+            `${result.passed ? '识图测试通过' : '识图测试未通过'} · 配置 ${result.model} · 返回 ${result.returnedModel || '未报告模型标识'} · ${result.elapsedMs} ms。${result.message}`,
+          )
+        } catch (error) {
+          visionResults.set(id, `识图请求失败：${error.message}`)
+        }
+        render()
+        break
+      }
       case 'open-ai-profile':
         state.aiProfileEditorOpen = true
         state.aiEditingProfileId = null
@@ -349,6 +403,8 @@ export function createModelSettingsPage({
           break
         }
         const input = collectInput()
+        visionResults.delete(input.profile.id)
+        verifiedProfiles.delete(input.profile.id)
         state.aiConfig = await api.saveAiProfile(input.profile, input.apiKey, input.clearKey)
         state.aiProfileEditorOpen = false
         state.aiEditingProfileId = null

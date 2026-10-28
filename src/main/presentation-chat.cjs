@@ -83,7 +83,7 @@ message 最多 4000 字。不能声称已经保存、导出、核验事实或获
   ]
 }
 
-function parsePresentationChat(content, input) {
+function parsePresentationChat(content, input, { sample = false } = {}) {
   const request = cleanPresentationChat(input)
   let parsed
   try {
@@ -112,7 +112,7 @@ function parsePresentationChat(content, input) {
       if (!record(slide)) throw new Error('模型页面格式无效。')
       return { ...pick(slide, slideFields), points: slide.points ?? [] }
     })
-    if (slides[0].layout !== 'cover' || slides.at(-1).layout !== 'closing')
+    if (slides[0].layout !== 'cover' || (!sample && slides.at(-1).layout !== 'closing'))
       throw new Error('新作品需要封面和结束页。')
     const deck = validatePresentationInput({ ...pick(parsed.deck, deckFields), slides })
     return { action: 'create', message, deck }
@@ -206,11 +206,16 @@ function parsePresentationChat(content, input) {
         fields.canvas = source.canvas.map((node) => objects.get(node.id))
       }
       if (source.canvas && !fields.canvas) {
+        if (fields.chart && source.canvas.filter((n) => n.type === 'chart').length !== 1)
+          throw new Error('本页图表数量不唯一，请选中具体图表对象修改。')
         fields.canvas = source.canvas.map((node) => ({
           ...node,
           ...(node.field && fields[node.field] !== undefined ? { text: fields[node.field] } : {}),
+          ...(node.type === 'chart' && fields.chart ? { chart: fields.chart } : {}),
         }))
       }
+      if (fields.canvas?.filter((n) => n.type === 'chart').length === 1)
+        fields.chart = fields.canvas.find((n) => n.type === 'chart').chart
       if (fields.canvas)
         fields.canvas = fields.canvas.map((node) => {
           const original = source.canvas?.find((n) => n.id === node.id)

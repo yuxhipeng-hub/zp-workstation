@@ -97,6 +97,32 @@ test('canceling PPTX export never writes and releases the export lock', async ()
   assert.deepEqual(calls, ['dialog', 'dialog'])
 })
 
+test('complete design returns before visual inspection so the renderer can keep editing', async () => {
+  let inspections = 0
+  const { handlers } = harness({
+    aiService: {
+      designPresentation: async () => ({
+        action: 'create',
+        deck: createPresentation(),
+        message: '整套',
+      }),
+      getConfig: () => ({ visionProfileId: 'vision' }),
+    },
+    qualityService: {
+      inspect: async () => {
+        inspections++
+        return { report: { status: 'pass' } }
+      },
+    },
+  })
+  const result = await handlers.get('presentation:design')(null, { action: 'complete' })
+  assert.equal(result.autoInspect, true)
+  assert.equal(result.visualReport.status, 'pending')
+  assert.equal(inspections, 0)
+  await handlers.get('presentation:inspect')(null, { deck: result.deck })
+  assert.equal(inspections, 1)
+})
+
 test('PPT IPC routes valid saves, deletes and draft generation to their bounded services', () => {
   const { handlers, calls } = harness()
   const deck = createPresentation()
@@ -205,6 +231,11 @@ test('PPT preload exposes only the specific presentation operations', () => {
   exposed.exportPresentation({ title: 'deck' })
   exposed.deletePresentation('id')
   exposed.choosePresentationImage()
+  exposed.designPresentation({ action: 'samples', message: '材料' })
+  exposed.inspectPresentation({ deck: {} })
+  exposed.describePresentationImage({ deck: {} })
+  exposed.testVisionProfile('model')
+  exposed.setVisionProfile('model')
   assert.deepEqual(
     calls.map((call) => call[0]),
     [
@@ -214,6 +245,11 @@ test('PPT preload exposes only the specific presentation operations', () => {
       'presentation:export',
       'presentation:delete',
       'presentation:image',
+      'presentation:design',
+      'presentation:inspect',
+      'presentation:describe-image',
+      'ai:vision-test',
+      'ai:vision-profile',
     ],
   )
   assert.equal(exposed.ipcRenderer, undefined)

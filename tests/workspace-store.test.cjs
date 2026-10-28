@@ -20,6 +20,8 @@ test('canvas objects, images and locks survive workspace reload and backup resto
   const { canvasFromScene } = require('../src/shared/presentation-canvas.mjs')
   const { buildSlideScene } = require('../src/shared/presentation.mjs')
   const deck = createPresentation()
+  deck.designDirection = 'precision'
+  deck.slides[0].visualIntent = '突出本页真实结论，保留来源。'
   deck.slides[0].canvas = canvasFromScene(buildSlideScene(deck.slides[0]), deck.slides[0])
   deck.slides[0].canvas[0].locked = true
   deck.slides[0].canvas.push({
@@ -37,6 +39,8 @@ test('canvas objects, images and locks survive workspace reload and backup resto
   deck.slides[0].background = 'F7F6F2'
   store.savePresentation(deck)
   const saved = new WorkspaceStore(directory).get().presentations[0]
+  assert.equal(saved.designDirection, 'precision')
+  assert.equal(saved.slides[0].visualIntent, deck.slides[0].visualIntent)
   assert.deepEqual(saved.slides[0].canvas, deck.slides[0].canvas)
   const backup = store.createBackup('canvas-ppt')
   store.deletePresentation(deck.id)

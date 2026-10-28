@@ -99,6 +99,9 @@ export function cleanPresentation(input, existing = null) {
     scene: choice(input.scene, PRESENTATION_SCENES, 'proposal'),
     audience: text(input.audience, 160),
     goal: text(input.goal, 500),
+    ...(['precision', 'story'].includes(input.designDirection)
+      ? { designDirection: input.designDirection }
+      : {}),
     slides,
     createdAt: existing?.createdAt || text(input.createdAt, 40) || now,
     updatedAt: text(input.updatedAt, 40) || now,
@@ -124,6 +127,11 @@ export function validatePresentationInput(input) {
   check(input.audience, 160, '听众')
   check(input.goal, 500, '演示目标')
   presentationStrategy(input.strategy, true)
+  if (
+    input.designDirection !== undefined &&
+    !['precision', 'story'].includes(input.designDirection)
+  )
+    throw new Error('设计方向无效。')
   if (!Object.hasOwn(PRESENTATION_THEMES, input.theme)) throw new Error('请选择有效的视觉主题。')
   if (!Object.hasOwn(PRESENTATION_SCENES, input.scene)) throw new Error('请选择有效的演示场景。')
   for (const slide of input.slides) {

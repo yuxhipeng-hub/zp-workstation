@@ -4,6 +4,86 @@
   color: var(--text);
 }
 
+.ppt-design-samples {
+  margin: 24px var(--ppt-gutter);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+.ppt-design-samples h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.ppt-design-samples p,
+.ppt-visual-actions p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.ppt-design-directions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.ppt-design-directions button {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+}
+.ppt-design-directions button[aria-pressed='true'] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.ppt-design-directions small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.ppt-sample-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.ppt-sample-grid article {
+  min-width: 0;
+}
+.ppt-sample-grid article > p {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.ppt-visual-actions,
+.ppt-visual-report {
+  margin: 16px var(--ppt-gutter);
+  padding: 14px 0;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.ppt-visual-actions summary {
+  cursor: pointer;
+}
+.ppt-visual-actions .ppt-inline-actions {
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.is-canvas-focused .ppt-visual-actions,
+.is-canvas-focused .ppt-visual-report {
+  grid-column: 1 / -1;
+}
+@media (max-width: 950px) {
+  .ppt-sample-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ppt-design-samples {
+    padding: 16px;
+  }
+  .ppt-design-samples .ppt-section-heading {
+    flex-wrap: wrap;
+  }
+}
+
 .ppt-studio h2,
 .ppt-studio p {
   margin: 0;

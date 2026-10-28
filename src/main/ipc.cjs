@@ -86,6 +86,8 @@ function registerIpc({
   ipcMain.handle('ai:profile-delete', (_event, id) => aiService.deleteProfile(id))
   ipcMain.handle('ai:profile-activate', (_event, id) => aiService.activateProfile(id))
   ipcMain.handle('ai:profile-test', (_event, id) => aiService.testProfile(id))
+  ipcMain.handle('ai:vision-test', (_event, id) => aiService.testVisionProfile(id))
+  ipcMain.handle('ai:vision-profile', (_event, id) => aiService.setVisionProfile(id))
   ipcMain.handle('ai:assignment-plan', async (_event, assignmentId) => {
     const assignment = workspace
       .get()

@@ -6,6 +6,7 @@ export const CONTENT_FIELDS = [
   'chart',
   'source',
   'purpose',
+  'visualIntent',
   'seconds',
   'canvas',
   'background',
@@ -38,7 +39,7 @@ function contentField(key, value) {
     if (!Number.isInteger(value) || value < 1 || value > 3600) throw new Error('页面建议时长无效。')
     return value
   }
-  if (key === 'source' || key === 'purpose')
+  if (key === 'source' || key === 'purpose' || key === 'visualIntent')
     return string(value, 200, key === 'source' ? '来源' : '页面目的')
   if (key === 'items')
     return array(value, 1, 5, '阶段/指标').map((item) => {

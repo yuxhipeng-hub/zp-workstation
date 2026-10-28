@@ -20,6 +20,13 @@ const {
   allocateSlideSeconds,
 } = require('./presentation-planner.cjs')
 const { presentationReviewMessages, parsePresentationReview } = require('./presentation-review.cjs')
+const { validateImageData } = require('../shared/presentation-canvas.mjs')
+const { visionProbe, checkVisionProbe } = require('./vision-probe.cjs')
+const {
+  materializeDesign,
+  samplePageIndices,
+  DESIGN_DIRECTIONS,
+} = require('../shared/presentation-design.mjs')
 const REQUEST_TIMEOUT_MS = 90_000
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 const API_PROTOCOLS = new Set(['chat-completions', 'responses'])
@@ -115,7 +122,14 @@ function extractMessageContent(payload) {
   if (typeof payload?.output_text === 'string') return payload.output_text.trim()
   if (Array.isArray(payload?.output)) {
     const text = payload.output
+      .filter(
+        (item) =>
+          item?.type === 'message' &&
+          (!item.role || item.role === 'assistant') &&
+          (!item.channel || item.channel === 'final'),
+      )
       .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
+      .filter((part) => part?.type === 'output_text')
       .map((part) => part?.text || '')
       .join('')
       .trim()
@@ -240,7 +254,14 @@ class AiService {
     const activeProfileId = profiles.some((profile) => profile.id === configuredActiveId)
       ? configuredActiveId
       : profiles[0]?.id || ''
-    return { profiles, activeProfileId }
+    const visionProfileId = this.settings.get().presentationVisionProfileId || ''
+    return {
+      profiles,
+      activeProfileId,
+      visionProfileId: profiles.some((p) => p.id === visionProfileId && p.supportsVision)
+        ? visionProfileId
+        : '',
+    }
   }
 
   persist(profiles, activeProfileId) {
@@ -294,6 +315,68 @@ class AiService {
     return this.persist(profiles, target)
   }
 
+  setVisionProfile(id) {
+    if (typeof id !== 'string' || id.length > 80) throw new Error('视觉模型编号无效。')
+    if (id && !this.storedProfiles().some((p) => p.id === id && p.supportsVision))
+      throw new Error('请选择已声明支持视觉输入的模型。')
+    this.settings.patch({ presentationVisionProfileId: id })
+    return this.getConfig()
+  }
+
+  async requestVision(profile, prompt, images, options = {}) {
+    if (
+      typeof prompt !== 'string' ||
+      !prompt.trim() ||
+      prompt.length > 80000 ||
+      !Array.isArray(images) ||
+      images.length < 1 ||
+      images.length > 16
+    )
+      throw new Error('视觉请求参数无效。')
+    return this.requestChat(
+      profile,
+      [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            ...images.map((data) => ({
+              type: 'image_url',
+              image_url: { url: validateImageData(data), detail: 'high' },
+            })),
+          ],
+        },
+      ],
+      options,
+    )
+  }
+
+  async testVisionProfile(id) {
+    const profile = this.resolveProfile(id)
+    const probe = visionProbe()
+    const started = Date.now()
+    let returnedModel = ''
+    const content = await this.requestVision(profile, probe.prompt, probe.images, {
+      maxTokens: 600,
+      temperature: 0,
+      onMetadata: (meta) => {
+        returnedModel = meta.model
+      },
+    })
+    const passed = checkVisionProbe(content, probe.expected)
+    return {
+      passed,
+      observation: cleanText(content, 1600),
+      model: profile.model,
+      returnedModel,
+      protocol: profile.protocol,
+      elapsedMs: Date.now() - started,
+      message: passed
+        ? '两张测试图的颜色、形状与顺序全部识别正确。'
+        : '接口有回复，但识图结果未通过测试；请核对模型和接口的图片支持。',
+    }
+  }
+
   resolveProfile(profileId = '') {
     const config = this.getConfig()
     const id = cleanText(profileId, 80) || config.activeProfileId
@@ -321,7 +404,11 @@ class AiService {
     return new Error(detail || `模型请求失败（${response.status}）。`)
   }
 
-  async requestChat(profile, messages, { maxTokens = 1600, temperature = 0.2 } = {}) {
+  async requestChat(
+    profile,
+    messages,
+    { maxTokens = 1600, temperature = 0.2, onMetadata = null } = {},
+  ) {
     const protocol = API_PROTOCOLS.has(profile.protocol) ? profile.protocol : 'chat-completions'
     const body = {
       model: profile.model,
@@ -338,7 +425,24 @@ class AiService {
         .filter((message) => message.role !== 'system')
         .map((message) => message.content)
         .join('\n\n')
-      body.input = input
+      body.input = messages.some((message) => Array.isArray(message.content))
+        ? messages
+            .filter((m) => m.role !== 'system')
+            .map((m) => ({
+              role: m.role,
+              content: Array.isArray(m.content)
+                ? m.content.map((part) =>
+                    part.type === 'image_url'
+                      ? {
+                          type: 'input_image',
+                          image_url: part.image_url.url,
+                          detail: part.image_url.detail || 'auto',
+                        }
+                      : { type: 'input_text', text: part.text },
+                  )
+                : [{ type: 'input_text', text: m.content }],
+            }))
+        : input
       body.max_output_tokens = maxTokens
       if (instructions) body.instructions = instructions
       if (profile.reasoningEffort) body.reasoning = { effort: profile.reasoningEffort }
@@ -374,8 +478,15 @@ class AiService {
       payload = null
     }
     if (!response.ok) throw this.errorFromResponse(response, raw, payload)
+    onMetadata?.({ model: cleanText(payload?.model, 160) })
     const content = extractMessageContent(payload)
-    if (!content) throw new Error('模型没有返回可用内容。')
+    if (!content)
+      throw new Error(
+        payload?.status === 'incomplete' ||
+          payload?.incomplete_details?.reason === 'max_output_tokens'
+          ? '模型输出未完成，请提高输出上限或降低推理强度。'
+          : '模型没有返回可用内容。',
+      )
     return content
   }
 
@@ -389,7 +500,7 @@ class AiService {
           content: '请只回复 OK，不要输出其他内容。',
         },
       ],
-      { maxTokens: Math.min(64, profile.maxOutputTokens || 64), temperature: 0 },
+      { maxTokens: Math.min(2048, Math.max(512, profile.maxOutputTokens || 512)), temperature: 0 },
     )
     this.logger?.info('ai', `模型连接测试成功：${profile.label} / ${profile.model}`)
     return { ok: true, message: content.slice(0, 120), profileId: profile.id }
@@ -435,28 +546,79 @@ class AiService {
     }
   }
 
-  async chatPresentation(input) {
+  async designPresentation(input) {
+    if (
+      !input ||
+      !['samples', 'complete'].includes(input.action) ||
+      !Object.hasOwn(DESIGN_DIRECTIONS, input.direction || 'precision')
+    )
+      throw new Error('设计请求无效。')
+    const request = cleanPresentationChat({ message: input.message, history: input.history })
+    const plan =
+      input.action === 'complete'
+        ? parsePresentationPlan(JSON.stringify({ action: 'plan', plan: input.plan })).plan
+        : null
+    return this.chatPresentation(request, {
+      planOverride: plan,
+      samples: input.action === 'samples',
+      direction: input.direction || 'precision',
+    })
+  }
+
+  async chatPresentation(input, { planOverride = null, samples = false, direction = null } = {}) {
     const request = cleanPresentationChat(input)
     if (this.presentationBusy) throw new Error('已有 PPT 请求正在生成，请稍候。')
     const profile = this.resolveProfile()
     this.presentationBusy = true
     try {
-      let plan
-      if (!request.deck) {
-        const planning = await this.requestChat(profile, presentationPlanningMessages(request), {
+      let plan = planOverride,
+        designPlan,
+        indices
+      if (!request.deck && !plan) {
+        const planningMessages = presentationPlanningMessages(request)
+        const planning = await this.requestChat(profile, planningMessages, {
           maxTokens: 4500,
           temperature: 0.3,
         })
-        const planned = parsePresentationPlan(planning)
+        let planned
+        try {
+          planned = parsePresentationPlan(planning)
+        } catch (error) {
+          const repaired = await this.requestChat(
+            profile,
+            [
+              ...planningMessages,
+              { role: 'assistant', content: planning },
+              {
+                role: 'user',
+                content: `策划格式未通过：${error.message}。只修正JSON与字段格式，不新增事实；未指定时长时省略durationSeconds，不输出null或0。重新输出完整plan或clarify。`,
+              },
+            ],
+            { maxTokens: 6000, temperature: 0.2 },
+          )
+          planned = parsePresentationPlan(repaired)
+        }
         if (planned.action === 'clarify')
           return { ...planned, profile: { label: profile.label, model: profile.model } }
         plan = planned.plan
       }
+      if (samples && plan) {
+        designPlan = plan
+        indices = samplePageIndices(plan)
+        const strategy = { ...plan.strategy }
+        delete strategy.durationSeconds
+        plan = { ...plan, strategy, pages: indices.map((i) => plan.pages[i]) }
+      }
       const messages = presentationChatMessages(request)
       if (plan) {
         messages[0].content += `\n已完成策划，请按 plan 制作恰好 ${plan.pages.length} 页，逐页落实 purpose、材料事实与信息缺口，输出 action=create。`
+        if (samples)
+          messages[0].content +=
+            '\n本轮只制作指定三页视觉样稿，允许不含结束页，严格按 plan.pages 的版式和顺序。'
+        if (direction)
+          messages[0].content += `\n采用${DESIGN_DIRECTIONS[direction].name}方向：${DESIGN_DIRECTIONS[direction].description}。文字精炼，突出每页结论与真实证据。`
         messages[messages.length - 1].content =
-          `本轮主动提交的内容与已完成的策划（JSON 数据）：\n${JSON.stringify({ phase: 'compose', message: request.message, deck: null, plan })}`
+          `本轮主动提交的内容与已完成的策划（JSON 数据）：\n${JSON.stringify({ phase: samples ? 'samples' : 'compose', message: request.message, deck: null, plan, ...(indices ? { sampleIndices: indices } : {}) })}`
       }
       const options = {
         maxTokens: Math.min(16000, Math.max(profile.maxOutputTokens || 1800, 10000)),
@@ -464,9 +626,11 @@ class AiService {
       }
       let content = await this.requestChat(profile, messages, options)
       const parse = (value) => {
-        const result = parsePresentationChat(value, request)
+        const result = parsePresentationChat(value, request, { sample: samples })
         if (plan && (result.action !== 'create' || result.deck.slides.length !== plan.pages.length))
           throw new Error('成品页数与策划不一致。')
+        if (samples && result.deck.slides.some((slide, i) => slide.layout !== plan.pages[i].layout))
+          throw new Error('样稿版式与策划不一致。')
         if (plan) {
           result.deck.strategy = plan.strategy
           const seconds = allocateSlideSeconds(plan)
@@ -505,14 +669,33 @@ class AiService {
         const seconds = allocateSlideSeconds(plan)
         result.deck.slides.forEach((slide, index) => {
           if (!slide.purpose) slide.purpose = plan.pages[index].purpose
+          if (!slide.visualIntent && plan.pages[index].visualIntent)
+            slide.visualIntent = plan.pages[index].visualIntent
           if (seconds) slide.seconds = seconds[index]
         })
-        const reviewContent = await this.requestChat(
-          profile,
-          presentationReviewMessages(request, result.deck),
-          { maxTokens: 6000, temperature: 0.2 },
-        )
-        const reviewed = parsePresentationReview(reviewContent, request, result.deck)
+        const reviewMessages = presentationReviewMessages(request, result.deck, { samples })
+        const reviewContent = await this.requestChat(profile, reviewMessages, {
+          maxTokens: 6000,
+          temperature: 0.2,
+        })
+        let reviewed
+        try {
+          reviewed = parsePresentationReview(reviewContent, request, result.deck)
+        } catch (error) {
+          const repaired = await this.requestChat(
+            profile,
+            [
+              ...reviewMessages,
+              { role: 'assistant', content: reviewContent },
+              {
+                role: 'user',
+                content: `复核结果未通过：${error.message}。保留当前页数、顺序与版式，禁止replacementSlides。只返回accept或按已有页面id的必要局部edit，重新输出完整JSON。`,
+              },
+            ],
+            { maxTokens: 8000, temperature: 0.2 },
+          )
+          reviewed = parsePresentationReview(repaired, request, result.deck)
+        }
         if (
           seconds &&
           reviewed.deck.slides.some((slide, index) => slide.seconds !== seconds[index])
@@ -523,6 +706,15 @@ class AiService {
         result.deck = reviewed.deck
       }
       this.logger?.info('ai', `PPT 对话处理完成：${result.action}`)
+      if (direction && result.deck) result.deck = materializeDesign(result.deck, direction)
+      if (samples)
+        return {
+          ...result,
+          action: 'samples',
+          plan: designPlan,
+          sampleIndices: indices,
+          profile: { label: profile.label, model: profile.model },
+        }
       return { ...result, profile: { label: profile.label, model: profile.model } }
     } finally {
       this.presentationBusy = false

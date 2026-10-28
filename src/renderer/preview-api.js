@@ -1184,6 +1184,24 @@ export function createPreviewLauncherApi() {
     async getAiConfig() {
       return clone(state.ai)
     },
+    async testVisionProfile() {
+      throw new Error('浏览器预览不调用真实视觉模型，请在桌面应用中测试。')
+    },
+    async designPresentation() {
+      throw new Error('浏览器预览不调用真实模型，请在桌面应用中制作设计样稿。')
+    },
+    async inspectPresentation() {
+      throw new Error('实际 PPTX 渲染与视觉检查需要桌面应用。')
+    },
+    async describePresentationImage() {
+      throw new Error('图片理解需要在桌面应用中配置视觉模型。')
+    },
+    async setVisionProfile(id) {
+      const profile = state.ai.profiles.find((p) => p.id === id)
+      if (id && !profile?.supportsVision) throw new Error('请选择支持视觉输入的模型。')
+      state.ai.visionProfileId = id
+      return clone(state.ai)
+    },
     async saveAiProfile(profile, apiKey, clearKey = false) {
       const existingIndex = state.ai.profiles.findIndex((item) => item.id === profile?.id)
       const existing = existingIndex >= 0 ? state.ai.profiles[existingIndex] : null

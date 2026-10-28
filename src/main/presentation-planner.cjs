@@ -19,6 +19,7 @@ layout 可用 ${Object.keys(PRESENTATION_LAYOUTS).join('|')}。能力/方案差�
 scene 可用 ${Object.keys(PRESENTATION_SCENES).join('|')}，theme 可用 ${Object.keys(PRESENTATION_THEMES).join('|')}。
 需要补充时：{"action":"clarify","message":"已理解的要求与集中提出的问题"}。
 否则：{"action":"plan","plan":{"title":"作品名","audience":"听众","goal":"希望听众做出的判断或行动","scene":"proposal","theme":"editorial","strategy":{"thesis":"整套叙事主线，最多500字","requirements":["必须满足的要求，最多12条，每条200字"],"missing":["明确缺失的事实或证据，最多12条，每条200字"]},"pages":[{"title":"结论式页面标题，最多100字","purpose":"该页如何推进主线，最多200字","layout":"版式"}]}}。如果材料明确给出陈述时长，在 strategy.durationSeconds 中写对应的总秒数（例如七分钟为420）；没有要求则省略此字段。不要在备注中手写各页时间，系统会分配建议用时。
+每页可增加 visualIntent，最多200字，说明视觉重点、需要突出的事实和信息层次。整套保持统一字体、颜色与留白，避免连续使用同一种表达；不靠装饰掩盖事实缺口。
 策划 3–16 页，尊重用户指定页数；第一页面 cover，最后一页 closing。按评分或决策的重要程度分配篇幅，不把大部分页面用来介绍背景。`,
     },
     ...request.history,
@@ -77,6 +78,7 @@ function parsePresentationPlan(content) {
       title: string(page.title, 100, '策划标题'),
       purpose: string(page.purpose, 200, '页面目的'),
       layout: page.layout,
+      visualIntent: string(page.visualIntent, 200, '视觉意图', false),
     }
   })
   if (pages[0].layout !== 'cover' || pages.at(-1).layout !== 'closing')

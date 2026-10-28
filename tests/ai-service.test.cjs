@@ -32,6 +32,54 @@ function jsonResponse(payload, status = 200) {
   }
 }
 
+test('Responses extracts the final message without concatenating reasoning into structured JSON', async (t) => {
+  const { directory, service } = createHarness(async () =>
+    jsonResponse({
+      output: [
+        {
+          type: 'reasoning',
+          content: [{ type: 'reasoning_text', text: '先分析图片，不属于最终JSON。' }],
+        },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: '{"ok":true}' }],
+        },
+      ],
+    }),
+  )
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const result = await service.requestChat(
+    { baseUrl: 'http://localhost:1234/v1', protocol: 'responses', model: 'test' },
+    [{ role: 'user', content: '测试' }],
+  )
+  assert.equal(result, '{"ok":true}')
+})
+
+test('connection tests reserve enough output for thinking models to reach a final reply', async (t) => {
+  const { directory, service } = createHarness(async (_url, options) =>
+    jsonResponse(
+      JSON.parse(options.body).max_output_tokens < 512
+        ? {
+            status: 'incomplete',
+            incomplete_details: { reason: 'max_output_tokens' },
+            output: [
+              { type: 'reasoning', content: [{ type: 'reasoning_text', text: '分析连接测试' }] },
+            ],
+          }
+        : { output_text: 'OK' },
+    ),
+  )
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile({
+    label: '测试',
+    model: 'test',
+    protocol: 'responses',
+    baseUrl: 'http://localhost:5432/v1',
+  })
+  assert.equal((await service.testProfile()).ok, true)
+})
+
 test('generates a PPT draft using the selected model without returning keys or persisting materials', async (t) => {
   const { createPresentation } = require('../src/shared/presentation.mjs')
   const requests = []
@@ -150,6 +198,8 @@ test('PPT conversation shares the generation lock and releases it after malforme
     /正在生成/,
   )
   finish(jsonResponse({ choices: [{ message: { content: '{' } }] }))
+  await new Promise((resolve) => setImmediate(resolve))
+  finish(jsonResponse({ choices: [{ message: { content: '{' } }] }))
   await assert.rejects(pending, /完整的 JSON/)
   assert.equal(service.presentationBusy, false)
   const retry = service.chatPresentation({ message: '重试' })
@@ -204,6 +254,31 @@ test('PPT validation failures stop after one repair and release the generation l
   assert.equal(calls, 3)
   assert.equal(service.presentationBusy, false)
   assert.equal(fs.existsSync(path.join(directory, 'workspace.json')), false)
+})
+
+test('planning and content review each permit one bounded format repair without changing source material', async (t) => {
+  const { createPresentation } = require('../src/shared/presentation.mjs')
+  const deck = createPresentation()
+  const replies = [
+    '{',
+    JSON.stringify(planningReply(deck)),
+    JSON.stringify({ action: 'create', message: '已制作', deck }),
+    '{',
+    JSON.stringify({ action: 'accept', message: '已复核' }),
+  ]
+  const requests = []
+  const { directory, service } = createHarness(async (_url, options) => {
+    requests.push(JSON.parse(options.body))
+    return jsonResponse({ choices: [{ message: { content: replies.shift() } }] })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile({ label: '测试', model: 'test', baseUrl: 'http://localhost:5432/v1' })
+  const result = await service.chatPresentation({ message: '合成材料，允许留空' })
+  assert.equal(result.action, 'create')
+  assert.equal(requests.length, 5)
+  assert.match(requests[1].messages.at(-1).content, /只修正JSON/)
+  assert.match(requests[4].messages.at(-1).content, /禁止replacementSlides/)
+  assert.equal(service.presentationBusy, false)
 })
 
 test('stores model metadata without exposing the encrypted API key', (t) => {

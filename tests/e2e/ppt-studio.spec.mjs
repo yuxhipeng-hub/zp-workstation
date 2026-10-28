@@ -100,7 +100,8 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
           },
         }
       }
-      if (!['plan', 'accept'].includes(reply.action)) requests.push({ payload, context })
+      if (!['plan', 'accept'].includes(reply.action) && context.phase !== 'samples')
+        requests.push({ payload, context })
       response.writeHead(200, { 'Content-Type': 'application/json' })
       response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }))
     })
@@ -137,6 +138,8 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
       .locator('#ppt-message')
       .fill('我是机械专业大二学生，想走智能制造方向，先做，项目经历待补充。')
     await window.locator('#ppt-message').press('Control+Enter')
+    await expect(window.locator('.ppt-sample-grid article')).toHaveCount(3)
+    await window.getByRole('button', { name: '按此方向生成整套', exact: true }).click()
     await expect(window.locator('[data-ppt-project-title]')).toHaveText('智能制造职业规划')
     await expect(window.locator('.ppt-thumbnail')).toHaveCount(3)
     await expect(window.locator('.ppt-inspector')).toHaveCount(0)
@@ -260,7 +263,14 @@ test('PPT plans structured pages, previews chart edits and exports an editable n
           : context.phase === 'plan'
             ? planningReply(deck)
             : !context.deck
-              ? { action: 'create', message: '已完成策划和页面制作。', deck }
+              ? {
+                  action: 'create',
+                  message: '已完成策划和页面制作。',
+                  deck:
+                    context.phase === 'samples'
+                      ? { ...deck, slides: context.sampleIndices.map((i) => deck.slides[i]) }
+                      : deck,
+                }
               : {
                   action: 'edit',
                   message: '当前页切换为折线图，数值与来源保持。',
@@ -298,6 +308,19 @@ test('PPT plans structured pages, previews chart edits and exports an editable n
       .locator('#ppt-message')
       .fill('使用这份合成商业材料制作提案，保留 3、4、1 小时与数据来源。')
     await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-sample-grid article')).toHaveCount(3)
+    await window.getByRole('button', { name: '叙事编辑', exact: false }).click()
+    await expect(window.locator('.ppt-design-samples')).toContainText('当前为 叙事编辑')
+    fs.mkdirSync(screenshotDir, { recursive: true })
+    for (const theme of ['dark', 'light']) {
+      await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+      await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
+      await window.locator('.ppt-design-samples').screenshot({
+        path: path.join(screenshotDir, `design-samples-${theme}.png`),
+        animations: 'disabled',
+      })
+    }
+    await window.getByRole('button', { name: '按此方向生成整套', exact: true }).click()
     await expect(window.locator('.ppt-thumbnail')).toHaveCount(8)
     await expect(window.locator('.ppt-inspector')).toHaveCount(0)
     await window.locator('.ppt-strategy summary').click()
@@ -334,6 +357,7 @@ test('PPT plans structured pages, previews chart edits and exports an editable n
     expect(edited.slides[2].canvas.find((n) => n.type === 'chart').chart.series[0].values).toEqual([
       5, 4, 1,
     ])
+    expect(edited.slides[2].chart.series[0].values).toEqual([5, 4, 1])
     await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
     await expect(window.locator('.ppt-editor-bar button[data-action="ppt-export"]')).toBeEnabled()
     await expect

@@ -117,6 +117,8 @@ export function createPptCanvasEditor({
     }
     if (key.startsWith('chart.')) item.chart[key.slice(6)] = value
     else item[key] = value
+    if (item.type === 'chart' && slide().canvas.filter((n) => n.type === 'chart').length === 1)
+      slide().chart = structuredClone(item.chart)
     if (key === 'text') {
       if (item.field) slide()[item.field] = value
       if (item.role) delete item.role
@@ -139,6 +141,8 @@ export function createPptCanvasEditor({
         checkpointOnce(chartKey)
         chart.series[Number(match[2])].values[Number(match[3])] = Number(element.value)
       }
+      if (slide().canvas.filter((n) => n.type === 'chart').length === 1)
+        slide().chart = structuredClone(chart)
       refresh()
       return true
     }

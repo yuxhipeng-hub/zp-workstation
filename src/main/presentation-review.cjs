@@ -1,6 +1,6 @@
 const { presentationChatMessages, parsePresentationChat } = require('./presentation-chat.cjs')
 
-function presentationReviewMessages(input, deck) {
+function presentationReviewMessages(input, deck, { samples = false } = {}) {
   const messages = presentationChatMessages({ ...input, deck, selectedSlideId: null })
   messages[0].content += `\n本轮只做内容复核。对照原始材料、对话和当前作品逐页检查：
 1. 是否把收到反馈写成已按反馈修改、把计划写成已完成、把课程成果写成获奖、把预估收益写成实际收益。
@@ -11,6 +11,9 @@ function presentationReviewMessages(input, deck) {
 有问题时输出 action=edit 和按真实页面 id 的 changes.slides 局部补丁，沿用上面的编辑格式，不更换整套作品。没有证据就删除断言或改为【待补充】/建议，不编造替代事实。所有页面的主题与顺序保持，禁止 clarify/create。此检查只比较材料一致性，不声称完成现实世界事实核验。`
   messages[messages.length - 1].content =
     `原始输入与待复核作品（JSON 数据）：\n${JSON.stringify({ phase: 'review', message: input.message, deck, selectedSlideId: null })}`
+  if (samples)
+    messages[0].content +=
+      '\n当前只制作了从完整策划中抽取的三页视觉样稿。不要检查整套页数或章节覆盖，不要补全其他页面。只核对这三页已出现的事实与材料是否一致；保留页数、顺序、版式，禁止replacementSlides。'
   return messages
 }
 function parsePresentationReview(content, input, deck) {

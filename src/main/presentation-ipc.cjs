@@ -4,6 +4,7 @@ const { cleanPresentationBrief } = require('./presentation-ai.cjs')
 const { cleanPresentationChat } = require('./presentation-chat.cjs')
 const { exportPresentation } = require('./presentation-export.cjs')
 const { readPresentationImage } = require('./presentation-image.cjs')
+const { PresentationQuality } = require('./presentation-quality.cjs')
 
 /** PPT 白名单独立注册，进程、对话框与保存依赖均由主进程注入。 */
 function registerPresentationIpc({
@@ -15,6 +16,7 @@ function registerPresentationIpc({
   getExportDirectory,
   onPresentationDirty,
   writePresentation = exportPresentation,
+  qualityService = new PresentationQuality({ aiService }),
 }) {
   ipcMain.handle('presentation:dirty', (_event, value) => {
     if (typeof value !== 'boolean') throw new Error('作品状态无效。')
@@ -33,6 +35,34 @@ function registerPresentationIpc({
   )
   ipcMain.handle('presentation:chat', (_event, input) =>
     aiService.chatPresentation(cleanPresentationChat(input)),
+  )
+  let designBusy = false
+  ipcMain.handle('presentation:design', async (_event, input) => {
+    if (designBusy) throw new Error('已有设计任务正在进行。')
+    designBusy = true
+    try {
+      const result = await aiService.designPresentation(input)
+      if (input.action === 'complete' && result.deck) {
+        if (aiService.getConfig().visionProfileId) {
+          result.autoInspect = true
+          result.visualReport = {
+            status: 'pending',
+            message: '整套已生成，视觉检查将在后台进行，可以继续编辑。',
+          }
+        } else
+          result.visualReport = {
+            status: 'not-configured',
+            message: '未指定视觉模型，尚未进行截图视觉检查。',
+          }
+      }
+      return result
+    } finally {
+      designBusy = false
+    }
+  })
+  ipcMain.handle('presentation:inspect', (_event, input) => qualityService.inspect(input))
+  ipcMain.handle('presentation:describe-image', (_event, input) =>
+    qualityService.describeImage(input),
   )
   let imageBusy = false
   ipcMain.handle('presentation:image', async () => {

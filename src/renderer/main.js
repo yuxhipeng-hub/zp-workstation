@@ -1394,6 +1394,12 @@ function render(options = {}) {
   const samePage = view.dataset.page === state.page
   view.classList.toggle('is-settled', samePage)
   const previousScrollTop = view.scrollTop
+  const disclosureSnapshots = samePage
+    ? [...view.querySelectorAll('details[data-disclosure-id]')].map((element) => ({
+        key: element.dataset.disclosureId,
+        open: element.open,
+      }))
+    : []
   const nestedScrollSnapshots = [...view.querySelectorAll('[data-scroll-preserve]')].map(
     (element) => ({
       key: element.dataset.scrollPreserve,
@@ -1436,6 +1442,10 @@ function render(options = {}) {
     state.page === 'today'
       ? content
       : `<div class="workbench-canvas route-canvas" data-route-canvas>${content}</div>`
+  for (const { key, open } of disclosureSnapshots) {
+    const details = view.querySelector(`details[data-disclosure-id="${CSS.escape(key)}"]`)
+    if (details) details.open = open
+  }
   syncOnboardingOverlay()
   refreshIcons()
   syncExperimentMorph()
