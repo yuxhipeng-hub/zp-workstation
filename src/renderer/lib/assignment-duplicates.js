@@ -15,10 +15,13 @@
  * @property {string} [notes]
  * @property {string} [priority]
  * @property {number} [batchIndex]
+ * @property {string} [sourceQuote]
+ * @property {string} [previousDueAt]
  */
 
 /**
  * @typedef {object} DuplicateMatch
+ * @property {'reschedule'} [kind]
  * @property {number} [batchIndex]
  * @property {AssignmentLike} assignment
  * @property {'high' | 'medium'} confidence
@@ -98,6 +101,36 @@ export function findDuplicateAssignment(draft, assignments) {
 }
 
 /**
+ * 仅提示有明确更正/延期依据且能唯一定位的日期变更，不自动覆盖。
+ * @param {AssignmentLike} draft
+ * @param {AssignmentLike[]} assignments
+ * @returns {DuplicateMatch | null}
+ */
+export function findAssignmentChange(draft, assignments) {
+  const evidence = `${draft.notes || ''}\n${draft.sourceQuote || ''}`
+  if (!/(?:延期|延后|延至|提前|更正|改期|截止.{0,12}(?:调整|更改|改为))/.test(evidence)) return null
+  const title = assignmentTitleKey(draft.title)
+  const course = assignmentCourseKey(draft.course)
+  const due = dueDateKey(draft.dueAt)
+  const previous = dueDateKey(draft.previousDueAt)
+  if (!title || !due) return null
+  const candidates = assignments.filter((item) => {
+    const oldDue = dueDateKey(item.dueAt)
+    const otherCourse = assignmentCourseKey(item.course)
+    return (
+      assignmentTitleKey(item.title) === title &&
+      oldDue &&
+      oldDue !== due &&
+      (!previous || previous === oldDue) &&
+      (!course || !otherCourse || course === otherCourse)
+    )
+  })
+  return candidates.length === 1
+    ? { assignment: candidates[0], confidence: 'medium', kind: 'reschedule' }
+    : null
+}
+
+/**
  * 生成“合并到已有作业”时的补丁：只补已有作业为空的字段，不覆盖原有内容。
  * @param {AssignmentLike | null | undefined} existing
  * @param {AssignmentLike | null | undefined} draft
@@ -116,4 +149,32 @@ export function buildAssignmentMergePatch(existing, draft) {
     patch.notes = String(draft?.notes).trim()
   }
   return patch
+}
+
+/** 仅在用户明确选择“更新截止日期”后使用。
+ * @param {AssignmentLike} existing
+ * @param {AssignmentLike} draft
+ */
+export function buildAssignmentDeadlinePatch(existing, draft) {
+  const dueAt = dueDateKey(draft.dueAt)
+  if (!dueAt) throw new Error('新的截止日期无效，请重新核对。')
+  const oldNotes = String(existing.notes || '')
+    .replace(/^截止时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}\s*$/gm, '')
+    .trim()
+  const newNotes = String(draft.notes || '').trim()
+  const notes = [oldNotes, oldNotes.includes(newNotes) ? '' : newNotes].filter(Boolean).join('\n')
+  if (notes.length > 2000) throw new Error('更新后的备注超过 2000 字，请缩短备注后重试。')
+  return { ...buildAssignmentMergePatch(existing, draft), dueAt, notes }
+}
+
+/** 仅同步应用生成的截止说明，不改写用户的其他备注。
+ * @param {string} notes
+ * @param {string} dueAt
+ */
+export function syncAssignmentDeadlineNotes(notes, dueAt) {
+  const date = dueDateKey(dueAt)
+  return notes.replace(
+    /^截止(?:时间：\d{4}-\d{2}-\d{2} |时刻：)(\d{2}:\d{2})(?:（日期待确认）)?$/gm,
+    (_line, time) => (date ? `截止时间：${date} ${time}` : `截止时刻：${time}（日期待确认）`),
+  )
 }

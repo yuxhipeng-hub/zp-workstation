@@ -159,3 +159,44 @@ test('cleans source evidence without treating invalid image numbers as evidence'
   assert.equal(draft.sourceImage, 20)
   assert.equal(invalid.sourceImage, undefined)
 })
+
+test('keeps explicit and quoted deadline times in notes that survive assignment creation', (t) => {
+  const fs = require('node:fs')
+  const os = require('node:os')
+  const path = require('node:path')
+  const { WorkspaceStore } = require('../src/main/workspace-store.cjs')
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-deadline-time-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const drafts = cleanExtractedAssignments([
+    { title: '物理报告', dueAt: '2026-10-31', dueTime: '18:00', notes: '交PDF' },
+    { title: 'Python程序', dueAt: '2026-10-29', sourceQuote: '明天23:59前提交源码和截图。' },
+  ])
+  assert.match(drafts[0].notes, /截止时间：2026-10-31 18:00/)
+  assert.match(drafts[1].notes, /截止时间：2026-10-29 23:59/)
+  const store = new WorkspaceStore(directory)
+  for (const draft of drafts) store.createAssignment(draft)
+  const saved = new WorkspaceStore(directory).get().assignments
+  assert.ok(saved.some((item) => item.notes.includes('2026-10-31 18:00')))
+  assert.ok(saved.some((item) => item.notes.includes('2026-10-29 23:59')))
+})
+
+test('does not guess invalid or conflicting deadline times', () => {
+  const drafts = cleanExtractedAssignments([
+    { title: '无效时刻', dueAt: '2026-10-31', dueTime: '25:70' },
+    { title: '多时刻', dueAt: '2026-10-31', sourceQuote: '18:00前交报告，20:00前交源码' },
+    { title: '仅聊天时间', dueAt: '2026-10-31', sourceQuote: '09:00 老师：截止日期另行通知' },
+  ])
+  assert.ok(drafts.every((draft) => !draft.notes.includes('截止时间：')))
+})
+
+test('normalizes single digit and full width hours and retains times with an unknown date', () => {
+  const drafts = cleanExtractedAssignments([
+    { title: '单数字', dueAt: '2026-11-02', dueTime: '9:00' },
+    { title: '全角', dueAt: '2026-11-02', dueTime: '１８：００' },
+    { title: '未知日期', dueTime: '18:00' },
+  ])
+  assert.match(drafts[0].notes, /2026-11-02 09:00/)
+  assert.match(drafts[1].notes, /2026-11-02 18:00/)
+  assert.equal(drafts[2].dueAt, '')
+  assert.match(drafts[2].notes, /截止时刻：18:00（日期待确认）/)
+})

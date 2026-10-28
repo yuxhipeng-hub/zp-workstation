@@ -1677,3 +1677,125 @@ test('merges supplementary requirements across image batches after confirmation'
     await new Promise((resolve) => server.close(resolve))
   }
 })
+
+test('requires confirmation for cross-batch and existing deadline changes and persists exact times', async () => {
+  const userDataDir = createUserDataDir()
+  const imagePath = path.join(userDataDir, 'notice.png')
+  fs.writeFileSync(
+    imagePath,
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  )
+  let calls = 0
+  const server = http.createServer((request, response) => {
+    request.resume()
+    request.on('end', () => {
+      calls += 1
+      const assignments =
+        calls === 1
+          ? [
+              {
+                title: '高等数学第3章习题',
+                course: '高等数学',
+                dueAt: '2026-10-30',
+                dueTime: '23:59',
+                notes: '完成12、15、18题',
+                sourceImage: 1,
+              },
+              {
+                title: '大学物理实验报告一',
+                course: '大学物理',
+                dueAt: '2026-10-31',
+                sourceQuote: '10月31日18:00前交PDF。',
+                notes: '数据处理和误差分析',
+                sourceImage: 1,
+              },
+            ]
+          : [
+              {
+                title: '高等数学第3章习题',
+                course: '高等数学',
+                dueAt: calls === 2 ? '2026-11-02' : '2026-11-05',
+                previousDueAt: calls === 2 ? '2026-10-30' : '2026-11-02',
+                dueTime: '23:59',
+                notes: '更正：延期，其他要求不变',
+                sourceImage: 1,
+              },
+            ]
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({ complete: true, assignments }) } }],
+        }),
+      )
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  fs.writeFileSync(
+    path.join(userDataDir, 'settings.json'),
+    JSON.stringify({
+      onboarding: { welcomeSeen: true },
+      aiProfiles: [
+        {
+          id: 'deadline',
+          label: '日期测试',
+          baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+          model: 'test',
+          supportsVision: true,
+          protocol: 'chat-completions',
+        },
+      ],
+      activeAiProfileId: 'deadline',
+    }),
+  )
+  const app = await launchWorkstation(userDataDir)
+  try {
+    const window = await app.firstWindow()
+    await window.locator('.nav-item[data-page="assignments"]').click()
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await window.locator('#smartEntryImages').setInputFiles(Array(5).fill(imagePath))
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('.smart-entry-draft')).toHaveCount(3)
+    await expect(window.locator('[data-smart-draft-decision]')).toHaveValue('review')
+    await expect(window.locator('.smart-entry-duplicate:not([hidden])')).toContainText(
+      '2026-10-30 → 2026-11-02',
+    )
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(window.locator('.smart-entry-error')).toContainText('请先确认截止日期变更')
+    expect(fs.existsSync(path.join(userDataDir, 'workspace.json'))).toBe(false)
+    await expect(window.locator('.assignment-card')).toHaveCount(0)
+    await window.locator('[data-smart-draft-decision]').selectOption('update')
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(window.locator('.assignment-card')).toHaveCount(2)
+    let saved = JSON.parse(
+      fs.readFileSync(path.join(userDataDir, 'workspace.json'), 'utf8'),
+    ).assignments
+    const math = saved.find((item) => item.title === '高等数学第3章习题')
+    expect(math.dueAt).toBe('2026-11-02')
+    expect(math.notes).toContain('完成12、15、18题')
+    expect(math.notes).toContain('截止时间：2026-11-02 23:59')
+    expect(math.notes).not.toContain('截止时间：2026-10-30')
+    expect(saved.find((item) => item.course === '大学物理').notes).toContain('2026-10-31 18:00')
+    expect(math.previousDueAt).toBeUndefined()
+    await window.getByRole('button', { name: '粘贴通知录入' }).click()
+    await window.locator('#smartEntryImages').setInputFiles(imagePath)
+    await window.getByRole('button', { name: '解析为作业' }).click()
+    await expect(window.locator('[data-smart-draft-decision]')).toHaveValue('review')
+    await expect(window.locator('.smart-entry-duplicate:not([hidden])')).toContainText(
+      '2026-11-02 → 2026-11-05',
+    )
+    await window.locator('[data-smart-draft-decision]').selectOption('update')
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(window.locator('#smartEntryTitle')).toHaveCount(0)
+    saved = JSON.parse(
+      fs.readFileSync(path.join(userDataDir, 'workspace.json'), 'utf8'),
+    ).assignments
+    expect(saved).toHaveLength(2)
+    expect(saved.find((item) => item.id === math.id).dueAt).toBe('2026-11-05')
+  } finally {
+    await closeWorkstation(app, userDataDir)
+    await new Promise((resolve) => server.close(resolve))
+  }
+})

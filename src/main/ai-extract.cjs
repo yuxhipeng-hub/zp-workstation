@@ -39,6 +39,29 @@ function cleanPriority(value) {
   return PRIORITY_ALIASES.get(cleanText(value, 12).toLowerCase()) || 'medium'
 }
 
+function cleanDueTime(value) {
+  const raw = String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+  const match = raw.match(/^([01]?\d|2[0-3]):([0-5]\d)$/)
+  return match ? `${match[1].padStart(2, '0')}:${match[2]}` : ''
+}
+
+function draftDeadlineTime(input) {
+  const explicit = cleanDueTime(input.dueTime)
+  if (explicit) return explicit
+  // 仅兜底原文里直接与“交/提交/截止”相连的唯一时刻；不把聊天时间当作截止。
+  const quote = cleanText(input.sourceQuote, 500).normalize('NFKC')
+  const times = [
+    ...new Set(
+      [...quote.matchAll(/(?<!\d)(\d{1,2}:\d{2})\s*(?:前)?\s*(?:提交|交|截止)/g)]
+        .map((match) => cleanDueTime(match[1]))
+        .filter(Boolean),
+    ),
+  ]
+  return times.length === 1 ? times[0] : ''
+}
+
 function cleanExtractImages(images) {
   if (!Array.isArray(images) || !images.length) return []
   if (images.length > MAX_EXTRACT_IMAGES) {
@@ -73,12 +96,22 @@ function cleanAssignmentDraft(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const title = cleanText(input.title, 120)
   if (!title) return null
+  const dueAt = cleanDueDate(input.dueAt)
+  const dueTime = draftDeadlineTime(input)
+  let notes = cleanText(input.notes, 500)
+  if (dueTime) {
+    const deadline = dueAt ? `截止时间：${dueAt} ${dueTime}` : `截止时刻：${dueTime}（日期待确认）`
+    if (!notes.includes(deadline)) notes = [notes, deadline].filter(Boolean).join('\n')
+  }
   return {
     title,
     course: cleanText(input.course, 80),
-    dueAt: cleanDueDate(input.dueAt),
+    dueAt,
     priority: cleanPriority(input.priority),
-    notes: cleanText(input.notes, 500),
+    notes,
+    ...(cleanDueDate(input.previousDueAt)
+      ? { previousDueAt: cleanDueDate(input.previousDueAt) }
+      : {}),
     ...(input.sourceQuote ? { sourceQuote: cleanText(input.sourceQuote, 500) } : {}),
     ...(Number.isInteger(input.sourceImage) &&
     input.sourceImage > 0 &&
@@ -133,7 +166,8 @@ function buildExtractMessages(text, now = new Date(), images = [], noticeDate = 
     ...(hasImages ? [`随附 ${attachments.length} 张通知截图，请先读取截图中的文字。`] : []),
     '',
     '请严格输出以下结构：',
-    '{"assignments":[{"title":"作业标题","course":"课程名或空字符串","dueAt":"YYYY-MM-DD 或空字符串","priority":"low|medium|high","notes":"通知里的关键要求或空字符串","sourceQuote":"逐字摘录的通知原文片段，不翻译，不改写","sourceImage":0}],"complete":true}',
+    '{"assignments":[{"title":"作业标题","course":"课程名或空字符串","dueAt":"YYYY-MM-DD 或空字符串","dueTime":"HH:mm 或空字符串","previousDueAt":"延期或更正前的 YYYY-MM-DD 或空字符串","priority":"low|medium|high","notes":"通知里的关键要求或空字符串","sourceQuote":"逐字摘录的通知原文片段，不翻译，不改写","sourceImage":0}],"complete":true}',
+    '截止日期和时刻都要提取，不能漏掉 18:00、23:59 等明确时刻；没有时刻就留空，不默认成午夜。延期、更正、提前属于原作业的变更：本批有旧通知时使用最新日期和时刻，在 previousDueAt 填旧日期，在 notes 明确说明变更，sourceQuote 优先摘录更正通知。不要把同一作业的旧通知和更正各生成为独立任务；每周不同任务仍分开。',
     '抽取本批全部作业，不限制条数，不凑数。只有本批全部内容都已处理才填写 complete:true；图片模糊、内容不全或输出空间不足时填写 complete:false。没有作业时返回空数组并填写 complete:true。标题必须来自通知内容；相对日期按通知发布日期换算；作业字段用中文，sourceQuote 保留原文。sourceImage 为本批截图序号（1 起），文字来源填 0；无法确认来源时留空，不要编造。',
   ].join('\n')
   return [

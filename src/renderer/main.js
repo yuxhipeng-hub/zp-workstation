@@ -14,7 +14,13 @@ import { createSmartEntrySession } from './components/smart-entry-batches.js'
 import { createEditors } from './components/editors.js'
 import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { keepFocusInDialog } from './lib/focus.js'
-import { buildAssignmentMergePatch, findDuplicateAssignment } from './lib/assignment-duplicates.js'
+import {
+  buildAssignmentMergePatch,
+  buildAssignmentDeadlinePatch,
+  findDuplicateAssignment,
+  findAssignmentChange,
+  syncAssignmentDeadlineNotes,
+} from './lib/assignment-duplicates.js'
 import { createTodayPage } from './pages/today.js'
 import { createSchedulePage } from './pages/schedule.js'
 import '@fontsource-variable/inter/wght.css'
@@ -361,20 +367,31 @@ async function addSmartEntryImages(files) {
 function findSmartEntryMatch(draft, index) {
   const existing = findDuplicateAssignment(draft, state.workspace?.assignments || [])
   if (existing) return existing
-  const batch = findDuplicateAssignment(
-    draft,
-    state.smartEntryDrafts
-      .slice(0, index)
-      .map((item, batchIndex) => ({ ...item, id: 'batch-' + batchIndex, batchIndex })),
-  )
-  return batch ? { ...batch, batchIndex: batch.assignment.batchIndex } : null
+  const batchAssignments = state.smartEntryDrafts
+    .slice(0, index)
+    .map((item, batchIndex) => ({ ...item, id: 'batch-' + batchIndex, batchIndex }))
+  const batch = findDuplicateAssignment(draft, batchAssignments)
+  if (batch) return { ...batch, batchIndex: batch.assignment.batchIndex }
+  const change = findAssignmentChange(draft, [
+    ...(state.workspace?.assignments || []),
+    ...batchAssignments,
+  ])
+  return change ? { ...change, batchIndex: change.assignment.batchIndex } : null
+}
+
+function smartEntryMatchKey(match) {
+  return match ? match.assignment.id + ':' + (match.kind || 'duplicate') : ''
+}
+
+function defaultSmartEntryDecision(match) {
+  return match?.kind === 'reschedule' ? 'review' : match ? 'skip' : 'create'
 }
 
 function prepareSmartEntryDrafts(drafts) {
   const previousMatches = new Map(
     state.smartEntryDrafts.map((draft, index) => [
       draft,
-      state.smartEntryMatches[index]?.assignment.id,
+      smartEntryMatchKey(state.smartEntryMatches[index]),
     ]),
   )
   const decisions = new Map(
@@ -383,15 +400,13 @@ function prepareSmartEntryDrafts(drafts) {
   state.smartEntryDrafts = drafts
   state.smartEntryMatches = drafts.map((draft, index) => findSmartEntryMatch(draft, index))
   state.smartEntryDecisions = state.smartEntryMatches.map((match, index) =>
-    previousMatches.get(drafts[index]) === match?.assignment.id
-      ? decisions.get(drafts[index]) || (match ? 'skip' : 'create')
-      : match
-        ? 'skip'
-        : 'create',
+    previousMatches.get(drafts[index]) === smartEntryMatchKey(match)
+      ? decisions.get(drafts[index]) || defaultSmartEntryDecision(match)
+      : defaultSmartEntryDecision(match),
   )
   const duplicates = state.smartEntryMatches.filter(Boolean).length
   state.smartEntryNotice = duplicates
-    ? `有 ${duplicates} 条可能已存在，默认跳过；可改成合并或仍要新建。`
+    ? `有 ${duplicates} 条重复或截止日期变更；重复默认跳过，日期变更须明确确认。`
     : ''
 }
 
@@ -2667,6 +2682,21 @@ async function handleAction(action, element) {
       const writeMatches = state.smartEntryDrafts.map((draft, index) =>
         findSmartEntryMatch(draft, index),
       )
+      for (const index of selected) {
+        const match = writeMatches[index]
+        if (smartEntryMatchKey(match) !== smartEntryMatchKey(state.smartEntryMatches[index])) {
+          state.smartEntryDecisions[index] = defaultSmartEntryDecision(match)
+        }
+        if (
+          match?.kind === 'reschedule' &&
+          !['update', 'skip', 'create'].includes(state.smartEntryDecisions[index])
+        ) {
+          state.smartEntryError = '请先确认截止日期变更：更新截止日期、跳过或仍要新建。'
+          state.smartEntryMatches = writeMatches
+          render()
+          return
+        }
+      }
       state.smartEntrySaving = true
       render()
       try {
@@ -2674,8 +2704,8 @@ async function handleAction(action, element) {
           const draft = state.smartEntryDrafts[index]
           if (!draft) continue
           const match = writeMatches[index]
-          if (match?.assignment.id !== state.smartEntryMatches[index]?.assignment.id) {
-            state.smartEntryDecisions[index] = match ? 'skip' : 'create'
+          if (smartEntryMatchKey(match) !== smartEntryMatchKey(state.smartEntryMatches[index])) {
+            state.smartEntryDecisions[index] = defaultSmartEntryDecision(match)
           }
           const decision = state.smartEntryDecisions[index] || (match ? 'skip' : 'create')
           if (match && decision === 'skip') {
@@ -2683,12 +2713,14 @@ async function handleAction(action, element) {
             handled.add(draft)
             continue
           }
-          if (match && decision === 'merge') {
+          if (match && (decision === 'merge' || decision === 'update')) {
             const targetId =
               match.batchIndex !== undefined
                 ? createdByDraft.get(match.batchIndex)
                 : match.assignment.id
             const existing = state.workspace?.assignments.find((item) => item.id === targetId)
+            if (!existing && decision === 'update' && match.batchIndex === undefined)
+              throw new Error('变更目标已不存在，请重新核对。')
             if (existing) {
               const notes =
                 draft.notes && existing.notes && !existing.notes.includes(draft.notes)
@@ -2700,6 +2732,7 @@ async function handleAction(action, element) {
                 await api.updateAssignment(existing.id, {
                   ...buildAssignmentMergePatch(existing, draft),
                   ...(notes ? { notes } : {}),
+                  ...(decision === 'update' ? buildAssignmentDeadlinePatch(existing, draft) : {}),
                 }),
               )
               merged += 1
@@ -3916,6 +3949,14 @@ document.addEventListener('input', (event) => {
       state.smartEntryDrafts[index]
     ) {
       state.smartEntryDrafts[index][field] = event.target.value
+      if (field === 'dueAt') {
+        const draft = state.smartEntryDrafts[index]
+        draft.notes = syncAssignmentDeadlineNotes(draft.notes || '', draft.dueAt)
+        const notes = event.target
+          .closest('.smart-entry-draft')
+          ?.querySelector('[data-smart-field="notes"]')
+        if (notes) notes.value = draft.notes
+      }
     }
   }
   if (event.target.matches?.('#smartEntryText, #smartEntryNoticeDate')) syncSmartEntryTextFromDom()

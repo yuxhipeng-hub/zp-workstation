@@ -52,6 +52,29 @@ export function createAssignmentsPage({
   `
   }
 
+  function smartEntryDecisionOptions(match) {
+    return match?.kind === 'reschedule'
+      ? [
+          ['review', '请选择处理方式'],
+          ['update', '更新截止日期'],
+          ['skip', '跳过'],
+          ['create', '仍要新建'],
+        ]
+      : [
+          ['skip', '跳过'],
+          ['merge', '合并到已有'],
+          ['create', '仍要新建'],
+        ]
+  }
+
+  function smartEntryMatchLabel(match, draft) {
+    const target =
+      (match.batchIndex !== undefined ? '本批草稿' : '已有') + '“' + match.assignment.title + '”'
+    return match.kind === 'reschedule'
+      ? target + ' · 截止日期变更：' + match.assignment.dueAt + ' → ' + draft.dueAt
+      : target + (match.assignment.dueAt ? ' · ' + dueDateMeta(match.assignment.dueAt).label : '')
+  }
+
   function renderSmartEntryPanel() {
     if (!state.smartEntryOpen) return ''
     const profile = activeAiProfile()
@@ -150,8 +173,8 @@ export function createAssignmentsPage({
                       assignmentPriorityMeta[draft.priority] || assignmentPriorityMeta.medium
                     const match = state.smartEntryMatches?.[index] || null
                     const decision =
-                      state.smartEntryDecisions?.[index] || (match ? 'skip' : 'create')
-                    const matchDue = match ? dueDateMeta(match.assignment.dueAt) : null
+                      state.smartEntryDecisions?.[index] ||
+                      (match?.kind === 'reschedule' ? 'review' : match ? 'skip' : 'create')
                     return `
                     <div class="smart-entry-draft ${match ? 'is-duplicate' : ''}">
                       <label class="smart-entry-draft-check">
@@ -160,7 +183,7 @@ export function createAssignmentsPage({
                       <label class="smart-entry-draft-main" for="smartDraft${index}">
                         <strong>${escapeHtml(draft.title)}</strong>
                         <small>${escapeHtml(draft.notes || '')}</small>
-                        ${match ? '<span class="smart-entry-duplicate-flag"><i data-lucide="triangle-alert"></i>可能已存在</span>' : ''}
+                        ${match ? `<span class="smart-entry-duplicate-flag"><i data-lucide="triangle-alert"></i>${match.kind === 'reschedule' ? '截止日期变更待确认' : '可能已存在'}</span>` : ''}
                       </label>
                       <span class="badge neutral">${escapeHtml(draft.course || '未分类')}</span>
                       <span class="badge ${due.tone}">${escapeHtml(due.label)}</span>
@@ -168,11 +191,14 @@ export function createAssignmentsPage({
                       ${
                         match
                           ? `<div class="smart-entry-duplicate">
-                              <span>${match.batchIndex !== undefined ? '本批草稿' : '已有'}“${escapeHtml(match.assignment.title)}”${match.assignment.dueAt ? ` · ${escapeHtml(matchDue.label)}` : ''}</span>
-                              <select data-smart-draft-decision="${index}" aria-label="处理与已有作业重复的 ${escapeHtml(draft.title)}">
-                                <option value="skip" ${decision === 'skip' ? 'selected' : ''}>跳过</option>
-                                <option value="merge" ${decision === 'merge' ? 'selected' : ''}>合并到已有</option>
-                                <option value="create" ${decision === 'create' ? 'selected' : ''}>仍要新建</option>
+                              <span>${escapeHtml(smartEntryMatchLabel(match, draft))}</span>
+                              <select data-smart-draft-decision="${index}" aria-label="处理与已有作业关联的 ${escapeHtml(draft.title)}">
+                                ${smartEntryDecisionOptions(match)
+                                  .map(
+                                    ([value, text]) =>
+                                      `<option value="${value}" ${decision === value ? 'selected' : ''}>${text}</option>`,
+                                  )
+                                  .join('')}
                               </select>
                             </div>`
                           : '<div class="smart-entry-duplicate" hidden></div>'
@@ -191,7 +217,7 @@ export function createAssignmentsPage({
                                 `<option value="${key}" ${draft.priority === key ? 'selected' : ''}>${escapeHtml(meta.label)}</option>`,
                             )
                             .join('')}</select></label>
-                          <label class="field smart-entry-wide"><span>备注</span><textarea data-smart-field="notes" data-smart-index="${index}" maxlength="500" rows="2">${escapeHtml(draft.notes || '')}</textarea></label>
+                          <label class="field smart-entry-wide"><span>备注</span><textarea data-smart-field="notes" data-smart-index="${index}" maxlength="2000" rows="2">${escapeHtml(draft.notes || '')}</textarea></label>
                         </div>
                         <p data-smart-edit-warning role="status"></p>
                         <div class="smart-entry-source">
@@ -204,7 +230,7 @@ export function createAssignmentsPage({
                   .join('')}
               </fieldset>
               <div class="smart-entry-result-actions">
-                <span class="setting-hint">请核对截止日期；无法确定的日期留空。原文摘录仅用于本次核对。</span>
+                <span class="setting-hint">请核对截止日期和备注中的具体时刻；日期变更需确认。原文摘录仅用于本次核对。</span>
                 <button class="button primary" type="button" data-action="add-smart-drafts" ${busy ? 'disabled' : ''}>
                   <i data-lucide="plus"></i><span>添加选中的作业</span>
                 </button>
@@ -371,9 +397,12 @@ export function createAssignmentsPage({
     if (flag) flag.remove()
     const warning = row?.querySelector('[data-smart-edit-warning]')
     if (warning)
-      warning.textContent = match
-        ? '修改后可能与已有作业重复，添加时请核对处理方式；新匹配默认跳过。'
-        : ''
+      warning.textContent =
+        match?.kind === 'reschedule'
+          ? '检测到截止日期变更，请明确选择处理方式。'
+          : match
+            ? '修改后可能与已有作业重复，添加时请核对处理方式；新匹配默认跳过。'
+            : ''
     const duplicate = /** @type {HTMLElement | null} */ (
       row?.querySelector('.smart-entry-duplicate')
     )
@@ -382,15 +411,11 @@ export function createAssignmentsPage({
       duplicate.hidden = !match
       if (match) {
         const label = document.createElement('span')
-        label.textContent = '已有“' + match.assignment.title + '”'
+        label.textContent = smartEntryMatchLabel(match, draft)
         const select = document.createElement('select')
         select.dataset.smartDraftDecision = String(index)
         select.setAttribute('aria-label', '处理与已有作业重复的 ' + draft.title)
-        for (const [value, text] of [
-          ['skip', '跳过'],
-          ['merge', '合并到已有'],
-          ['create', '仍要新建'],
-        ]) {
+        for (const [value, text] of smartEntryDecisionOptions(match)) {
           const option = document.createElement('option')
           option.value = value
           option.textContent = text
