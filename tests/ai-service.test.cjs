@@ -256,13 +256,26 @@ test('rejects empty or oversized notice text before calling the model', async (t
 
   await assert.rejects(() => service.extractAssignments('   '), /请先粘贴通知内容/)
   await assert.rejects(() => service.extractAssignments('x'.repeat(4001)), /最多 4000 字/)
+  await assert.rejects(
+    () => service.extractAssignments({ text: '报告', noticeDate: '2026-02-30' }),
+    /通知日期无效/,
+  )
   assert.equal(requests.length, 0)
 })
 
 test('sends screenshot content to a vision model and extracts drafts', async (t) => {
   const requests = []
   const content = JSON.stringify({
-    assignments: [{ title: '平台截图作业', course: '操作系统', dueAt: '2026-11-01' }],
+    assignments: [
+      {
+        title: '平台截图作业',
+        course: '操作系统',
+        dueAt: '2026-11-01',
+        sourceImage: 6,
+        sourceQuote: '原文片段',
+      },
+      { title: '错误来源', sourceImage: 7, sourceQuote: '不存在的摘录' },
+    ],
   })
   const { directory, service } = createHarness(async (url, options) => {
     requests.push({ url, options })
@@ -281,15 +294,20 @@ test('sends screenshot content to a vision model and extracts drafts', async (t)
 
   const result = await service.extractAssignments({
     text: '',
-    images: [{ name: '平台通知.png', dataUrl: PNG_DATA_URL }],
+    images: Array.from({ length: 6 }, () => ({ name: '平台通知.png', dataUrl: PNG_DATA_URL })),
+    noticeDate: '2026-10-20',
   })
 
   assert.equal(result.assignments[0].title, '平台截图作业')
+  assert.equal(result.assignments[0].sourceImage, 6)
+  assert.equal(result.assignments[1].sourceQuote, undefined)
   const body = JSON.parse(requests[0].options.body)
   const userContent = body.messages.at(-1).content
   assert.equal(Array.isArray(userContent), true)
+  assert.equal(userContent.filter((part) => part.type === 'image_url').length, 6)
   const textPart = userContent.find((part) => part.type === 'text')
   assert.match(textPart.text, /图片中/)
+  assert.match(textPart.text, /换算基准）：2026-10-20/)
   const imagePart = userContent.find((part) => part.type === 'image_url')
   assert.equal(imagePart.image_url.url, PNG_DATA_URL)
 })

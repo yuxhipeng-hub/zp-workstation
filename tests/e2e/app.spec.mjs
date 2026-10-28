@@ -389,6 +389,13 @@ test('configures a model and runs AI assignment planning end to end', async () =
     await expect(
       window.locator('.assignment-card').filter({ hasText: '概率论第 5 章习题' }),
     ).toHaveCount(1)
+    await window.locator('.smart-entry-review summary').click()
+    await window.locator('[data-smart-field="title"]').fill('全新作业')
+    await window.locator('[data-smart-field="course"]').focus()
+    await expect(window.locator('.smart-entry-duplicate')).toBeHidden()
+    await window.locator('[data-smart-field="title"]').fill('概率论第 5 章习题')
+    await window.locator('[data-smart-field="course"]').focus()
+    await expect(window.locator('[data-smart-draft-decision]')).toHaveValue('skip')
     await window.locator('[data-smart-draft-decision]').selectOption('create')
     await window.getByRole('button', { name: '添加选中的作业' }).click()
     await expect(
@@ -461,6 +468,8 @@ test('extracts assignment drafts from a platform screenshot', async () => {
                       dueAt: '2026-11-01',
                       priority: 'high',
                       notes: '从平台截图识别',
+                      sourceQuote: '下周五交平台截图作业',
+                      sourceImage: 6,
                     },
                   ],
                 }),
@@ -508,16 +517,34 @@ test('extracts assignment drafts from a platform screenshot', async () => {
     await window.getByRole('button', { name: '粘贴通知录入' }).click()
     await expect(window.locator('#smartEntryTitle')).toBeVisible()
 
-    await window.locator('#smartEntryImages').setInputFiles(imagePath)
-    await expect(window.locator('.smart-entry-image')).toHaveCount(1)
-    await expect(window.locator('.smart-entry-image img')).toBeVisible()
+    await window.locator('#smartEntryNoticeDate').fill('2026-10-20')
+    await window.locator('#smartEntryImages').setInputFiles(Array(7).fill(imagePath))
+    await expect(window.locator('.smart-entry-image')).toHaveCount(6)
+    await expect(window.locator('.smart-entry-error')).toContainText('最多添加 6 张')
+    await expect(window.locator('.smart-entry-image img').first()).toBeVisible()
+    await expect(window.locator('.smart-entry-image-add')).toHaveCount(0)
+    await expect(window.locator('#smartEntryNoticeDate')).toHaveValue('2026-10-20')
 
     await window.getByRole('button', { name: '解析为作业' }).click()
     await expect(window.locator('.smart-entry-draft')).toContainText('平台截图作业')
     await expect(window.locator('.smart-entry-draft')).toContainText('高优先级')
 
+    await window.locator('.smart-entry-review summary').click()
+    await expect(window.locator('.smart-entry-source')).toContainText('截图 6')
+    await expect(window.locator('.smart-entry-source')).toContainText('下周五交平台截图作业')
+    await window.locator('[data-smart-field="title"]').fill('')
+    await window.getByRole('button', { name: '添加选中的作业' }).click()
+    await expect(window.locator('.smart-entry-error')).toContainText('请填写')
+    await window.locator('.smart-entry-review summary').click()
+    await window.locator('[data-smart-field="title"]').fill('平台截图作业（已核对）')
+    await window.locator('[data-smart-field="course"]').fill('计算机网络')
+    await window.locator('[data-smart-field="dueAt"]').fill('2026-11-06')
+    await window.locator('[data-smart-field="notes"]').fill('上传 PDF')
+    await window.locator('[data-smart-field="priority"]').selectOption('low')
     const payload = requests.at(-1)
     const userContent = payload.messages.at(-1).content
+    expect(userContent.filter((part) => part.type === 'image_url')).toHaveLength(6)
+    expect(userContent[0].text).toContain('换算基准）：2026-10-20')
     assert.equal(Array.isArray(userContent), true)
     const textPart = userContent.find((part) => part.type === 'text')
     assert.match(textPart.text, /通知内容在图片中/)
@@ -526,8 +553,16 @@ test('extracts assignment drafts from a platform screenshot', async () => {
 
     await window.getByRole('button', { name: '添加选中的作业' }).click()
     await expect(
-      window.locator('.assignment-card').filter({ hasText: '平台截图作业' }),
+      window.locator('.assignment-card').filter({ hasText: '平台截图作业（已核对）' }),
     ).toBeVisible()
+    const saved = JSON.parse(fs.readFileSync(path.join(userDataDir, 'workspace.json'), 'utf8'))
+      .assignments[0]
+    expect(saved.course).toBe('计算机网络')
+    expect(saved.dueAt).toBe('2026-11-06')
+    expect(saved.notes).toBe('上传 PDF')
+    expect(saved.priority).toBe('low')
+    expect(saved.sourceQuote).toBeUndefined()
+    expect(saved.sourceImage).toBeUndefined()
   } finally {
     await closeWorkstation(app, userDataDir)
     await new Promise((resolve) => server.close(resolve))

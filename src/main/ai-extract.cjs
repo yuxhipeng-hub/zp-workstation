@@ -1,6 +1,6 @@
 const MAX_EXTRACT_TEXT_LENGTH = 4000
 const MAX_EXTRACT_DRAFTS = 5
-const MAX_EXTRACT_IMAGES = 2
+const MAX_EXTRACT_IMAGES = 6
 const MAX_EXTRACT_IMAGE_BYTES = 5 * 1024 * 1024
 const IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/i
 
@@ -80,6 +80,12 @@ function cleanAssignmentDraft(input) {
     dueAt: cleanDueDate(input.dueAt),
     priority: cleanPriority(input.priority),
     notes: cleanText(input.notes, 500),
+    ...(input.sourceQuote ? { sourceQuote: cleanText(input.sourceQuote, 500) } : {}),
+    ...(Number.isInteger(input.sourceImage) &&
+    input.sourceImage > 0 &&
+    input.sourceImage <= MAX_EXTRACT_IMAGES
+      ? { sourceImage: input.sourceImage }
+      : {}),
   }
 }
 
@@ -110,7 +116,7 @@ function localDateString(now) {
   return `${year}-${month}-${day}`
 }
 
-function buildExtractMessages(text, now = new Date(), images = []) {
+function buildExtractMessages(text, now = new Date(), images = [], noticeDate = '') {
   const today = localDateString(now)
   const attachments = Array.isArray(images)
     ? images.filter((image) => image?.dataUrl).slice(0, MAX_EXTRACT_IMAGES)
@@ -118,12 +124,13 @@ function buildExtractMessages(text, now = new Date(), images = []) {
   const hasImages = attachments.length > 0
   const userText = [
     `今天是 ${today}。`,
+    `通知发布日期（相对日期换算基准）：${cleanDueDate(noticeDate) || today}。不同截图若有各自明确的发布日期，应优先使用各自日期；无法确定时截止日期留空。`,
     `通知原文：\n${text || '（没有文字，通知内容在图片中）'}`,
     ...(hasImages ? [`随附 ${attachments.length} 张通知截图，请先读取截图中的文字。`] : []),
     '',
     '请严格输出以下结构：',
-    '{"assignments":[{"title":"作业标题","course":"课程名或空字符串","dueAt":"YYYY-MM-DD 或空字符串","priority":"low|medium|high","notes":"通知里的关键要求或空字符串"}]}',
-    `要求：最多 ${MAX_EXTRACT_DRAFTS} 条；合并重复作业；标题必须来自通知内容；相对日期（如“下周五”）按今天换算成 YYYY-MM-DD；所有文字使用中文。`,
+    '{"assignments":[{"title":"作业标题","course":"课程名或空字符串","dueAt":"YYYY-MM-DD 或空字符串","priority":"low|medium|high","notes":"通知里的关键要求或空字符串","sourceQuote":"逐字摘录的通知原文片段，不翻译，不改写","sourceImage":0}]}',
+    `要求：最多 ${MAX_EXTRACT_DRAFTS} 条；合并重复作业；标题必须来自通知内容；相对日期（如“下周五”）按通知发布日期换算成 YYYY-MM-DD；作业字段用中文，sourceQuote 保留原文。sourceImage 为来源截图序号（1 起），文字来源填 0；无法确认来源时留空，不要编造。`,
   ].join('\n')
   return [
     {
@@ -138,10 +145,10 @@ function buildExtractMessages(text, now = new Date(), images = []) {
       content: hasImages
         ? [
             { type: 'text', text: userText },
-            ...attachments.map((image) => ({
-              type: 'image_url',
-              image_url: { url: image.dataUrl },
-            })),
+            ...attachments.flatMap((image, index) => [
+              { type: 'text', text: `截图 ${index + 1}` },
+              { type: 'image_url', image_url: { url: image.dataUrl } },
+            ]),
           ]
         : userText,
     },
@@ -179,5 +186,6 @@ module.exports = {
   buildExtractMessages,
   cleanExtractImages,
   cleanExtractedAssignments,
+  cleanDueDate,
   parseExtractContent,
 }

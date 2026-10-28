@@ -72,6 +72,7 @@ const state = {
   smartEntryOpen: false,
   smartEntryBusy: false,
   smartEntryText: '',
+  smartEntryNoticeDate: '',
   smartEntryDrafts: [],
   smartEntryMatches: [],
   smartEntryDecisions: [],
@@ -249,13 +250,15 @@ function readableAiError(error) {
   )
 }
 
-const SMART_ENTRY_MAX_IMAGES = 2
+const SMART_ENTRY_MAX_IMAGES = 6
 const SMART_ENTRY_MAX_SOURCE_BYTES = 15 * 1024 * 1024
 const SMART_ENTRY_IMAGE_MAX_SIDE = 2000
 
 function syncSmartEntryTextFromDom() {
   const input = document.querySelector('#smartEntryText')
   if (input) state.smartEntryText = input.value
+  const date = document.querySelector('#smartEntryNoticeDate')
+  if (date) state.smartEntryNoticeDate = date.value
 }
 
 async function prepareSmartEntryImage(file) {
@@ -2504,6 +2507,7 @@ async function handleAction(action, element) {
       render()
       break
     case 'open-smart-entry':
+      state.smartEntryNoticeDate = ''
       state.smartEntryOpen = true
       state.smartEntryBusy = false
       state.smartEntryDrafts = []
@@ -2540,6 +2544,7 @@ async function handleAction(action, element) {
       break
     }
     case 'parse-smart-entry': {
+      syncSmartEntryTextFromDom()
       const text = document.querySelector('#smartEntryText')?.value?.trim() || ''
       const images = state.smartEntryImages || []
       state.smartEntryText = text
@@ -2570,6 +2575,7 @@ async function handleAction(action, element) {
       try {
         const result = await api.extractAssignments({
           text,
+          noticeDate: state.smartEntryNoticeDate,
           images: images.map(({ name, dataUrl }) => ({ name, dataUrl })),
         })
         const drafts = Array.isArray(result?.assignments) ? result.assignments : []
@@ -2595,6 +2601,11 @@ async function handleAction(action, element) {
         render()
         return
       }
+      if (selected.some((index) => !state.smartEntryDrafts[index]?.title?.trim())) {
+        state.smartEntryError = '请填写选中作业的标题。'
+        render()
+        return
+      }
       let created = 0
       let merged = 0
       let skipped = 0
@@ -2603,7 +2614,10 @@ async function handleAction(action, element) {
         for (const index of selected) {
           const draft = state.smartEntryDrafts[index]
           if (!draft) continue
-          const match = state.smartEntryMatches[index]
+          const match = findDuplicateAssignment(draft, state.workspace?.assignments || [])
+          if (match?.assignment.id !== state.smartEntryMatches[index]?.assignment.id) {
+            state.smartEntryDecisions[index] = match ? 'skip' : 'create'
+          }
           const decision = state.smartEntryDecisions[index] || (match ? 'skip' : 'create')
           if (match && decision === 'skip') {
             skipped += 1
@@ -2623,7 +2637,10 @@ async function handleAction(action, element) {
               continue
             }
           }
-          applyWorkspace(await api.createAssignment(draft))
+          const { title, course, dueAt, priority, notes } = draft
+          applyWorkspace(
+            await api.createAssignment({ title: title.trim(), course, dueAt, priority, notes }),
+          )
           created += 1
           handled.add(draft)
         }
@@ -3801,6 +3818,17 @@ document.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('input', (event) => {
+  if (event.target.matches?.('[data-smart-field]')) {
+    const index = Number(event.target.dataset.smartIndex)
+    const field = event.target.dataset.smartField
+    if (
+      ['title', 'course', 'dueAt', 'priority', 'notes'].includes(field) &&
+      state.smartEntryDrafts[index]
+    ) {
+      state.smartEntryDrafts[index][field] = event.target.value
+    }
+  }
+  if (event.target.matches?.('#smartEntryText, #smartEntryNoticeDate')) syncSmartEntryTextFromDom()
   if (event.target.id === 'scheduleCourseColor') {
     syncScheduleColorControls(event.target.value)
   }
@@ -3843,6 +3871,19 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (event.target.matches?.('[data-smart-field]')) {
+    const index = Number(event.target.dataset.smartIndex)
+    const draft = state.smartEntryDrafts[index]
+    if (draft) {
+      const match = findDuplicateAssignment(draft, state.workspace?.assignments || [])
+      if (match?.assignment.id !== state.smartEntryMatches[index]?.assignment.id) {
+        state.smartEntryDecisions[index] = match ? 'skip' : 'create'
+      }
+      state.smartEntryMatches[index] = match
+      getAssignmentsPage().refreshSmartEntryDraft(event.target, index, draft, match)
+    }
+    return
+  }
   if (event.target.matches?.('[data-smart-draft-decision]')) {
     const index = Number(event.target.dataset.smartDraftDecision)
     if (Number.isInteger(index)) {

@@ -72,7 +72,7 @@ export function createAssignmentsPage({
       ? '添加并启用模型后，就可以识别通知截图。'
       : !canUseVision
         ? '当前模型未开启「支持视觉输入」，请先到「模型配置」勾选；文字录入仍然可用。'
-        : '可以直接粘贴截图、把截图拖进来，或点击“添加截图”；最多 2 张。'
+        : '可以粘贴、拖入或选择截图；最多 6 张，处理后单张不超过 5 MB。每次最多抽取 5 条作业，通知较多时请分批核对。'
     return `
     <section class="section smart-entry-panel" aria-labelledby="smartEntryTitle">
       <div class="section-heading">
@@ -88,12 +88,18 @@ export function createAssignmentsPage({
         <span>通知原文</span>
         <textarea id="smartEntryText" rows="5" maxlength="4000" placeholder="可以粘贴通知文字，也可以不写字、直接添加平台截图。">${escapeHtml(state.smartEntryText || '')}</textarea>
       </label>
+      <label class="field" for="smartEntryNoticeDate">
+        <span>通知发布日期</span>
+        <input id="smartEntryNoticeDate" type="date" value="${escapeHtml(state.smartEntryNoticeDate || '')}" />
+        <small>留空按今天换算“明天、下周五”；旧通知请选择发布日期。不同截图有明确日期时优先各自日期。</small>
+      </label>
       <div class="smart-entry-images ${imageBusy ? 'is-busy' : ''}" aria-label="通知截图">
         ${images
           .map(
             (image, index) => `
               <figure class="smart-entry-image">
                 <img src="${escapeHtml(image.dataUrl)}" alt="${escapeHtml(image.name || '通知截图')}" />
+                <figcaption>截图 ${index + 1}</figcaption>
                 <button class="icon-button compact" type="button" data-action="remove-smart-image" data-index="${index}" title="移除截图" aria-label="移除截图">
                   <i data-lucide="x"></i>
                 </button>
@@ -101,7 +107,7 @@ export function createAssignmentsPage({
           )
           .join('')}
         ${
-          images.length < 2
+          images.length < 6
             ? `<label class="smart-entry-image-add ${canUseVision && !imageBusy ? '' : 'is-disabled'}" for="smartEntryImages">
                 <i data-lucide="${imageBusy ? 'loader' : 'image-plus'}"></i>
                 <span>${imageBusy ? '正在处理' : '添加截图'}</span>
@@ -126,7 +132,7 @@ export function createAssignmentsPage({
           ? `<div class="smart-entry-result">
               <div class="smart-entry-result-head">
                 <strong>识别到 ${drafts.length} 条作业</strong>
-                <span>取消勾选不想添加的条目，添加后可以逐条编辑。</span>
+                <span>展开“编辑与原文核对”可在添加前修改；取消勾选不想添加的条目。</span>
               </div>
               ${
                 state.smartEntryNotice
@@ -150,7 +156,7 @@ export function createAssignmentsPage({
                       </label>
                       <label class="smart-entry-draft-main" for="smartDraft${index}">
                         <strong>${escapeHtml(draft.title)}</strong>
-                        ${draft.notes ? `<small>${escapeHtml(draft.notes)}</small>` : ''}
+                        <small>${escapeHtml(draft.notes || '')}</small>
                         ${match ? '<span class="smart-entry-duplicate-flag"><i data-lucide="triangle-alert"></i>可能已存在</span>' : ''}
                       </label>
                       <span class="badge neutral">${escapeHtml(draft.course || '未分类')}</span>
@@ -166,14 +172,36 @@ export function createAssignmentsPage({
                                 <option value="create" ${decision === 'create' ? 'selected' : ''}>仍要新建</option>
                               </select>
                             </div>`
-                          : ''
+                          : '<div class="smart-entry-duplicate" hidden></div>'
                       }
+                      <details class="smart-entry-review">
+                        <summary>编辑与原文核对</summary>
+                        <div class="smart-entry-edit-grid">
+                          <label class="field"><span>标题</span><input data-smart-field="title" data-smart-index="${index}" maxlength="120" value="${escapeHtml(draft.title)}" required /></label>
+                          <label class="field"><span>课程</span><input data-smart-field="course" data-smart-index="${index}" maxlength="80" value="${escapeHtml(draft.course || '')}" /></label>
+                          <label class="field"><span>截止日期</span><input type="date" data-smart-field="dueAt" data-smart-index="${index}" value="${escapeHtml(draft.dueAt || '')}" /></label>
+                          <label class="field"><span>优先级</span><select data-smart-field="priority" data-smart-index="${index}">${Object.entries(
+                            assignmentPriorityMeta,
+                          )
+                            .map(
+                              ([key, meta]) =>
+                                `<option value="${key}" ${draft.priority === key ? 'selected' : ''}>${escapeHtml(meta.label)}</option>`,
+                            )
+                            .join('')}</select></label>
+                          <label class="field smart-entry-wide"><span>备注</span><textarea data-smart-field="notes" data-smart-index="${index}" maxlength="500" rows="2">${escapeHtml(draft.notes || '')}</textarea></label>
+                        </div>
+                        <p data-smart-edit-warning role="status"></p>
+                        <div class="smart-entry-source">
+                          <strong>${draft.sourceImage ? `截图 ${Number(draft.sourceImage)} · 模型摘录，请对照图片核实` : '通知文字 · 原文依据'}</strong>
+                          <p>${escapeHtml(draft.sourceQuote || '模型未提供可核对的原文片段，请对照上方通知或截图确认。')}</p>
+                        </div>
+                      </details>
                     </div>`
                   })
                   .join('')}
               </div>
               <div class="smart-entry-result-actions">
-                <span class="setting-hint">添加后仍可逐条编辑标题、截止时间和备注。</span>
+                <span class="setting-hint">请核对截止日期；无法确定的日期留空。原文摘录仅用于本次核对。</span>
                 <button class="button primary" type="button" data-action="add-smart-drafts">
                   <i data-lucide="plus"></i><span>添加选中的作业</span>
                 </button>
@@ -287,5 +315,60 @@ export function createAssignmentsPage({
   `
   }
 
-  return { renderPage }
+  function refreshSmartEntryDraft(target, index, draft, match) {
+    // 更新重复提示，不重建表单，保留焦点、选中项和编辑内容。
+    const row = target.closest('.smart-entry-draft')
+    const title = row?.querySelector('.smart-entry-draft-main strong')
+    if (title) title.textContent = draft.title || '请填写标题'
+    const notes = row?.querySelector('.smart-entry-draft-main small')
+    if (notes) notes.textContent = draft.notes || ''
+    const badges = row?.querySelectorAll(':scope > .badge') || []
+    const due = dueDateMeta(draft.dueAt)
+    const priority = assignmentPriorityMeta[draft.priority] || assignmentPriorityMeta.medium
+    if (badges[0]) badges[0].textContent = draft.course || '未分类'
+    if (badges[1]) {
+      badges[1].textContent = due.label
+      badges[1].className = 'badge ' + due.tone
+    }
+    if (badges[2]) {
+      badges[2].textContent = priority.label
+      badges[2].className = 'badge ' + priority.tone
+    }
+    row?.classList.toggle('is-duplicate', Boolean(match))
+    const flag = row?.querySelector('.smart-entry-duplicate-flag')
+    if (flag) flag.remove()
+    const warning = row?.querySelector('[data-smart-edit-warning]')
+    if (warning)
+      warning.textContent = match
+        ? '修改后可能与已有作业重复，添加时请核对处理方式；新匹配默认跳过。'
+        : ''
+    const duplicate = /** @type {HTMLElement | null} */ (
+      row?.querySelector('.smart-entry-duplicate')
+    )
+    if (duplicate) {
+      duplicate.replaceChildren()
+      duplicate.hidden = !match
+      if (match) {
+        const label = document.createElement('span')
+        label.textContent = '已有“' + match.assignment.title + '”'
+        const select = document.createElement('select')
+        select.dataset.smartDraftDecision = String(index)
+        select.setAttribute('aria-label', '处理与已有作业重复的 ' + draft.title)
+        for (const [value, text] of [
+          ['skip', '跳过'],
+          ['merge', '合并到已有'],
+          ['create', '仍要新建'],
+        ]) {
+          const option = document.createElement('option')
+          option.value = value
+          option.textContent = text
+          select.append(option)
+        }
+        select.value = state.smartEntryDecisions[index]
+        duplicate.append(label, select)
+      }
+    }
+  }
+
+  return { renderPage, refreshSmartEntryDraft }
 }

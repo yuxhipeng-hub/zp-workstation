@@ -5,6 +5,7 @@ const {
   MAX_EXTRACT_TEXT_LENGTH,
   buildExtractMessages,
   cleanExtractImages,
+  cleanDueDate,
   parseExtractContent,
 } = require('./ai-extract.cjs')
 
@@ -520,6 +521,10 @@ class AiService {
     const payload = input && typeof input === 'object' && !Array.isArray(input) ? input : null
     const source = String(payload ? (payload.text ?? '') : (input ?? '')).trim()
     const images = cleanExtractImages(payload?.images)
+    const noticeDate = payload?.noticeDate || ''
+    if (noticeDate && (typeof noticeDate !== 'string' || cleanDueDate(noticeDate) !== noticeDate)) {
+      throw new Error('通知日期无效，请选择有效日期。')
+    }
     if (!source && !images.length) throw new Error('请先粘贴通知内容。')
     if (source.length > MAX_EXTRACT_TEXT_LENGTH) {
       throw new Error(`通知内容最多 ${MAX_EXTRACT_TEXT_LENGTH} 字，请分段处理。`)
@@ -536,13 +541,19 @@ class AiService {
     )
     const content = await this.requestChat(
       profile,
-      buildExtractMessages(source, new Date(), images),
+      buildExtractMessages(source, new Date(), images, noticeDate),
       {
         maxTokens: Math.min(profile.maxOutputTokens || 1400, 2000),
         temperature: 0.1,
       },
     )
     const assignments = parseExtractContent(content)
+    for (const draft of assignments) {
+      if (draft.sourceImage > images.length) delete draft.sourceImage
+      if (!draft.sourceImage && draft.sourceQuote && !source.includes(draft.sourceQuote)) {
+        delete draft.sourceQuote
+      }
+    }
     this.logger?.info('ai', `通知抽取完成：${assignments.length} 条作业草稿`)
     return {
       assignments,

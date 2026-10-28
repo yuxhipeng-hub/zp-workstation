@@ -98,7 +98,7 @@ test('prompt sends only the pasted notice plus today and the strict schema', () 
 test('keeps the documented payload limit', () => {
   assert.equal(MAX_EXTRACT_TEXT_LENGTH, 4000)
   assert.equal(MAX_EXTRACT_DRAFTS, 5)
-  assert.equal(MAX_EXTRACT_IMAGES, 2)
+  assert.equal(MAX_EXTRACT_IMAGES, 6)
 })
 
 test('validates screenshot data and builds multimodal prompts', () => {
@@ -110,8 +110,8 @@ test('validates screenshot data and builds multimodal prompts', () => {
   assert.equal(Array.isArray(messages[1].content), true)
   assert.equal(messages[1].content[0].type, 'text')
   assert.match(messages[1].content[0].text, /图片中/)
-  assert.equal(messages[1].content[1].type, 'image_url')
-  assert.equal(messages[1].content[1].image_url.url, PNG_DATA_URL)
+  assert.equal(messages[1].content[2].type, 'image_url')
+  assert.equal(messages[1].content[2].image_url.url, PNG_DATA_URL)
 
   assert.throws(
     () => cleanExtractImages([{ dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=' }]),
@@ -122,7 +122,7 @@ test('validates screenshot data and builds multimodal prompts', () => {
       cleanExtractImages(
         Array.from({ length: MAX_EXTRACT_IMAGES + 1 }, () => ({ dataUrl: PNG_DATA_URL })),
       ),
-    /最多识别 2 张截图/,
+    /最多识别 6 张截图/,
   )
   assert.throws(
     () =>
@@ -133,4 +133,26 @@ test('validates screenshot data and builds multimodal prompts', () => {
       ]),
     /不能超过 5 MB/,
   )
+})
+
+test('accepts six ordered screenshots and uses the notice date as the relative-date reference', () => {
+  const images = cleanExtractImages(
+    Array.from({ length: 6 }, (_, i) => ({ name: String(i), dataUrl: PNG_DATA_URL })),
+  )
+  const messages = buildExtractMessages('明天交报告', new Date(2026, 9, 28), images, '2026-10-20')
+  const parts = messages[1].content
+  assert.equal(parts.filter((part) => part.type === 'image_url').length, 6)
+  assert.match(parts[0].text, /换算基准）：2026-10-20/)
+  assert.equal(parts[11].text, '截图 6')
+  assert.match(parts[0].text, /不要编造/)
+})
+
+test('cleans source evidence without treating invalid image numbers as evidence', () => {
+  const [draft, invalid] = cleanExtractedAssignments([
+    { title: '报告', sourceQuote: ' 明天交报告 ', sourceImage: 6 },
+    { title: '其他', sourceImage: 7 },
+  ])
+  assert.equal(draft.sourceQuote, '明天交报告')
+  assert.equal(draft.sourceImage, 6)
+  assert.equal(invalid.sourceImage, undefined)
 })
