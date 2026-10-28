@@ -1,4 +1,5 @@
 .ppt-studio {
+  --ppt-gutter: 24px;
   min-width: 0;
   color: var(--text);
 }
@@ -22,7 +23,7 @@
   gap: 36px;
   align-items: center;
   min-height: 330px;
-  padding: 32px 8px 40px;
+  padding: 32px var(--ppt-gutter) 40px;
 }
 
 .ppt-welcome-copy h2 {
@@ -123,7 +124,7 @@
 }
 
 .ppt-gallery {
-  padding-top: 28px;
+  padding: 28px var(--ppt-gutter) var(--ppt-gutter);
   border-top: 1px solid var(--line);
 }
 
@@ -140,7 +141,7 @@
 
 .ppt-project-open {
   width: 100%;
-  padding: 0 0 12px;
+  padding: 0 0 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--panel);
@@ -157,7 +158,7 @@
 .ppt-project-open > strong,
 .ppt-project-open > span {
   display: block;
-  margin: 12px 40px 0 12px;
+  margin: 14px 44px 0 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -201,7 +202,7 @@
 
 .ppt-brief,
 .ppt-candidate {
-  padding: 24px 0;
+  padding: 24px var(--ppt-gutter);
   margin-bottom: 24px;
   border-bottom: 1px solid var(--line);
 }
@@ -295,7 +296,7 @@
 .ppt-editor-bar {
   flex-wrap: wrap;
   gap: 14px;
-  padding: 4px 0 18px;
+  padding: 16px var(--ppt-gutter) 18px;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -376,13 +377,13 @@
 
 .ppt-editor-grid {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) 240px;
+  grid-template-columns: 148px minmax(0, 1fr) 264px;
   align-items: start;
   min-width: 0;
 }
 
 .ppt-filmstrip {
-  padding: 18px 16px 0 0;
+  padding: 18px 12px 16px var(--ppt-gutter);
   max-height: calc(100vh - 240px);
   overflow-y: auto;
 }
@@ -486,7 +487,7 @@
 }
 
 .ppt-inspector {
-  padding: 24px 0 0 20px;
+  padding: 24px var(--ppt-gutter) 16px 20px;
   max-height: calc(100vh - 240px);
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -507,7 +508,7 @@
 .ppt-presentation {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 16px 0;
+  padding: 16px var(--ppt-gutter);
 }
 
 .ppt-presentation-controls {
@@ -524,8 +525,11 @@
 }
 
 @media (max-width: 1100px) {
+  .ppt-studio {
+    --ppt-gutter: 16px;
+  }
   .ppt-editor-grid {
-    grid-template-columns: 88px minmax(0, 1fr) 220px;
+    grid-template-columns: 108px minmax(0, 1fr) 240px;
   }
   .ppt-stage-column {
     padding: 16px;
@@ -551,7 +555,7 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0 24px;
-    padding: 24px 0 0;
+    padding: 24px var(--ppt-gutter) 16px;
     border-top: 1px solid var(--line);
     max-height: none;
     overflow: visible;

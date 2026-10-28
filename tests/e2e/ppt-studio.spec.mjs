@@ -208,6 +208,72 @@ test('PPT studio stages model output before adoption and preserves the draft on 
   }
 })
 
+test('PPT studio leaves consistent space between content and the outer frame', async () => {
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await window.getByRole('button', { name: '试试手动编辑', exact: true }).click()
+    await window.locator('#ppt-deck-title').fill('间距核对作品')
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    await window.getByRole('button', { name: '返回作品', exact: true }).click()
+    for (const width of [1280, 1080]) {
+      await app.evaluate(
+        ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setSize(size, 820),
+        width,
+      )
+      for (const theme of ['dark', 'light']) {
+        await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+        await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
+        const gaps = await window.locator('.ppt-studio').evaluate((root) => {
+          const outer = root.getBoundingClientRect()
+          const box = (selector) => root.querySelector(selector).getBoundingClientRect()
+          return {
+            titleLeft: box('.ppt-gallery h2').left - outer.left,
+            countRight: outer.right - box('.ppt-gallery .ppt-section-heading > span').right,
+            cardLeft: box('.ppt-project').left - outer.left,
+            heroLeft: box('.ppt-welcome-copy').left - outer.left,
+            heroRight: outer.right - box('.ppt-welcome-art').right,
+            cardBottom: outer.bottom - box('.ppt-project').bottom,
+          }
+        })
+        for (const [edge, gap] of Object.entries(gaps))
+          expect(gap, `${width}/${theme}/${edge}`).toBeGreaterThanOrEqual(16)
+        expect(Math.abs(gaps.titleLeft - gaps.heroLeft)).toBeLessThanOrEqual(1)
+        expect(Math.abs(gaps.titleLeft - gaps.countRight)).toBeLessThanOrEqual(1)
+        fs.mkdirSync(screenshotDir, { recursive: true })
+        await window.locator('.ppt-gallery').screenshot({
+          path: path.join(screenshotDir, `spacing-gallery-${width}-${theme}.png`),
+          animations: 'disabled',
+        })
+        await window.locator('.ppt-project-open').click()
+        const editorGaps = await window.locator('.ppt-studio').evaluate((root) => {
+          const outer = root.getBoundingClientRect()
+          const box = (selector) => root.querySelector(selector).getBoundingClientRect()
+          return {
+            toolbarLeft: box('.ppt-editor-identity').left - outer.left,
+            toolbarRight: outer.right - box('.ppt-editor-bar > .ppt-inline-actions').right,
+            pagesLeft: box('.ppt-filmstrip-head').left - outer.left,
+            formRight: outer.right - box('#ppt-deck-title').right,
+          }
+        })
+        for (const [edge, gap] of Object.entries(editorGaps))
+          expect(gap, `${width}/${theme}/${edge}`).toBeGreaterThanOrEqual(16)
+        const overflow = await window
+          .locator('.ppt-studio')
+          .evaluate((element) => element.scrollWidth - element.clientWidth)
+        expect(overflow).toBeLessThanOrEqual(1)
+        await window.getByRole('button', { name: '返回作品', exact: true }).click()
+      }
+    }
+  } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('PPT studio keeps narrow light and dark layouts usable and escapes editable content', async () => {
   const directory = temporaryDirectory()
   let app
