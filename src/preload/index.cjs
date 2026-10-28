@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('launcher', {
   setPresentationDirty: (value) => ipcRenderer.invoke('presentation:dirty', value),
   deletePresentation: (id) => ipcRenderer.invoke('presentation:delete', id),
   generatePresentation: (input) => ipcRenderer.invoke('presentation:generate', input),
+  chatPresentation: (input) => ipcRenderer.invoke('presentation:chat', input),
   exportPresentation: (input) => ipcRenderer.invoke('presentation:export', input),
   listCourses: () => ipcRenderer.invoke('workspace:courses'),
   createCourse: (input) => ipcRenderer.invoke('workspace:course-create', input),

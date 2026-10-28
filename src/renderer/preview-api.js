@@ -1492,6 +1492,16 @@ export function createPreviewLauncherApi() {
       }))
       return { deck, profile: { label: '预览示例', model: '未调用模型' } }
     },
+    async chatPresentation(input) {
+      const message = '这是界面预览示例，未调用真实模型。请在桌面应用中连接模型制作作品。'
+      if (input.deck) return { action: 'clarify', message, profile: { label: '预览示例' } }
+      return {
+        action: 'create',
+        message,
+        deck: createPresentation({ title: '对话创作示例' }),
+        profile: { label: '预览示例' },
+      }
+    },
     async exportPresentation() {
       throw new Error('浏览器预览不提供本机文件导出，请在桌面应用中导出。')
     },

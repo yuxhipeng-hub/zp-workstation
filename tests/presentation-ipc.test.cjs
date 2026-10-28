@@ -36,6 +36,10 @@ function harness(overrides = {}) {
         calls.push('generate')
         return brief
       },
+      chatPresentation: (input) => {
+        calls.push('chat')
+        return input
+      },
     },
     onPresentationDirty: (value) => calls.push(`dirty:${value}`),
     getMainWindow: () => null,
@@ -47,7 +51,12 @@ function harness(overrides = {}) {
 
 test('PPT IPC validates renderer data before persistence, model calls or a save dialog', async () => {
   const { handlers, calls } = harness()
-  for (const name of ['presentation:save', 'presentation:generate', 'presentation:export']) {
+  for (const name of [
+    'presentation:save',
+    'presentation:generate',
+    'presentation:chat',
+    'presentation:export',
+  ]) {
     await assert.rejects(async () => handlers.get(name)(null, { slides: [] }))
   }
   assert.deepEqual(calls, [])
@@ -75,6 +84,11 @@ test('PPT IPC routes valid saves, deletes and draft generation to their bounded 
     3,
   )
   assert.deepEqual(calls, ['save', 'delete', 'generate'])
+  assert.equal(
+    handlers.get('presentation:chat')(null, { message: '比赛通知原文' }).message,
+    '比赛通知原文',
+  )
+  assert.deepEqual(calls, ['save', 'delete', 'generate', 'chat'])
 })
 
 test('PPT IPC uses only the selected dialog path, sanitizes suggested names and appends the extension', async () => {
@@ -163,11 +177,18 @@ test('PPT preload exposes only the specific presentation operations', () => {
   })
   exposed.savePresentation({ title: 'test' })
   exposed.generatePresentation({ title: 'brief' })
+  exposed.chatPresentation({ message: '通知' })
   exposed.exportPresentation({ title: 'deck' })
   exposed.deletePresentation('id')
   assert.deepEqual(
     calls.map((call) => call[0]),
-    ['presentation:save', 'presentation:generate', 'presentation:export', 'presentation:delete'],
+    [
+      'presentation:save',
+      'presentation:generate',
+      'presentation:chat',
+      'presentation:export',
+      'presentation:delete',
+    ],
   )
   assert.equal(exposed.ipcRenderer, undefined)
 })

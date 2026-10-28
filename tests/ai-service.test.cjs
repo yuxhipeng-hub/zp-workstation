@@ -80,6 +80,76 @@ test('rejects concurrent PPT generation and releases the lock after a failed res
   assert.equal(service.presentationBusy, false)
 })
 
+test('PPT conversation uses the selected model and returns clarification or editable drafts without saving material', async (t) => {
+  const { createPresentation } = require('../src/shared/presentation.mjs')
+  const requests = []
+  let reply = { action: 'clarify', message: '请补充专业和经历。' }
+  const { directory, service } = createHarness(async (_url, options) => {
+    requests.push(JSON.parse(options.body))
+    return jsonResponse({ choices: [{ message: { content: JSON.stringify(reply) } }] })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile(
+    { label: '对话模型', baseUrl: 'https://example.com/v1', model: 'test' },
+    'private-key',
+  )
+  const first = await service.chatPresentation({ message: '比赛通知原文' })
+  assert.equal(first.action, 'clarify')
+  reply = {
+    action: 'create',
+    message: '已按要求制作。',
+    deck: createPresentation({ title: '参赛作品' }),
+  }
+  const second = await service.chatPresentation({
+    message: '机械专业，先做，经历待补充',
+    history: [
+      { role: 'user', content: '比赛通知原文' },
+      { role: 'assistant', content: first.message },
+    ],
+  })
+  assert.equal(second.deck.title, '参赛作品')
+  assert.equal(second.profile.label, '对话模型')
+  assert.match(JSON.stringify(requests[1].messages), /比赛通知原文/)
+  assert.doesNotMatch(JSON.stringify(second), /private-key|比赛通知原文/)
+  assert.equal(fs.existsSync(path.join(directory, 'workspace.json')), false)
+  reply = {
+    action: 'edit',
+    message: '已修改标题。',
+    changes: { slides: [{ id: second.deck.slides[1].id, title: '修改后的重点' }] },
+  }
+  const edited = await service.chatPresentation({ message: '修改第二页标题', deck: second.deck })
+  assert.equal(edited.deck.slides[1].title, '修改后的重点')
+  assert.deepEqual(edited.deck.slides[0], second.deck.slides[0])
+})
+
+test('PPT conversation shares the generation lock and releases it after malformed output', async (t) => {
+  let finish
+  const { directory, service } = createHarness(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile({ label: '模型', baseUrl: 'https://example.com/v1', model: 'test' }, 'key')
+  const pending = service.chatPresentation({ message: '制作' })
+  await assert.rejects(service.chatPresentation({ message: '另一个请求' }), /正在生成/)
+  await assert.rejects(
+    service.generatePresentation({ title: '旧入口', scene: 'report', pageCount: 3 }),
+    /正在生成/,
+  )
+  finish(jsonResponse({ choices: [{ message: { content: '{' } }] }))
+  await assert.rejects(pending, /完整的 JSON/)
+  assert.equal(service.presentationBusy, false)
+  const retry = service.chatPresentation({ message: '重试' })
+  finish(
+    jsonResponse({
+      choices: [{ message: { content: '{"action":"clarify","message":"请补充主题"}' } }],
+    }),
+  )
+  assert.equal((await retry).action, 'clarify')
+})
+
 test('stores model metadata without exposing the encrypted API key', (t) => {
   const { directory, service } = createHarness(async () => jsonResponse({}))
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

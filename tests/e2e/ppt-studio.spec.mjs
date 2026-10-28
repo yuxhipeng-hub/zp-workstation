@@ -41,6 +41,169 @@ async function close(app) {
   await app.close()
 }
 
+test('PPT conversation turns pasted notices into previews, edits selected pages and recovers failed replies', async () => {
+  const directory = temporaryDirectory()
+  const requests = []
+  const server = http.createServer((request, response) => {
+    let body = ''
+    request.on('data', (chunk) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      const payload = JSON.parse(body)
+      const context = JSON.parse(payload.messages.at(-1).content.split('\n').slice(1).join('\n'))
+      requests.push({ payload, context })
+      let reply
+      if (context.message.includes('比赛通知：')) {
+        reply = {
+          action: 'clarify',
+          message:
+            '已提取五分钟展示和评分要求，请补充专业与项目经历。<img src=x onerror="window.pptInjected=true">',
+        }
+      } else if (!context.deck) {
+        const deck = createPresentation({ title: '智能制造职业规划', scene: 'competition' })
+        deck.slides[1].notes = '已有经历留待补充，不编造获奖事实。'
+        reply = {
+          action: 'create',
+          message: '已按通知组织成三页初稿，个人项目经历标记待补充。',
+          deck,
+        }
+      } else {
+        reply = {
+          action: 'edit',
+          message: '仅调整当前页标题，其余页面和备注保持。',
+          changes: {
+            slides: [
+              {
+                id: context.message.includes('无效回复')
+                  ? 'unknown-slide'
+                  : context.selectedSlideId,
+                title: '从机械基础走向智能制造',
+              },
+            ],
+          },
+        }
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }))
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await expect(window.locator('.ppt-studio textarea')).toHaveCount(1)
+    await expect(window.locator('.ppt-studio select')).toHaveCount(0)
+    await expect(window.getByRole('button', { name: '发送', exact: true })).toBeDisabled()
+    await window.evaluate(async (baseUrl) => {
+      await window.launcher.saveAiProfile(
+        { label: '本地测试模型', baseUrl, model: 'test', requiresKey: false },
+        '',
+      )
+    }, `http://127.0.0.1:${server.address().port}/v1`)
+    await window.reload()
+    await window.locator('.nav-item[data-page="ppt"]').click()
+    await window
+      .locator('#ppt-message')
+      .fill('比赛通知：职业规划大赛，展示五分钟，评分关注职业目标、行动与成果。')
+    await window.locator('#ppt-message').press('Enter')
+    expect(requests).toHaveLength(0)
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-message-assistant')).toContainText('请补充专业与项目经历')
+    await expect(window.locator('.ppt-message-assistant img')).toHaveCount(0)
+    expect(await window.evaluate(() => window.pptInjected)).toBeUndefined()
+    await expect(window.locator('.ppt-editor')).toHaveCount(0)
+    await expect(window.locator('#ppt-message')).toBeFocused()
+    await window
+      .locator('#ppt-message')
+      .fill('我是机械专业大二学生，想走智能制造方向，先做，项目经历待补充。')
+    await window.locator('#ppt-message').press('Control+Enter')
+    await expect(window.locator('[data-ppt-project-title]')).toHaveText('智能制造职业规划')
+    await expect(window.locator('.ppt-thumbnail')).toHaveCount(3)
+    await expect(window.locator('.ppt-inspector')).toHaveCount(0)
+    await expect(window.locator('.ppt-message')).toHaveCount(4)
+    expect(requests[1].payload.messages[1].content).toContain('比赛通知：')
+    expect(
+      (await window.evaluate(() => window.launcher.getWorkspace())).presentations,
+    ).toHaveLength(0)
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+    const before = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    await window.getByRole('button', { name: '选择第 2 页', exact: true }).click()
+    await window.locator('#ppt-message').fill('这一页标题改得更具体，其他内容保留。')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('[data-ppt-preview]')).toContainText('从机械基础走向智能制造')
+    expect(requests[2].context.selectedSlideId).toBe(before.slides[1].id)
+    expect((await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]).toEqual(
+      before,
+    )
+    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
+    await expect(window.locator('#ppt-slide-notes')).toHaveValue(before.slides[1].notes)
+    await window.getByRole('button', { name: '撤销修改', exact: true }).click()
+    await expect(window.locator('#ppt-slide-title')).toHaveValue(before.slides[1].title)
+    await window.getByRole('button', { name: '重做修改', exact: true }).click()
+    await expect(window.locator('#ppt-slide-title')).toHaveValue('从机械基础走向智能制造')
+    await window.locator('#ppt-message').fill('触发无效回复')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-error')).toContainText('输入和原作品已保留')
+    await expect(window.locator('#ppt-message')).toHaveValue('触发无效回复')
+    await expect(window.locator('#ppt-slide-title')).toHaveValue('从机械基础走向智能制造')
+    await expect(window.locator('.ppt-message')).toHaveCount(6)
+    await window.locator('#ppt-message').fill('重新修改当前页标题')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-error')).toHaveCount(0)
+    await expect(window.locator('.ppt-message')).toHaveCount(8)
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+    const after = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    expect(after.slides[0]).toEqual(before.slides[0])
+    expect(after.slides[2]).toEqual(before.slides[2])
+    expect(after.slides[1].notes).toBe(before.slides[1].notes)
+    fs.mkdirSync(screenshotDir, { recursive: true })
+    await window.getByRole('button', { name: '收起编辑', exact: true }).click()
+    await window.evaluate(() => window.launcher.patchSettings({ theme: 'dark' }))
+    await expect(window.locator('body')).toHaveAttribute('data-theme', 'dark')
+    await window.locator('.view').evaluate((element) => {
+      element.scrollTop = 0
+    })
+    const composerBox = await window.locator('[data-action="ppt-send"]').boundingBox()
+    expect(composerBox.y + composerBox.height).toBeLessThanOrEqual(
+      await window.evaluate(() => globalThis.innerHeight),
+    )
+    await expect(window.locator('#toasts .toast')).toHaveCount(0)
+    await window.screenshot({
+      path: path.join(screenshotDir, 'conversation-preview-dark.png'),
+      animations: 'disabled',
+    })
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1080, 820))
+    await window.evaluate(() => window.launcher.patchSettings({ theme: 'light' }))
+    await expect(window.locator('body')).toHaveAttribute('data-theme', 'light')
+    expect(
+      await window
+        .locator('.ppt-studio')
+        .evaluate((element) => element.scrollWidth - element.clientWidth),
+    ).toBeLessThanOrEqual(1)
+    await window.screenshot({
+      path: path.join(screenshotDir, 'conversation-preview-light.png'),
+      animations: 'disabled',
+    })
+    await window.getByRole('button', { name: '返回作品', exact: true }).click()
+    await window.locator('.ppt-project-open').click()
+    await expect(window.locator('.ppt-message')).toHaveCount(0)
+    await window.locator('#ppt-message').fill('修改当前封面标题')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-message')).toHaveCount(2)
+    expect(requests.at(-1).payload.messages).toHaveLength(2)
+    expect(requests.at(-1).context.selectedSlideId).toBe(after.slides[0].id)
+  } finally {
+    if (app) await close(app)
+    await new Promise((resolve) => server.close(resolve))
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('PPT studio edits, reorders, saves, exports native objects and survives restart', async () => {
   const directory = temporaryDirectory()
   let app
@@ -49,7 +212,7 @@ test('PPT studio edits, reorders, saves, exports native objects and survives res
     app = launched.app
     let window = launched.window
     await expect(window.locator('.nav-section-tools')).toContainText('工具')
-    await window.getByRole('button', { name: '试试手动编辑', exact: true }).click()
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await window.locator('#ppt-deck-title').fill('客户提案 <测试>')
     await window.locator('#ppt-slide-title').fill('让客户看清真正的价值')
     await window.locator('#ppt-slide-notes').fill('这是一段只进入备注的讲稿。')
@@ -89,6 +252,7 @@ test('PPT studio edits, reorders, saves, exports native objects and survives res
     app = launched.app
     window = launched.window
     await window.locator('.ppt-project-open').filter({ hasText: '客户提案 <测试>' }).click()
+    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
     await expect(window.locator('#ppt-slide-title')).toHaveValue('让客户看清真正的价值')
     await expect(window.locator('#ppt-slide-notes')).toHaveValue('这是一段只进入备注的讲稿。')
     await expect(window.locator('.ppt-thumbnail')).toHaveCount(4)
@@ -110,7 +274,7 @@ test('PPT studio keeps drafts when leaving is canceled and confirms project dele
     const launched = await launch(directory)
     app = launched.app
     const window = launched.window
-    await window.getByRole('button', { name: '试试手动编辑', exact: true }).click()
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await window.locator('#ppt-deck-title').fill('保留作品')
     await window.getByRole('button', { name: '保存作品', exact: true }).click()
     await window.locator('#ppt-slide-title').fill('还没有保存的标题')
@@ -141,6 +305,7 @@ test('PPT studio keeps drafts when leaving is canceled and confirms project dele
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await window.getByRole('dialog').getByRole('button', { name: '不保存', exact: true }).click()
     await window.locator('.ppt-project-open').click()
+    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
     await expect(window.locator('#ppt-slide-title')).toHaveValue('从一个好想法开始')
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await window.getByRole('button', { name: '删除作品：保留作品', exact: true }).click()
@@ -164,7 +329,7 @@ test('PPT studio saves directly from its three-button dialog and keeps the draft
     const launched = await launch(directory)
     app = launched.app
     const window = launched.window
-    await window.getByRole('button', { name: '试试手动编辑', exact: true }).click()
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await window.locator('#ppt-deck-title').fill('直接保存的作品')
     await window.locator('#ppt-slide-title').fill('需要保存的新标题')
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
@@ -198,78 +363,13 @@ test('PPT studio saves directly from its three-button dialog and keeps the draft
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
     await expect(window.locator('.ppt-project-open')).toContainText('直接保存的作品')
     await window.locator('.ppt-project-open').click()
+    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
     await expect(window.locator('#ppt-slide-title')).toHaveValue('需要保存的新标题')
     await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
   } finally {
     if (fs.existsSync(temporaryPath) && fs.statSync(temporaryPath).isDirectory())
       fs.rmdirSync(temporaryPath)
     if (app) await close(app)
-    fs.rmSync(directory, { recursive: true, force: true })
-  }
-})
-
-test('PPT studio stages model output before adoption and preserves the draft on a failed generation', async () => {
-  const directory = temporaryDirectory()
-  let malformed = false
-  const requests = []
-  const server = http.createServer((request, response) => {
-    let body = ''
-    request.on('data', (chunk) => {
-      body += chunk
-    })
-    request.on('end', () => {
-      requests.push(JSON.parse(body))
-      const slides = createPresentation({ title: '模型建议标题' }).slides
-      response.writeHead(200, { 'Content-Type': 'application/json' })
-      response.end(
-        JSON.stringify({
-          choices: [
-            { message: { content: malformed ? '{"slides":[]}' : JSON.stringify({ slides }) } },
-          ],
-        }),
-      )
-    })
-  })
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-  let app
-  try {
-    const launched = await launch(directory)
-    app = launched.app
-    const window = launched.window
-    await window.evaluate(async (baseUrl) => {
-      await window.launcher.saveAiProfile(
-        { label: '本地测试模型', baseUrl, model: 'test', requiresKey: false },
-        '',
-      )
-    }, `http://127.0.0.1:${server.address().port}/v1`)
-    await window.reload()
-    await window.locator('.nav-item[data-page="ppt"]').click()
-    await window.getByRole('button', { name: '试试手动编辑', exact: true }).click()
-    await window.locator('#ppt-slide-title').fill('我的原始标题')
-    await window.getByRole('button', { name: 'AI 大纲', exact: true }).click()
-    await window.locator('#ppt-brief-title').fill('服务提案')
-    await window.locator('[data-ppt-field="pageCount"]').selectOption('3')
-    await window.locator('#ppt-brief-material').fill('本次主动提供的真实事实')
-    await window.getByRole('button', { name: '生成 AI 大纲', exact: true }).click()
-    await expect(window.locator('.ppt-candidate')).toBeVisible()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('我的原始标题')
-    expect(
-      (await window.evaluate(() => window.launcher.getWorkspace())).presentations,
-    ).toHaveLength(0)
-    expect(requests[0].messages[1].content).toContain('本次主动提供的真实事实')
-    await window.getByRole('button', { name: '采用这版大纲', exact: true }).click()
-    await expect(window.locator('#ppt-deck-title')).toHaveValue('服务提案')
-    await window.getByRole('button', { name: '撤销修改', exact: true }).click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('我的原始标题')
-    malformed = true
-    await window.getByRole('button', { name: 'AI 大纲', exact: true }).click()
-    await window.getByRole('button', { name: '生成 AI 大纲', exact: true }).click()
-    await expect(window.locator('.ppt-error')).toContainText('页数不完整')
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('我的原始标题')
-    await expect(window.locator('.ppt-candidate')).toHaveCount(0)
-  } finally {
-    if (app) await close(app)
-    await new Promise((resolve) => server.close(resolve))
     fs.rmSync(directory, { recursive: true, force: true })
   }
 })
@@ -281,7 +381,7 @@ test('PPT studio leaves consistent space between content and the outer frame', a
     const launched = await launch(directory)
     app = launched.app
     const window = launched.window
-    await window.getByRole('button', { name: '试试手动编辑', exact: true }).click()
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await window.locator('#ppt-deck-title').fill('间距核对作品')
     await window.getByRole('button', { name: '保存作品', exact: true }).click()
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
@@ -300,14 +400,14 @@ test('PPT studio leaves consistent space between content and the outer frame', a
             titleLeft: box('.ppt-gallery h2').left - outer.left,
             countRight: outer.right - box('.ppt-gallery .ppt-section-heading > span').right,
             cardLeft: box('.ppt-project').left - outer.left,
-            heroLeft: box('.ppt-welcome-copy').left - outer.left,
-            heroRight: outer.right - box('.ppt-welcome-art').right,
+            inputLeft: box('.ppt-composer').left - outer.left,
+            inputRight: outer.right - box('.ppt-composer').right,
             cardBottom: outer.bottom - box('.ppt-project').bottom,
           }
         })
         for (const [edge, gap] of Object.entries(gaps))
           expect(gap, `${width}/${theme}/${edge}`).toBeGreaterThanOrEqual(16)
-        expect(Math.abs(gaps.titleLeft - gaps.heroLeft)).toBeLessThanOrEqual(1)
+        expect(Math.abs(gaps.inputLeft - gaps.inputRight)).toBeLessThanOrEqual(1)
         expect(Math.abs(gaps.titleLeft - gaps.countRight)).toBeLessThanOrEqual(1)
         fs.mkdirSync(screenshotDir, { recursive: true })
         await window.locator('.ppt-gallery').screenshot({
@@ -315,6 +415,7 @@ test('PPT studio leaves consistent space between content and the outer frame', a
           animations: 'disabled',
         })
         await window.locator('.ppt-project-open').click()
+        await window.getByRole('button', { name: '手动编辑', exact: true }).click()
         const editorGaps = await window.locator('.ppt-studio').evaluate((root) => {
           const outer = root.getBoundingClientRect()
           const box = (selector) => root.querySelector(selector).getBoundingClientRect()
@@ -354,7 +455,7 @@ test('PPT studio keeps narrow light and dark layouts usable and escapes editable
       path: path.join(screenshotDir, 'landing-dark.png'),
       animations: 'disabled',
     })
-    await window.getByRole('button', { name: '试试手动编辑', exact: true }).click()
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await window.locator('#ppt-slide-title').fill('<img src=x onerror="window.pptInjected=true">')
     await expect(window.locator('.ppt-stage img')).toHaveCount(0)
     expect(await window.evaluate(() => window.pptInjected)).toBeUndefined()

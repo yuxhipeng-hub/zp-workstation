@@ -6,6 +6,11 @@ const {
   presentationMessages,
   parsePresentationContent,
 } = require('./presentation-ai.cjs')
+const {
+  cleanPresentationChat,
+  presentationChatMessages,
+  parsePresentationChat,
+} = require('./presentation-chat.cjs')
 
 const MAX_PROFILES = 20
 const REQUEST_TIMEOUT_MS = 90_000
@@ -420,6 +425,24 @@ class AiService {
     return {
       plan,
       profile: { id: profile.id, label: profile.label, model: profile.model },
+    }
+  }
+
+  async chatPresentation(input) {
+    const request = cleanPresentationChat(input)
+    if (this.presentationBusy) throw new Error('已有 PPT 请求正在生成，请稍候。')
+    const profile = this.resolveProfile()
+    this.presentationBusy = true
+    try {
+      const content = await this.requestChat(profile, presentationChatMessages(request), {
+        maxTokens: Math.min(16000, Math.max(profile.maxOutputTokens || 1800, 10000)),
+        temperature: 0.5,
+      })
+      const result = parsePresentationChat(content, request)
+      this.logger?.info('ai', `PPT 对话处理完成：${result.action}`)
+      return { ...result, profile: { label: profile.label, model: profile.model } }
+    } finally {
+      this.presentationBusy = false
     }
   }
 

@@ -1,6 +1,7 @@
 const path = require('node:path')
 const { validatePresentationInput, getPresentationIssues } = require('../shared/presentation.mjs')
 const { cleanPresentationBrief } = require('./presentation-ai.cjs')
+const { cleanPresentationChat } = require('./presentation-chat.cjs')
 const { exportPresentation } = require('./presentation-export.cjs')
 
 /** PPT 白名单独立注册，进程、对话框与保存依赖均由主进程注入。 */
@@ -28,6 +29,9 @@ function registerPresentationIpc({
   })
   ipcMain.handle('presentation:generate', (_event, input) =>
     aiService.generatePresentation(cleanPresentationBrief(input)),
+  )
+  ipcMain.handle('presentation:chat', (_event, input) =>
+    aiService.chatPresentation(cleanPresentationChat(input)),
   )
   let exportBusy = false
   ipcMain.handle('presentation:export', async (_event, input) => {
