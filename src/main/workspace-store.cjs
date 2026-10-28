@@ -284,6 +284,7 @@ class WorkspaceStore {
         .filter(Boolean)
         .slice(0, 300),
       assignments: Array.isArray(stored.assignments) ? stored.assignments : [],
+      // cleanPresentation 同时兼容旧文字页面和可选的策划、图表、对比与阶段内容；旧快照不需改写。
       presentations: (Array.isArray(stored.presentations) ? stored.presentations : [])
         .map((item) => cleanPresentation(item))
         .filter(Boolean)

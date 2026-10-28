@@ -1,6 +1,7 @@
 const { randomUUID } = require('node:crypto')
 const { AiSecretStore } = require('./ai-secret-store.cjs')
 const { cleanAiPlan } = require('./ai-plan.cjs')
+const { getPresentationIssues } = require('../shared/presentation.mjs')
 const {
   cleanPresentationBrief,
   presentationMessages,
@@ -13,6 +14,12 @@ const {
 } = require('./presentation-chat.cjs')
 
 const MAX_PROFILES = 20
+const {
+  presentationPlanningMessages,
+  parsePresentationPlan,
+  allocateSlideSeconds,
+} = require('./presentation-planner.cjs')
+const { presentationReviewMessages, parsePresentationReview } = require('./presentation-review.cjs')
 const REQUEST_TIMEOUT_MS = 90_000
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 const API_PROTOCOLS = new Set(['chat-completions', 'responses'])
@@ -434,11 +441,87 @@ class AiService {
     const profile = this.resolveProfile()
     this.presentationBusy = true
     try {
-      const content = await this.requestChat(profile, presentationChatMessages(request), {
+      let plan
+      if (!request.deck) {
+        const planning = await this.requestChat(profile, presentationPlanningMessages(request), {
+          maxTokens: 4500,
+          temperature: 0.3,
+        })
+        const planned = parsePresentationPlan(planning)
+        if (planned.action === 'clarify')
+          return { ...planned, profile: { label: profile.label, model: profile.model } }
+        plan = planned.plan
+      }
+      const messages = presentationChatMessages(request)
+      if (plan) {
+        messages[0].content += `\n已完成策划，请按 plan 制作恰好 ${plan.pages.length} 页，逐页落实 purpose、材料事实与信息缺口，输出 action=create。`
+        messages[messages.length - 1].content =
+          `本轮主动提交的内容与已完成的策划（JSON 数据）：\n${JSON.stringify({ phase: 'compose', message: request.message, deck: null, plan })}`
+      }
+      const options = {
         maxTokens: Math.min(16000, Math.max(profile.maxOutputTokens || 1800, 10000)),
         temperature: 0.5,
-      })
-      const result = parsePresentationChat(content, request)
+      }
+      let content = await this.requestChat(profile, messages, options)
+      const parse = (value) => {
+        const result = parsePresentationChat(value, request)
+        if (plan && (result.action !== 'create' || result.deck.slides.length !== plan.pages.length))
+          throw new Error('成品页数与策划不一致。')
+        if (plan) {
+          result.deck.strategy = plan.strategy
+          const seconds = allocateSlideSeconds(plan)
+          if (seconds)
+            result.deck.slides.forEach((slide, index) => {
+              slide.seconds = seconds[index]
+            })
+        }
+        const blocking = result.deck
+          ? getPresentationIssues(result.deck).filter((issue) => issue.blocking)
+          : []
+        if (blocking.length)
+          throw new Error(
+            blocking.map((issue) => `第 ${issue.page} 页：${issue.message}`).join('；'),
+          )
+        return result
+      }
+      let result
+      try {
+        result = parse(content)
+      } catch (error) {
+        // 只对已返回内容的结构/容量错误修正一次；网络错误不自动重试，失败也不写草稿。
+        const repairMessages = [
+          ...messages,
+          { role: 'assistant', content },
+          {
+            role: 'user',
+            content: `作品未通过检查：${error.message}\n请只修正这些结构或版面问题，保留原有事实、数值、来源和未修改页面，不新增事实。重新输出完整、合法的同类 JSON。`,
+          },
+        ]
+        content = await this.requestChat(profile, repairMessages, { ...options, temperature: 0.2 })
+        result = parse(content)
+      }
+      if (plan) {
+        result.deck.strategy = plan.strategy
+        const seconds = allocateSlideSeconds(plan)
+        result.deck.slides.forEach((slide, index) => {
+          if (!slide.purpose) slide.purpose = plan.pages[index].purpose
+          if (seconds) slide.seconds = seconds[index]
+        })
+        const reviewContent = await this.requestChat(
+          profile,
+          presentationReviewMessages(request, result.deck),
+          { maxTokens: 6000, temperature: 0.2 },
+        )
+        const reviewed = parsePresentationReview(reviewContent, request, result.deck)
+        if (
+          seconds &&
+          reviewed.deck.slides.some((slide, index) => slide.seconds !== seconds[index])
+        )
+          throw new Error('内容复核改变了已分配的陈述时长，请重试。')
+        const reviewIssues = getPresentationIssues(reviewed.deck).filter((issue) => issue.blocking)
+        if (reviewIssues.length) throw new Error('复核后的页面仍有内容容量问题，请重试。')
+        result.deck = reviewed.deck
+      }
       this.logger?.info('ai', `PPT 对话处理完成：${result.action}`)
       return { ...result, profile: { label: profile.label, model: profile.model } }
     } finally {

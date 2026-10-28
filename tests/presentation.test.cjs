@@ -19,6 +19,7 @@ const {
   presentationMessages,
 } = require('../src/main/presentation-ai.cjs')
 const { presentationBuffer, exportPresentation } = require('../src/main/presentation-export.cjs')
+const { referenceDeck } = require('./fixtures/presentation-reference.cjs')
 
 test('cleans imported deck metadata, duplicate slide ids and unsupported properties', () => {
   const deck = createPresentation({ title: '演示' })
@@ -57,6 +58,8 @@ test('all default layouts fit the canvas across every theme and report excessive
   for (const theme of Object.keys(PRESENTATION_THEMES)) {
     const deck = createPresentation({ theme })
     for (const layout of Object.keys(PRESENTATION_LAYOUTS)) {
+      const structured = referenceDeck('proposal').slides.find((slide) => slide.layout === layout)
+      if (structured) Object.assign(deck.slides[1], structured)
       deck.slides[1].layout = layout
       assert.equal(
         getPresentationIssues(deck).some((issue) => issue.blocking),

@@ -14,6 +14,30 @@ function createStore() {
   }
 }
 
+test('structured PPT data and planning survive reload, backups and old-snapshot compatibility', (t) => {
+  const { referenceDeck, planningReply } = require('./fixtures/presentation-reference.cjs')
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const deck = referenceDeck('proposal')
+  deck.strategy = planningReply(deck).plan.strategy
+  store.savePresentation(deck)
+  const saved = new WorkspaceStore(directory).get().presentations[0]
+  assert.deepEqual(saved.slides[2].chart.series[0].values, [3, 4, 1])
+  assert.deepEqual(saved.slides[3].comparison, deck.slides[3].comparison)
+  assert.deepEqual(saved.strategy, deck.strategy)
+  const backup = store.createBackup('structured-ppt')
+  store.deletePresentation(deck.id)
+  store.restoreBackup(backup.fileName)
+  assert.deepEqual(store.get().presentations[0].slides[5].items, saved.slides[5].items)
+  const old = createPresentation({ title: '旧版作品' })
+  const migrated = store.normalizeData({
+    presentations: [old, { ...deck, slides: [{ ...deck.slides[2], chart: { type: 'bad' } }] }],
+  })
+  assert.equal(migrated.presentations[0].slides[1].layout, 'split')
+  assert.equal(migrated.presentations[0].strategy, undefined)
+  assert.equal(migrated.presentations[1].slides[0].chart, undefined)
+})
+
 test('persists PPT projects, updates without duplicates and preserves them through snapshot import', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

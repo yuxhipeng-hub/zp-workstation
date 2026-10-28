@@ -28,8 +28,57 @@ async function presentationBuffer(input) {
     slide.background = { color: scene.background }
     for (const node of scene.nodes) {
       const box = { x: node.x * scale, y: node.y * scale, w: node.w * scale, h: node.h * scale }
-      if (node.type === 'rect') {
-        slide.addShape(pptx.ShapeType.rect, {
+      if (node.type === 'chart') {
+        slide.addChart(
+          pptx.ChartType[node.chart.type],
+          node.chart.series.map((series) => ({
+            name: series.name,
+            labels: node.chart.categories,
+            values: series.values,
+          })),
+          {
+            ...box,
+            barDir: 'col',
+            grouping: 'clustered',
+            chartColors: node.colors,
+            showLegend: true,
+            legendPos: 't',
+            legendFontFace: 'Microsoft YaHei',
+            legendFontSize: 12,
+            legendColor: scene.nodes.find((n) => n.type === 'text')?.color || '333333',
+            showValue: true,
+            dataLabelFormatCode: node.chart.series.some((s) =>
+              s.values.some((v) => Math.abs(v) >= 1e7 || (v !== 0 && Math.abs(v) < 0.001)),
+            )
+              ? '0.00E+00'
+              : '0.########',
+            dataLabelPosition: node.chart.type === 'bar' ? 'outEnd' : 't',
+            dataLabelColor: node.colors[1],
+            dataLabelFontFace: 'Microsoft YaHei',
+            dataLabelFontSize: 12,
+            catAxisLabelFontFace: 'Microsoft YaHei',
+            catAxisLabelFontSize: 12,
+            valAxisLabelFontFace: 'Microsoft YaHei',
+            valAxisLabelFontSize: 11,
+            catAxisLabelColor: node.colors[1],
+            valAxisLabelColor: node.colors[1],
+            valAxisMinVal: node.scale.min,
+            valAxisMaxVal: node.scale.max,
+            valAxisMajorUnit: node.scale.step,
+            catAxisLineShow: false,
+            valAxisLineShow: false,
+            valGridLine: { color: node.colors[2], size: 0.4 },
+            chartArea: { fill: { color: scene.background }, border: { color: scene.background } },
+            plotArea: { fill: { color: scene.background }, border: { color: scene.background } },
+            showCatName: false,
+            showBorder: false,
+            altText: node.chart.series
+              .map((series) => `${series.name}: ${series.values.join(', ')}`)
+              .join('; '),
+          },
+        )
+      } else if (node.type === 'rect' || node.type === 'ellipse') {
+        slide.addShape(node.type === 'ellipse' ? pptx.ShapeType.ellipse : pptx.ShapeType.rect, {
           ...box,
           fill: { color: node.color },
           line: { color: node.color, transparency: 100 },
@@ -49,7 +98,12 @@ async function presentationBuffer(input) {
         })
       }
     }
-    if (source.notes) slide.addNotes(source.notes)
+    if (source.notes || source.seconds)
+      slide.addNotes(
+        [source.seconds ? `建议讲述时长：${source.seconds} 秒` : '', source.notes]
+          .filter(Boolean)
+          .join('\n'),
+      )
   }
   return Buffer.from(await pptx.write({ outputType: 'nodebuffer' }))
 }

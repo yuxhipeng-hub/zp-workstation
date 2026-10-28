@@ -1,8 +1,9 @@
 const { randomUUID } = require('node:crypto')
 const { validatePresentationInput } = require('../shared/presentation.mjs')
+const { CONTENT_FIELDS } = require('../shared/presentation-content.mjs')
 
-const slideFields = ['layout', 'eyebrow', 'title', 'body', 'points', 'notes']
-const deckFields = ['title', 'theme', 'scene', 'audience', 'goal']
+const slideFields = ['layout', 'eyebrow', 'title', 'body', 'points', 'notes', ...CONTENT_FIELDS]
+const deckFields = ['title', 'theme', 'scene', 'audience', 'goal', 'strategy']
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value)
 function boundedText(value, limit, name) {
   if (typeof value !== 'string' || !value.trim() || value.length > limit)
@@ -50,8 +51,12 @@ function presentationChatMessages(input) {
 每页一个重点，标题建议 32 字以内，正文 120 字以内，0–4 个要点、每项 45 字以内，长解释放 notes。禁止输出 HTML、脚本或文件操作。
 场景 scene：proposal 商业提案、report 汇报、teaching 教学、technical 技术分享、brand 品牌、competition 比赛。
 主题 theme：editorial 暖白朱红、midnight 深色薄荷、paper 纸色宋体。
-版式 layout：cover 封面、statement 核心判断、split 左正文右要点、steps 步骤或并列要点、closing 结束页。
-页面字段：layout、eyebrow、title、body、points（字符串数组）、notes。除 id 外不使用其他字段。
+版式 layout：cover 封面、statement 核心判断、split 左正文右要点、steps 步骤或并列要点、closing 结束页；comparison 方案/能力对比、timeline 阶段时间线、process 实施流程、metrics 关键指标、chart 数值图表。
+页面基础字段：layout、eyebrow、title、body、points（字符串数组）、notes；purpose 表示本页希望听众理解什么，source 表示来源。按信息选表达方式，不强行每页套同一种文字版式；结构化版式的主内容放在以下字段，points 留空。
+如果用户指定陈述时长，strategy.durationSeconds 表示总秒数，每页 seconds 表示建议秒数；各页合计必须等于总秒数。修改总时长或页数时同步调整，notes 不另外写用时数字。不能只改总时长而保留不一致的页面用时。
+comparison 使用 comparison:{headers:[2–3 个方案名，不包含维度列],rows:[{label:"对比维度",values:[与 headers 数量相同的内容]}]}，最多 5 行；列标题和维度最多 24 字，每格建议 30 字以内。例如 {headers:["方案A","方案B"],rows:[{label:"投入",values:["低","待评估"]}]}；label 是独立维度列，不能再放进 headers。
+timeline/process/metrics 使用 items:[{label:"时间或步骤",value:"指标值，仅 metrics 使用",title:"阶段或指标标题",body:"说明"}]。时间线最多 5 项，流程和指标最多 4 项；标题建议 16 字以内，说明 40 字以内。已有行动与未来计划必须明确区分。
+chart 使用 chart:{type:"bar|line",categories:[分类],series:[{name:"系列名",values:[数值]}],unit:"单位",source:"数据来源"}，最多 8 个分类、3 个系列，数值必须与材料完全对应。分类名建议 12 字以内。只在用户提供数值和来源时画数据图，没有数值不虚构图表。分类比较用 bar，时间趋势用 line。不能把预测收益当已实现成果。
 严格选择一种输出：
 1. 需要补充：{"action":"clarify","message":"简短说明已理解的要求，并集中提出必要问题"}
 2. 尚无作品时制作 3–16 页：{"action":"create","message":"说明采用的结构与待补充项","deck":{"title":"作品名称","scene":"competition","theme":"editorial","audience":"听众","goal":"目标","slides":[页面对象]}}。第一页 cover，最后一页 closing，不生成任何 id。

@@ -1,3 +1,10 @@
+import {
+  presentationContent,
+  presentationStrategy,
+  structuredContentIssue,
+} from './presentation-content.mjs'
+import { buildStructuredSlide } from './presentation-layouts.mjs'
+
 /** PPT 工作室的作品契约和确定性布局。此模块没有文件系统、网络或 DOM 依赖。 */
 export const PRESENTATION_LIMITS = { projects: 100, slides: 40, points: 6 }
 export const PRESENTATION_SCENES = {
@@ -14,6 +21,11 @@ export const PRESENTATION_LAYOUTS = {
   split: '内容分栏',
   steps: '步骤 / 要点',
   closing: '结束页',
+  comparison: '方案 / 能力对比',
+  timeline: '时间线 / 成长计划',
+  process: '流程 / 实施路径',
+  metrics: '关键指标',
+  chart: '数据图表',
 }
 export const PRESENTATION_THEMES = {
   editorial: {
@@ -77,6 +89,7 @@ export function cleanPresentation(input, existing = null) {
             .filter(Boolean)
         : [],
       notes: text(slide.notes, 4000),
+      ...presentationContent(slide),
     }
   })
   return {
@@ -89,6 +102,9 @@ export function cleanPresentation(input, existing = null) {
     slides,
     createdAt: existing?.createdAt || text(input.createdAt, 40) || now,
     updatedAt: text(input.updatedAt, 40) || now,
+    ...(presentationStrategy(input.strategy)
+      ? { strategy: presentationStrategy(input.strategy) }
+      : {}),
   }
 }
 
@@ -107,6 +123,7 @@ export function validatePresentationInput(input) {
   if (!input.title?.trim()) throw new Error('作品名称不能为空。')
   check(input.audience, 160, '听众')
   check(input.goal, 500, '演示目标')
+  presentationStrategy(input.strategy, true)
   if (!Object.hasOwn(PRESENTATION_THEMES, input.theme)) throw new Error('请选择有效的视觉主题。')
   if (!Object.hasOwn(PRESENTATION_SCENES, input.scene)) throw new Error('请选择有效的演示场景。')
   for (const slide of input.slides) {
@@ -121,6 +138,7 @@ export function validatePresentationInput(input) {
     if (!Array.isArray(slide.points) || slide.points.length > 6)
       throw new Error('每页最多 6 个要点。')
     slide.points.forEach((point) => check(point, 160, '要点'))
+    presentationContent(slide, true)
   }
   return cleanPresentation(input)
 }
@@ -213,7 +231,9 @@ export function buildSlideScene(slide, themeId = 'editorial', index = 0, total =
     theme.muted,
   )
   const points = Array.isArray(slide.points) ? slide.points : []
-  if (slide.layout === 'cover' || slide.layout === 'closing') {
+  if (buildStructuredSlide(slide, theme, { rect, label, nodes })) {
+    // 结构化版式与旧版式共用字体适配、边界检查和导出场景。
+  } else if (slide.layout === 'cover' || slide.layout === 'closing') {
     rect(1024, 148, 1, 430, theme.muted)
     label(String(index + 1).padStart(2, '0'), 1070, 158, 165, 140, 96, theme.accent)
     label(slide.title, 64, 164, 890, 240, 76, theme.ink, true, 40, true)
@@ -278,22 +298,39 @@ export function buildSlideScene(slide, themeId = 'editorial', index = 0, total =
 }
 
 export function getPresentationIssues(deck) {
-  return deck.slides.flatMap((slide, i) => {
-    const issues = []
-    if (slide.points.length > 6 || slide.points.some((point) => point.length > 160)) {
-      issues.push({ page: i + 1, message: '要点最多 6 项，每项最多 160 字。', blocking: true })
-    }
-    if (!slide.title.trim())
-      issues.push({ page: i + 1, message: '页面标题尚未填写。', blocking: false })
-    const scene = buildSlideScene(slide, deck.theme, i, deck.slides.length)
-    if (scene.nodes.some((node) => node.overflow))
-      issues.push({
-        page: i + 1,
-        message: '内容超出版式容量，请缩短文字、拆页或切换版式。',
-        blocking: true,
-      })
-    else if ([slide.body, ...slide.points].join('').length > 350)
-      issues.push({ page: i + 1, message: '内容偏多，建议把细节移到演讲备注。', blocking: false })
-    return issues
-  })
+  const durationIssues =
+    deck.strategy?.durationSeconds &&
+    deck.slides.reduce((sum, slide) => sum + (slide.seconds || 0), 0) !==
+      deck.strategy.durationSeconds
+      ? [
+          {
+            page: 1,
+            message: '页面建议用时合计与演示总时长不一致，请在对话中调整。',
+            blocking: true,
+          },
+        ]
+      : []
+  return [
+    ...durationIssues,
+    ...deck.slides.flatMap((slide, i) => {
+      const issues = []
+      const missing = structuredContentIssue(slide)
+      if (missing) issues.push({ page: i + 1, message: missing, blocking: true })
+      if (slide.points.length > 6 || slide.points.some((point) => point.length > 160)) {
+        issues.push({ page: i + 1, message: '要点最多 6 项，每项最多 160 字。', blocking: true })
+      }
+      if (!slide.title.trim())
+        issues.push({ page: i + 1, message: '页面标题尚未填写。', blocking: false })
+      const scene = buildSlideScene(slide, deck.theme, i, deck.slides.length)
+      if (scene.nodes.flatMap((node) => node.preview || [node]).some((node) => node.overflow))
+        issues.push({
+          page: i + 1,
+          message: '内容超出版式容量，请缩短文字、拆页或切换版式。',
+          blocking: true,
+        })
+      else if ([slide.body, ...slide.points].join('').length > 350)
+        issues.push({ page: i + 1, message: '内容偏多，建议把细节移到演讲备注。', blocking: false })
+      return issues
+    }),
+  ]
 }

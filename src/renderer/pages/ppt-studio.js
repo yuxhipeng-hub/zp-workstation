@@ -173,10 +173,13 @@ export function createPptStudioPage({
   function slideMarkup(slide, theme, index, total) {
     const scene = buildSlideScene(slide, theme, index, total)
     const nodes = scene.nodes
+      .flatMap((node) => node.preview || [node])
       .map((node) => {
         const style = `left:${node.x / 12.8}%;top:${node.y / 7.2}%;width:${node.w / 12.8}%;height:${node.h / 7.2}%;`
-        return node.type === 'rect'
-          ? `<span class="ppt-shape" style="${style}background:#${node.color}"></span>`
+        if (node.type === 'line')
+          return `<svg class="ppt-vector" style="${style}" viewBox="0 0 ${Math.max(1, node.w)} ${Math.max(1, node.h)}" aria-hidden="true"><line x1="${node.x1}" y1="${node.y1}" x2="${node.x2}" y2="${node.y2}" stroke="#${node.color}" stroke-width="${node.stroke || 2}"/></svg>`
+        return node.type === 'rect' || node.type === 'ellipse'
+          ? `<span class="ppt-shape" style="${style}background:#${node.color};${node.type === 'ellipse' ? 'border-radius:50%;' : ''}"></span>`
           : `<span class="ppt-text" style="${style}color:#${node.color};font-family:'${node.font}',sans-serif;font-size:${node.size / 12.8}cqw;font-weight:${node.bold ? 700 : 400}">${esc(node.text)}</span>`
       })
       .join('')
@@ -185,6 +188,10 @@ export function createPptStudioPage({
   function previewMarkup() {
     if (!draft) return ''
     return slideMarkup(draft.slides[selected], draft.theme, selected, draft.slides.length)
+  }
+  function pageLabel() {
+    const slide = draft.slides[selected]
+    return `第 ${selected + 1} 页 · ${PRESENTATION_LAYOUTS[slide.layout]}${slide.seconds ? ` · 建议 ${slide.seconds} 秒` : ''}`
   }
   function issuesMarkup() {
     if (!draft) return ''
@@ -196,6 +203,11 @@ export function createPptStudioPage({
   function field(scope, key, label, value, max, multiline = false, hint = '') {
     const attrs = `id="ppt-${scope}-${key}" data-ppt-scope="${scope}" data-ppt-field="${key}" maxlength="${max}" ${disabled(Boolean(busy))}`
     return `<label class="ppt-field" for="ppt-${scope}-${key}"><span>${esc(label)}</span>${multiline ? `<textarea ${attrs} rows="${key === 'notes' || key === 'material' ? 5 : 3}">${esc(value)}</textarea>` : `<input ${attrs} value="${esc(value)}" autocomplete="off">`}${hint ? `<small>${esc(hint)}</small>` : ''}</label>`
+  }
+  function strategyMarkup() {
+    if (!draft?.strategy) return ''
+    const strategy = draft.strategy
+    return `<details class="ppt-strategy"><summary>制作依据与待补充信息</summary><p>${esc(strategy.thesis)}</p>${strategy.requirements.length ? `<strong>本次要求</strong><ul>${strategy.requirements.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : ''}${strategy.missing.length ? `<strong>需要补充的事实或证据</strong><ul>${strategy.missing.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : ''}</details>`
   }
   function conversationMarkup() {
     const profile = activeAiProfile()
@@ -234,7 +246,7 @@ export function createPptStudioPage({
       <div class="ppt-editor-bar"><div class="ppt-editor-identity">${iconButton('home', '返回作品', 'arrow-left', disabled(Boolean(busy)))}<div><strong data-ppt-project-title>${esc(draft.title)}</strong><span data-ppt-save-state>${dirty() ? '有未保存的修改' : '已保存到本机'} · ${draft.slides.length} 页</span></div></div><div class="ppt-inline-actions">${iconButton('undo', '撤销修改', 'undo-2', disabled(!history.length || Boolean(busy)))}${iconButton('redo', '重做修改', 'redo-2', disabled(!future.length || Boolean(busy)))}${button('toggle-manual', manualOpen ? '收起编辑' : '手动编辑', 'sliders-horizontal', `${disabled(Boolean(busy))} aria-expanded="${manualOpen}"`)}${button('save', busy === 'saving' ? '保存中…' : '保存作品', 'save', disabled(Boolean(busy)))}${button('export', busy === 'exporting' ? '导出中…' : '导出 PPTX', 'download', disabled(Boolean(busy)), false)}</div></div>
       <div class="ppt-workspace">${conversationMarkup()}<div class="ppt-result"><div class="ppt-editor-grid">
         <aside class="ppt-filmstrip" aria-label="幻灯片列表" data-scroll-preserve="ppt-pages"><div class="ppt-filmstrip-head"><span>页面</span>${iconButton('add-slide', '添加页面', 'plus', disabled(Boolean(busy) || draft.slides.length >= 40))}</div>${draft.slides.map((item, i) => `<button class="ppt-thumbnail ${selected === i ? 'is-selected' : ''}" data-action="ppt-select" data-index="${i}" aria-label="选择第 ${i + 1} 页" aria-pressed="${selected === i}" ${disabled(Boolean(busy))}><div class="ppt-thumbnail-art" data-ppt-thumb="${i}">${slideMarkup(item, draft.theme, i, draft.slides.length)}</div><span><b>${String(i + 1).padStart(2, '0')}</b><span data-ppt-thumb-title="${i}">${esc(item.title || '未填写标题')}</span></span></button>`).join('')}</aside>
-        <div class="ppt-stage-column"><div class="ppt-stage-meta"><span data-ppt-page-label>第 ${selected + 1} 页 · ${esc(PRESENTATION_LAYOUTS[slide.layout])}</span><span>16 : 9</span></div><div class="ppt-stage" data-ppt-preview>${previewMarkup()}</div><div class="ppt-page-actions">${iconButton('previous', '上一页', 'chevron-left', disabled(selected === 0 || Boolean(busy)))}${button('present', '演示', 'play', disabled(Boolean(busy)))}${iconButton('next', '下一页', 'chevron-right', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}</div><div data-ppt-checks>${issuesMarkup()}</div></div>
+        <div class="ppt-stage-column"><div class="ppt-stage-meta"><span data-ppt-page-label>${esc(pageLabel())}</span><span>16 : 9</span></div><div class="ppt-stage" data-ppt-preview>${previewMarkup()}</div><div class="ppt-page-actions">${iconButton('previous', '上一页', 'chevron-left', disabled(selected === 0 || Boolean(busy)))}${button('present', '演示', 'play', disabled(Boolean(busy)))}${iconButton('next', '下一页', 'chevron-right', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}</div><div data-ppt-checks>${issuesMarkup()}</div></div>
       </div>${
         manualOpen
           ? `<aside class="ppt-inspector" aria-label="页面内容与设计" data-scroll-preserve="ppt-inspector"><div class="ppt-inspector-heading"><strong>手动编辑 · 第 ${selected + 1} 页</strong><span>也可以直接在对话中提出修改</span></div>
@@ -250,7 +262,7 @@ export function createPptStudioPage({
         </aside>`
           : ''
       }
-      </div></div>
+      ${strategyMarkup()}</div></div>
     </section>`
   }
   function presentationMarkup() {
@@ -279,8 +291,7 @@ export function createPptStudioPage({
     const title = document.querySelector('[data-ppt-project-title]')
     if (title) title.textContent = draft.title
     const label = document.querySelector('[data-ppt-page-label]')
-    if (label)
-      label.textContent = `第 ${selected + 1} 页 · ${PRESENTATION_LAYOUTS[draft.slides[selected].layout]}`
+    if (label) label.textContent = pageLabel()
     const checks = document.querySelector('[data-ppt-checks]')
     if (checks) checks.innerHTML = issuesMarkup()
     const theme = document.querySelector('[data-ppt-theme-description]')

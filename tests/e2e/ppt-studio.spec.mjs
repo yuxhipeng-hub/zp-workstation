@@ -8,6 +8,7 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const JSZip = require('jszip')
 const { createPresentation } = require('../../src/shared/presentation.mjs')
+const { planningReply, referenceDeck } = require('../fixtures/presentation-reference.cjs')
 const screenshotDir = path.join(os.tmpdir(), 'zp-ppt-studio-qa')
 
 function temporaryDirectory() {
@@ -51,10 +52,14 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     })
     request.on('end', () => {
       const payload = JSON.parse(body)
-      const context = JSON.parse(payload.messages.at(-1).content.split('\n').slice(1).join('\n'))
-      requests.push({ payload, context })
+      const submitted = payload.messages.findLast(
+        (item) => item.role === 'user' && item.content.includes('（JSON 数据）：'),
+      )
+      const context = JSON.parse(submitted.content.split('\n').slice(1).join('\n'))
       let reply
-      if (context.message.includes('比赛通知：')) {
+      if (context.phase === 'review') {
+        reply = { action: 'accept', message: '材料一致性复核完成' }
+      } else if (context.message.includes('比赛通知：')) {
         reply = {
           action: 'clarify',
           message:
@@ -63,11 +68,14 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
       } else if (!context.deck) {
         const deck = createPresentation({ title: '智能制造职业规划', scene: 'competition' })
         deck.slides[1].notes = '已有经历留待补充，不编造获奖事实。'
-        reply = {
-          action: 'create',
-          message: '已按通知组织成三页初稿，个人项目经历标记待补充。',
-          deck,
-        }
+        reply =
+          context.phase === 'plan'
+            ? planningReply(deck)
+            : {
+                action: 'create',
+                message: '已按通知组织成三页初稿，个人项目经历标记待补充。',
+                deck,
+              }
       } else {
         reply = {
           action: 'edit',
@@ -84,6 +92,7 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
           },
         }
       }
+      if (!['plan', 'accept'].includes(reply.action)) requests.push({ payload, context })
       response.writeHead(200, { 'Content-Type': 'application/json' })
       response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }))
     })
@@ -197,6 +206,95 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     await expect(window.locator('.ppt-message')).toHaveCount(2)
     expect(requests.at(-1).payload.messages).toHaveLength(2)
     expect(requests.at(-1).context.selectedSlideId).toBe(after.slides[0].id)
+  } finally {
+    if (app) await close(app)
+    await new Promise((resolve) => server.close(resolve))
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('PPT plans structured pages, previews chart edits and exports an editable native chart', async () => {
+  const directory = temporaryDirectory()
+  let app
+  const deck = referenceDeck('proposal')
+  const server = http.createServer((request, response) => {
+    let body = ''
+    request.on('data', (chunk) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      const payload = JSON.parse(body)
+      const context = JSON.parse(payload.messages.at(-1).content.split('\n').slice(1).join('\n'))
+      const result =
+        context.phase === 'review'
+          ? { action: 'accept', message: '材料一致性复核完成' }
+          : context.phase === 'plan'
+            ? planningReply(deck)
+            : !context.deck
+              ? { action: 'create', message: '已完成策划和页面制作。', deck }
+              : {
+                  action: 'edit',
+                  message: '当前页切换为折线图，数值与来源保持。',
+                  changes: {
+                    slides: [
+                      {
+                        id: context.selectedSlideId,
+                        chart: {
+                          ...context.deck.slides.find((s) => s.id === context.selectedSlideId)
+                            .chart,
+                          type: 'line',
+                        },
+                      },
+                    ],
+                  },
+                }
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(result) } }] }))
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await window.evaluate(async (baseUrl) => {
+      await window.launcher.saveAiProfile(
+        { label: '结构化测试模型', baseUrl, model: 'test', requiresKey: false },
+        '',
+      )
+    }, `http://127.0.0.1:${server.address().port}/v1`)
+    await window.reload()
+    await window.locator('.nav-item[data-page="ppt"]').click()
+    await window
+      .locator('#ppt-message')
+      .fill('使用这份合成商业材料制作提案，保留 3、4、1 小时与数据来源。')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-thumbnail')).toHaveCount(8)
+    await expect(window.locator('.ppt-inspector')).toHaveCount(0)
+    await window.locator('.ppt-strategy summary').click()
+    await expect(window.locator('.ppt-strategy')).toContainText('区分事实与计划')
+    await window.getByRole('button', { name: '选择第 4 页', exact: true }).click()
+    await expect(window.locator('[data-ppt-preview]')).toContainText('需梳理数据字段')
+    await window.getByRole('button', { name: '选择第 3 页', exact: true }).click()
+    await expect(window.locator('[data-ppt-preview]')).toContainText('合成访谈记录')
+    await window.locator('#ppt-message').fill('这个图表改成折线图，保留数值和来源。')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('[data-ppt-preview] .ppt-vector')).toHaveCount(2)
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+    const stored = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    expect(stored.slides[2].chart.type).toBe('line')
+    expect(stored.slides[2].chart.series[0].values).toEqual([3, 4, 1])
+    expect(stored.slides[3].comparison.rows).toEqual(deck.slides[3].comparison.rows)
+    const target = path.join(directory, 'structured.pptx')
+    await app.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath })
+    }, target)
+    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await expect.poll(() => fs.existsSync(target)).toBe(true)
+    const zip = await JSZip.loadAsync(fs.readFileSync(target))
+    expect(await zip.file('ppt/charts/chart1.xml').async('string')).toContain('c:lineChart')
+    expect(zip.file(/^ppt\/embeddings\/.*\.xlsx$/)).toHaveLength(1)
   } finally {
     if (app) await close(app)
     await new Promise((resolve) => server.close(resolve))

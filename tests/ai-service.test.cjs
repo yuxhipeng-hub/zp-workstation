@@ -5,6 +5,7 @@ const path = require('node:path')
 const test = require('node:test')
 const { AiService, chatEndpoint, parsePlanContent } = require('../src/main/ai-service.cjs')
 const { SettingsStore } = require('../src/main/settings-store.cjs')
+const { planningReply } = require('./fixtures/presentation-reference.cjs')
 
 function createHarness(fetchImpl) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-ai-service-'))
@@ -85,8 +86,16 @@ test('PPT conversation uses the selected model and returns clarification or edit
   const requests = []
   let reply = { action: 'clarify', message: '请补充专业和经历。' }
   const { directory, service } = createHarness(async (_url, options) => {
-    requests.push(JSON.parse(options.body))
-    return jsonResponse({ choices: [{ message: { content: JSON.stringify(reply) } }] })
+    const request = JSON.parse(options.body)
+    const planning = request.messages[0].content.includes('本轮只做内容策划')
+    const reviewing = request.messages[0].content.includes('本轮只做内容复核')
+    const response = reviewing
+      ? { action: 'accept', message: '材料一致性复核完成' }
+      : planning && reply.action === 'create'
+        ? planningReply(reply.deck)
+        : reply
+    requests.push(request)
+    return jsonResponse({ choices: [{ message: { content: JSON.stringify(response) } }] })
   })
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
   service.saveProfile(
@@ -109,6 +118,8 @@ test('PPT conversation uses the selected model and returns clarification or edit
   })
   assert.equal(second.deck.title, '参赛作品')
   assert.equal(second.profile.label, '对话模型')
+  assert.equal(requests.length, 4, 'clarification followed by planning, composition and review')
+  assert.ok(second.deck.strategy.requirements.includes('区分事实与计划'))
   assert.match(JSON.stringify(requests[1].messages), /比赛通知原文/)
   assert.doesNotMatch(JSON.stringify(second), /private-key|比赛通知原文/)
   assert.equal(fs.existsSync(path.join(directory, 'workspace.json')), false)
@@ -148,6 +159,51 @@ test('PPT conversation shares the generation lock and releases it after malforme
     }),
   )
   assert.equal((await retry).action, 'clarify')
+})
+
+test('PPT composition repairs a malformed comparison once and preserves facts and numeric source data', async (t) => {
+  const { referenceDeck } = require('./fixtures/presentation-reference.cjs')
+  const deck = referenceDeck('proposal')
+  const bad = structuredClone(deck)
+  bad.slides[3].comparison.headers.unshift('维度')
+  const replies = [
+    planningReply(deck),
+    { action: 'create', message: '初稿', deck: bad },
+    { action: 'create', message: '已修正结构', deck },
+    { action: 'accept', message: '材料一致性复核完成' },
+  ]
+  const requests = []
+  const { directory, service } = createHarness(async (_url, options) => {
+    requests.push(JSON.parse(options.body))
+    return jsonResponse({ choices: [{ message: { content: JSON.stringify(replies.shift()) } }] })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile({ label: '模型', baseUrl: 'https://example.com/v1', model: 'test' }, 'key')
+  const result = await service.chatPresentation({ message: '按已知材料制作' })
+  assert.equal(requests.length, 4)
+  assert.match(requests[2].messages.at(-1).content, /label 不占 headers/)
+  assert.match(requests[2].messages.at(-1).content, /保留原有事实、数值、来源/)
+  assert.equal(requests[2].temperature, 0.2)
+  assert.deepEqual(result.deck.slides[2].chart.series[0].values, [3, 4, 1])
+  assert.equal(result.deck.slides[2].chart.source, deck.slides[2].chart.source)
+})
+
+test('PPT validation failures stop after one repair and release the generation lock', async (t) => {
+  const { createPresentation } = require('../src/shared/presentation.mjs')
+  const deck = createPresentation()
+  let calls = 0
+  const { directory, service } = createHarness(async () => {
+    calls++
+    return jsonResponse({
+      choices: [{ message: { content: calls === 1 ? JSON.stringify(planningReply(deck)) : '{' } }],
+    })
+  })
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  service.saveProfile({ label: '模型', baseUrl: 'https://example.com/v1', model: 'test' }, 'key')
+  await assert.rejects(service.chatPresentation({ message: '生成初稿' }), /完整的 JSON/)
+  assert.equal(calls, 3)
+  assert.equal(service.presentationBusy, false)
+  assert.equal(fs.existsSync(path.join(directory, 'workspace.json')), false)
 })
 
 test('stores model metadata without exposing the encrypted API key', (t) => {

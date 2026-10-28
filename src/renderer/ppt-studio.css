@@ -27,7 +27,8 @@
   isolation: isolate;
 }
 
-.ppt-slide > span {
+.ppt-slide > span,
+.ppt-slide > svg {
   position: absolute;
   display: block;
 }
@@ -636,6 +637,27 @@
 
 .ppt-result {
   min-width: 0;
+}
+
+.ppt-strategy {
+  margin: 16px var(--ppt-gutter) 24px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.ppt-strategy summary {
+  cursor: pointer;
+  color: var(--text);
+  padding: 8px 0;
+}
+.ppt-strategy p,
+.ppt-strategy ul {
+  margin: 10px 0;
+}
+.ppt-strategy strong {
+  display: block;
+  margin-top: 12px;
 }
 
 .ppt-inspector-heading,
