@@ -14,6 +14,36 @@ function createStore() {
   }
 }
 
+test('canvas objects, images and locks survive workspace reload and backup restore', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const { canvasFromScene } = require('../src/shared/presentation-canvas.mjs')
+  const { buildSlideScene } = require('../src/shared/presentation.mjs')
+  const deck = createPresentation()
+  deck.slides[0].canvas = canvasFromScene(buildSlideScene(deck.slides[0]), deck.slides[0])
+  deck.slides[0].canvas[0].locked = true
+  deck.slides[0].canvas.push({
+    id: 'photo',
+    type: 'image',
+    x: 100,
+    y: 300,
+    w: 200,
+    h: 100,
+    fit: 'cover',
+    locked: false,
+    hidden: false,
+    data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+  })
+  deck.slides[0].background = 'F7F6F2'
+  store.savePresentation(deck)
+  const saved = new WorkspaceStore(directory).get().presentations[0]
+  assert.deepEqual(saved.slides[0].canvas, deck.slides[0].canvas)
+  const backup = store.createBackup('canvas-ppt')
+  store.deletePresentation(deck.id)
+  store.restoreBackup(backup.fileName)
+  assert.deepEqual(store.get().presentations[0].slides[0].canvas, saved.slides[0].canvas)
+})
+
 test('structured PPT data and planning survive reload, backups and old-snapshot compatibility', (t) => {
   const { referenceDeck, planningReply } = require('./fixtures/presentation-reference.cjs')
   const { directory, store } = createStore()

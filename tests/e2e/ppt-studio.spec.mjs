@@ -7,6 +7,7 @@ import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
 const JSZip = require('jszip')
+const sharp = require('sharp')
 const { createPresentation } = require('../../src/shared/presentation.mjs')
 const { planningReply, referenceDeck } = require('../fixtures/presentation-reference.cjs')
 const screenshotDir = path.join(os.tmpdir(), 'zp-ppt-studio-qa')
@@ -87,6 +88,13 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
                   ? 'unknown-slide'
                   : context.selectedSlideId,
                 title: '从机械基础走向智能制造',
+                ...(context.message === '删除选中对象'
+                  ? {
+                      canvas: context.deck.slides
+                        .find((s) => s.id === context.selectedSlideId)
+                        .canvas.filter((n) => n.id !== context.selectedObjectId),
+                    }
+                  : {}),
               },
             ],
           },
@@ -206,6 +214,27 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     await expect(window.locator('.ppt-message')).toHaveCount(2)
     expect(requests.at(-1).payload.messages).toHaveLength(2)
     expect(requests.at(-1).context.selectedSlideId).toBe(after.slides[0].id)
+    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
+    await window
+      .locator('[data-ppt-preview]')
+      .getByRole('button', { name: '选择对象：从机械基础走向智能制造', exact: true })
+      .click()
+    await window.getByRole('button', { name: '对话修改所选对象', exact: true }).click()
+    await window.locator('#ppt-message').fill('修改这个对象，其他内容保留')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-message')).toHaveCount(4)
+    expect(requests.at(-1).context.selectedObjectId).toBeTruthy()
+    const selectedObject = requests
+      .at(-1)
+      .context.deck.slides[0].canvas.find((n) => n.id === requests.at(-1).context.selectedObjectId)
+    expect(selectedObject.field).toBe('title')
+    await window.locator('#ppt-message').fill('删除选中对象')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-message')).toHaveCount(6)
+    await window.locator('#ppt-message').fill('修改当前页')
+    await window.getByRole('button', { name: '发送', exact: true }).click()
+    await expect(window.locator('.ppt-message')).toHaveCount(8)
+    expect(requests.at(-1).context.selectedObjectId).toBeNull()
   } finally {
     if (app) await close(app)
     await new Promise((resolve) => server.close(resolve))
@@ -295,9 +324,145 @@ test('PPT plans structured pages, previews chart edits and exports an editable n
     const zip = await JSZip.loadAsync(fs.readFileSync(target))
     expect(await zip.file('ppt/charts/chart1.xml').async('string')).toContain('c:lineChart')
     expect(zip.file(/^ppt\/embeddings\/.*\.xlsx$/)).toHaveLength(1)
+    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
+    await window.locator('[data-ppt-preview] .ppt-chart-node').click()
+    await window.getByText('编辑图表数据', { exact: true }).click()
+    await window.getByLabel('现状 第 1 项数值', { exact: true }).fill('5')
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+    const edited = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    expect(edited.slides[2].canvas.find((n) => n.type === 'chart').chart.series[0].values).toEqual([
+      5, 4, 1,
+    ])
+    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await expect(window.locator('.ppt-editor-bar button[data-action="ppt-export"]')).toBeEnabled()
+    await expect
+      .poll(async () => {
+        const editedZip = await JSZip.loadAsync(fs.readFileSync(target))
+        return editedZip.file(/^ppt\/charts\/chart\d+\.xml$/)[0].async('string')
+      })
+      .toContain('<c:v>5</c:v>')
   } finally {
     if (app) await close(app)
     await new Promise((resolve) => server.close(resolve))
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('PPT canvas supports direct text editing, positioning, locks, image import and native export', async () => {
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
+    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
+    const preview = window.locator('[data-ppt-preview]')
+    await preview.getByRole('button', { name: '选择对象：从一个好想法开始', exact: true }).click()
+    await preview
+      .getByRole('button', { name: '选择对象：从一个好想法开始', exact: true })
+      .dblclick()
+    await expect(window.getByLabel('对象文字', { exact: true })).toBeFocused()
+    await window.getByLabel('对象文字', { exact: true }).fill('用户可以直接操作每个对象')
+    await expect(preview).toContainText('用户可以直接操作每个对象')
+    const title = preview.locator('[data-node-id].is-selected')
+    const original = await title.boundingBox()
+    await window.mouse.move(original.x + 20, original.y + 20)
+    await window.mouse.down()
+    await window.mouse.move(original.x + 50, original.y + 40, { steps: 5 })
+    await window.mouse.up()
+    const moved = await preview.locator('[data-node-id].is-selected').boundingBox()
+    expect(moved.x).toBeGreaterThan(original.x + 20)
+    await preview.focus()
+    await window.keyboard.press('ArrowRight')
+    await window.keyboard.press('Shift+ArrowDown')
+    const beforeDuplicate = await preview.locator('[data-node-id]').count()
+    await window.keyboard.press('Control+d')
+    await expect(preview.locator('[data-node-id]')).toHaveCount(beforeDuplicate + 1)
+    await preview.focus()
+    await window.keyboard.press('Delete')
+    await expect(preview.locator('[data-node-id]')).toHaveCount(beforeDuplicate)
+    await preview
+      .getByRole('button', { name: '选择对象：用户可以直接操作每个对象', exact: true })
+      .click()
+    await window.getByLabel('字号', { exact: true }).fill('40')
+    await window.getByRole('button', { name: '锁定对象', exact: true }).click()
+    await expect(window.getByLabel('对象文字', { exact: true })).toBeDisabled()
+    await expect(window.getByRole('button', { name: '删除对象', exact: true })).toBeDisabled()
+    await window.getByRole('button', { name: '解锁对象', exact: true }).click()
+    await expect(window.getByLabel('对象文字', { exact: true })).toBeEnabled()
+    await window.getByRole('button', { name: '返回作品', exact: true }).click()
+    await window.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
+    await expect(window.getByRole('button', { name: '完成直接编辑', exact: true })).toBeVisible()
+    await window.getByRole('button', { name: '锁定页面', exact: true }).click()
+    await expect(window.getByRole('button', { name: '图片', exact: true })).toBeDisabled()
+    await window.getByRole('button', { name: '解锁页面', exact: true }).click()
+    const imagePath = path.join(directory, 'sample.png')
+    await sharp({
+      create: {
+        width: 320,
+        height: 180,
+        channels: 4,
+        background: { r: 30, g: 140, b: 200, alpha: 0.5 },
+      },
+    })
+      .png()
+      .toFile(imagePath)
+    await app.evaluate(({ dialog }, filePath) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
+    }, imagePath)
+    await window.getByRole('button', { name: '图片', exact: true }).click()
+    await expect(preview.locator('img')).toHaveCount(1)
+    await window.getByRole('button', { name: '填满裁切', exact: true }).click()
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+    const saved = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    const savedTitle = saved.slides[0].canvas.find((n) => n.field === 'title')
+    expect(savedTitle.text).toBe('用户可以直接操作每个对象')
+    expect(savedTitle.size).toBe(40)
+    expect(savedTitle.x).toBeGreaterThan(64)
+    const image = saved.slides[0].canvas.find((n) => n.type === 'image')
+    expect(image.data).toMatch(/^data:image\/png;base64,/)
+    expect(image.fit).toBe('cover')
+    const target = path.join(directory, 'direct-edit.pptx')
+    await app.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath })
+    }, target)
+    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await expect.poll(() => fs.existsSync(target)).toBe(true)
+    const zip = await JSZip.loadAsync(fs.readFileSync(target))
+    const xml = await zip.file('ppt/slides/slide1.xml').async('string')
+    expect(xml).toContain('用户可以直接操作每个对象')
+    expect(xml).toContain('<p:pic>')
+    expect(xml).toContain('<p:sp>')
+    expect(zip.file(/^ppt\/media\//)).toHaveLength(1)
+    fs.mkdirSync(screenshotDir, { recursive: true })
+    fs.copyFileSync(target, path.join(screenshotDir, 'direct-edit.pptx'))
+    for (const width of [1280, 1080]) {
+      await app.evaluate(
+        ({ BrowserWindow }, value) => BrowserWindow.getAllWindows()[0].setSize(value, 820),
+        width,
+      )
+      for (const theme of ['dark', 'light']) {
+        await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+        await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
+        expect(
+          await window.locator('.ppt-studio').evaluate((el) => el.scrollWidth - el.clientWidth),
+        ).toBeLessThanOrEqual(1)
+        await window.screenshot({
+          path: path.join(screenshotDir, `direct-editor-${width}-${theme}.png`),
+          animations: 'disabled',
+        })
+      }
+    }
+    await window.getByRole('button', { name: '完成直接编辑', exact: true }).click()
+    await window.getByRole('button', { name: '返回作品', exact: true }).click()
+    await window.locator('.ppt-project-open').click()
+    await expect(preview).toContainText('用户可以直接操作每个对象')
+    await expect(preview.locator('img')).toHaveCount(1)
+  } finally {
+    if (app) await close(app)
     fs.rmSync(directory, { recursive: true, force: true })
   }
 })

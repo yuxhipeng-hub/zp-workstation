@@ -28,9 +28,199 @@
 }
 
 .ppt-slide > span,
-.ppt-slide > svg {
+.ppt-slide > svg,
+.ppt-slide > .ppt-node,
+.ppt-chart-node > span,
+.ppt-chart-node > svg {
   position: absolute;
   display: block;
+}
+
+.ppt-chart-node > * {
+  pointer-events: none;
+}
+.ppt-image-node img {
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+.ppt-slide.is-editable [data-node-id] {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.ppt-slide.is-editable [data-node-id]:active {
+  cursor: grabbing;
+}
+.ppt-slide .is-selected {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  z-index: 1;
+}
+.ppt-resize-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 10px;
+  height: 10px;
+  background: var(--focus);
+  border: 1px solid var(--panel);
+  cursor: nwse-resize;
+  pointer-events: auto;
+  z-index: 3;
+}
+.ppt-workspace.is-canvas-focused {
+  grid-template-columns: minmax(0, 1fr);
+}
+.ppt-workspace.is-canvas-focused > .ppt-conversation {
+  display: none;
+}
+.ppt-workspace.is-canvas-focused .ppt-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-items: start;
+}
+.ppt-workspace.is-canvas-focused .ppt-editor-grid {
+  grid-column: 1;
+  grid-row: 1;
+}
+.ppt-workspace.is-canvas-focused .ppt-object-editor {
+  grid-column: 2;
+  grid-row: 1;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  border-left: 1px solid var(--line);
+}
+.ppt-workspace.is-canvas-focused .ppt-strategy {
+  grid-column: 1 / -1;
+}
+.ppt-object-editor {
+  padding: 18px var(--ppt-gutter);
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  min-width: 0;
+}
+.ppt-object-toolbar,
+.ppt-object-style,
+.ppt-object-properties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ppt-object-toolbar {
+  margin-bottom: 16px;
+}
+.ppt-object-toolbar > span,
+.ppt-object-hint {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.ppt-object-properties > strong,
+.ppt-object-text,
+.ppt-object-properties > details {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ppt-object-properties > strong {
+  margin-bottom: 4px;
+}
+.ppt-object-field,
+.ppt-object-text {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+.ppt-object-field input,
+.ppt-object-text textarea,
+.ppt-chart-table input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  padding: 8px;
+}
+.ppt-object-field input[type='color'] {
+  padding: 4px;
+  height: 36px;
+}
+.ppt-object-style > .ppt-object-field {
+  width: 84px;
+}
+.ppt-object-text {
+  margin: 8px 0;
+}
+.ppt-object-text textarea {
+  resize: vertical;
+  line-height: 1.65;
+}
+.ppt-object-geometry {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px 0;
+}
+.ppt-object-editor summary {
+  cursor: pointer;
+  padding: 9px 0;
+  color: var(--text-secondary);
+}
+.ppt-layer-list {
+  margin-top: 12px;
+}
+.ppt-layer-list > button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 9px;
+  margin: 4px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--panel-raised);
+  cursor: pointer;
+}
+.ppt-layer-list > button[aria-pressed='true'] {
+  border-color: var(--focus);
+}
+.ppt-chart-table {
+  max-width: 100%;
+  overflow: auto;
+}
+.ppt-chart-table table {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+}
+.ppt-chart-table td,
+.ppt-chart-table th {
+  padding: 4px;
+  min-width: 60px;
+}
+@media (max-width: 850px) {
+  .ppt-workspace.is-canvas-focused .ppt-result {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ppt-workspace.is-canvas-focused .ppt-object-editor {
+    grid-column: 1;
+    grid-row: 2;
+    position: static;
+    max-height: none;
+    border-left: 0;
+  }
 }
 
 .ppt-text {

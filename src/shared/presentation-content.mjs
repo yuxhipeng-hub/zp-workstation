@@ -1,5 +1,16 @@
 /** 结构化内容契约。只接受文字和数值，不接受 URL、文件路径或可执行内容。 */
-export const CONTENT_FIELDS = ['items', 'comparison', 'chart', 'source', 'purpose', 'seconds']
+import { presentationCanvas } from './presentation-canvas.mjs'
+export const CONTENT_FIELDS = [
+  'items',
+  'comparison',
+  'chart',
+  'source',
+  'purpose',
+  'seconds',
+  'canvas',
+  'background',
+  'locked',
+]
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value)
 function string(value, max, name, required = false) {
   if (value === undefined && !required) return ''
@@ -13,6 +24,16 @@ function array(value, min, max, name) {
   return value
 }
 function contentField(key, value) {
+  if (key === 'canvas') return presentationCanvas(value, (chart) => contentField('chart', chart))
+  if (key === 'locked') {
+    if (typeof value !== 'boolean') throw new Error('页面锁定状态无效。')
+    return value
+  }
+  if (key === 'background') {
+    if (typeof value !== 'string' || !/^[0-9a-f]{6}$/i.test(value))
+      throw new Error('页面背景无效。')
+    return value.toUpperCase()
+  }
   if (key === 'seconds') {
     if (!Number.isInteger(value) || value < 1 || value > 3600) throw new Error('页面建议时长无效。')
     return value
@@ -116,6 +137,7 @@ export function presentationStrategy(value, strict = false) {
 }
 
 export function structuredContentIssue(slide) {
+  if (Array.isArray(slide.canvas)) return ''
   if (
     ['comparison', 'timeline', 'process', 'metrics', 'chart'].includes(slide.layout) &&
     slide.points?.length

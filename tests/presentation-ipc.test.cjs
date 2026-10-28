@@ -49,6 +49,30 @@ function harness(overrides = {}) {
   return { handlers, calls }
 }
 
+test('image IPC uses the native selection dialog and releases its lock on cancel or failure', async () => {
+  let finish
+  const selected = []
+  const { handlers } = harness({
+    dialog: {
+      showOpenDialog: async (_parent, options) => {
+        selected.push(options.properties)
+        return new Promise((resolve) => {
+          finish = resolve
+        })
+      },
+    },
+  })
+  const handler = handlers.get('presentation:image')
+  const first = handler(null, { filePath: 'renderer-controlled.png' })
+  await assert.rejects(handler(null), /正在导入/)
+  finish({ canceled: true })
+  assert.deepEqual(await first, { canceled: true })
+  const second = handler(null)
+  finish({ canceled: true })
+  await second
+  assert.deepEqual(selected, [['openFile'], ['openFile']])
+})
+
 test('PPT IPC validates renderer data before persistence, model calls or a save dialog', async () => {
   const { handlers, calls } = harness()
   for (const name of [
@@ -180,6 +204,7 @@ test('PPT preload exposes only the specific presentation operations', () => {
   exposed.chatPresentation({ message: '通知' })
   exposed.exportPresentation({ title: 'deck' })
   exposed.deletePresentation('id')
+  exposed.choosePresentationImage()
   assert.deepEqual(
     calls.map((call) => call[0]),
     [
@@ -188,6 +213,7 @@ test('PPT preload exposes only the specific presentation operations', () => {
       'presentation:chat',
       'presentation:export',
       'presentation:delete',
+      'presentation:image',
     ],
   )
   assert.equal(exposed.ipcRenderer, undefined)

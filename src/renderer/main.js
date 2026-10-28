@@ -3479,6 +3479,12 @@ document.addEventListener(
   true,
 )
 
+for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'dblclick']) {
+  document.addEventListener(type, (event) => {
+    if (state.page === 'ppt') getPptStudioPage().handlePointer(event)
+  })
+}
+
 document.addEventListener('keydown', (event) => {
   if (state.page === 'ppt') getPptStudioPage().handleKeydown(event)
   if (event.key !== 'Escape') return

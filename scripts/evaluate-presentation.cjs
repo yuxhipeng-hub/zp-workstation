@@ -8,10 +8,16 @@ const path = require('node:path')
 const os = require('node:os')
 const process = require('node:process')
 const console = require('node:console')
+const { isDeepStrictEqual } = require('node:util')
 const { SettingsStore } = require('../src/main/settings-store.cjs')
 const { AiService } = require('../src/main/ai-service.cjs')
-const { getPresentationIssues, buildSlideScene } = require('../src/shared/presentation.mjs')
+const {
+  getPresentationIssues,
+  buildSlideScene,
+  validatePresentationInput,
+} = require('../src/shared/presentation.mjs')
 const { presentationBuffer } = require('../src/main/presentation-export.cjs')
+const { canvasFromScene } = require('../src/shared/presentation-canvas.mjs')
 const cases = require('../tests/fixtures/presentation-cases.cjs')
 const { referenceDeck } = require('../tests/fixtures/presentation-reference.cjs')
 
@@ -90,6 +96,52 @@ async function main() {
     const profile = reference || renderOnly ? null : service.resolveProfile()
     if (!reference && !renderOnly && !profile) throw new Error('桌面应用尚未配置可用模型。')
     await fs.mkdir(output, { recursive: true })
+    if (process.argv.includes('--object-edit')) {
+      if (!service) throw new Error('对象修改评测需要 --configured-model。')
+      const deck = validatePresentationInput(referenceDeck('proposal'))
+      const slide = deck.slides[2]
+      slide.canvas = canvasFromScene(
+        buildSlideScene(slide, deck.theme, 2, deck.slides.length),
+        slide,
+      )
+      const target = slide.canvas.find((node) => node.field === 'title')
+      for (const node of slide.canvas) node.locked = node.id !== target.id
+      const started = Date.now()
+      const result = await service.chatPresentation({
+        message:
+          '只修改选中的标题对象：文字改为“用数据减少重复劳动”，字号改为44，水平位置向右移动24像素。其他对象、页面、备注保持不变。',
+        deck,
+        selectedSlideId: slide.id,
+        selectedObjectId: target.id,
+      })
+      const updated = result.deck?.slides[2].canvas.find((node) => node.id === target.id)
+      const checks = {
+        title: updated?.text === '用数据减少重复劳动',
+        size: updated?.size === 44,
+        position: updated?.x === target.x + 24,
+        otherPages: isDeepStrictEqual(
+          result.deck?.slides.filter((s) => s.id !== slide.id),
+          deck.slides.filter((s) => s.id !== slide.id),
+        ),
+        lockedObjects: isDeepStrictEqual(
+          result.deck?.slides[2].canvas.filter((n) => n.locked),
+          slide.canvas.filter((n) => n.locked),
+        ),
+      }
+      const summary = { model: profile.model, elapsedMs: Date.now() - started, checks }
+      await fs.writeFile(
+        path.join(output, 'selected-object.json'),
+        JSON.stringify({ summary, result }, null, 2),
+      )
+      if (result.deck)
+        await fs.writeFile(
+          path.join(output, 'selected-object.pptx'),
+          await presentationBuffer(result.deck),
+        )
+      console.log(JSON.stringify(summary))
+      if (!Object.values(checks).every(Boolean)) process.exitCode = 1
+      return
+    }
     const results = []
     let baseline
     if (process.argv.includes('--baseline')) {

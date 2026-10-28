@@ -127,6 +127,13 @@ export const MIRROR_NOTES = [
     category: '规格',
     description: '工具导航、PPT 工作室第一版及长期设计方向',
   },
+  {
+    source: 'docs/PPT_ENGINE_EVALUATION.md',
+    note: '50 规格/PPT 引擎验证记录.md',
+    title: 'PPT 引擎验证记录',
+    category: '规格',
+    description: 'PPTAgent、Presenton 的隔离安装、转换实测、当前模型对象修改与未验收边界',
+  },
 ]
 
 /** 从仓库文档里抽一段出来单独成篇。 */

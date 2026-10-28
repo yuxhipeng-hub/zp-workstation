@@ -27,8 +27,16 @@ async function presentationBuffer(input) {
     const slide = pptx.addSlide()
     slide.background = { color: scene.background }
     for (const node of scene.nodes) {
+      if (node.hidden) continue
       const box = { x: node.x * scale, y: node.y * scale, w: node.w * scale, h: node.h * scale }
-      if (node.type === 'chart') {
+      if (node.type === 'image') {
+        slide.addImage({
+          data: node.data,
+          ...box,
+          sizing: { type: node.fit === 'cover' ? 'cover' : 'contain', w: box.w, h: box.h },
+          altText: node.name || '用户图片',
+        })
+      } else if (node.type === 'chart') {
         slide.addChart(
           pptx.ChartType[node.chart.type],
           node.chart.series.map((series) => ({
@@ -90,6 +98,7 @@ async function presentationBuffer(input) {
           fontSize: node.size * 0.75,
           color: node.color,
           bold: node.bold,
+          align: node.align || 'left',
           margin: 0,
           breakLine: false,
           valign: 'top',

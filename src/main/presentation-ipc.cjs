@@ -3,6 +3,7 @@ const { validatePresentationInput, getPresentationIssues } = require('../shared/
 const { cleanPresentationBrief } = require('./presentation-ai.cjs')
 const { cleanPresentationChat } = require('./presentation-chat.cjs')
 const { exportPresentation } = require('./presentation-export.cjs')
+const { readPresentationImage } = require('./presentation-image.cjs')
 
 /** PPT 白名单独立注册，进程、对话框与保存依赖均由主进程注入。 */
 function registerPresentationIpc({
@@ -33,6 +34,24 @@ function registerPresentationIpc({
   ipcMain.handle('presentation:chat', (_event, input) =>
     aiService.chatPresentation(cleanPresentationChat(input)),
   )
+  let imageBusy = false
+  ipcMain.handle('presentation:image', async () => {
+    if (imageBusy) throw new Error('已有图片正在导入。')
+    imageBusy = true
+    try {
+      const result = await dialog.showOpenDialog(getMainWindow(), {
+        title: '选择 PPT 图片',
+        properties: ['openFile'],
+        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg'] }],
+      })
+      if (result.canceled || !result.filePaths?.[0]) return { canceled: true }
+      return await readPresentationImage(result.filePaths[0], (bytes) =>
+        require('electron').nativeImage.createFromBuffer(bytes),
+      )
+    } finally {
+      imageBusy = false
+    }
+  })
   let exportBusy = false
   ipcMain.handle('presentation:export', async (_event, input) => {
     const deck = validatePresentationInput(input)

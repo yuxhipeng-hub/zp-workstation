@@ -1505,6 +1505,9 @@ export function createPreviewLauncherApi() {
     async exportPresentation() {
       throw new Error('浏览器预览不提供本机文件导出，请在桌面应用中导出。')
     },
+    async choosePresentationImage() {
+      throw new Error('浏览器预览不提供本机图片选择，请在桌面应用中导入。')
+    },
     async createAssignment(input) {
       const now = new Date().toISOString()
       state.workspace.assignments.unshift({

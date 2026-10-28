@@ -3,7 +3,7 @@ import {
   presentationStrategy,
   structuredContentIssue,
 } from './presentation-content.mjs'
-import { buildStructuredSlide } from './presentation-layouts.mjs'
+import { buildStructuredSlide, chartPreview, chartScale } from './presentation-layouts.mjs'
 
 /** PPT 工作室的作品契约和确定性布局。此模块没有文件系统、网络或 DOM 依赖。 */
 export const PRESENTATION_LIMITS = { projects: 100, slides: 40, points: 6 }
@@ -140,6 +140,11 @@ export function validatePresentationInput(input) {
     slide.points.forEach((point) => check(point, 160, '要点'))
     presentationContent(slide, true)
   }
+  const imageBytes = input.slides
+    .flatMap((slide) => slide.canvas || [])
+    .filter((node) => node.type === 'image')
+    .reduce((sum, node) => sum + (node.data?.length || 0), 0)
+  if (imageBytes > 8000000) throw new Error('作品图片总量过大，请压缩图片或拆分作品。')
   return cleanPresentation(input)
 }
 
@@ -187,6 +192,22 @@ function lineCount(value, width, size) {
 /** 在 1280×720 画布上排版；字号自动适应到可读下限，剩余溢出明确报告。 */
 export function buildSlideScene(slide, themeId = 'editorial', index = 0, total = 1) {
   const theme = PRESENTATION_THEMES[themeId] || PRESENTATION_THEMES.editorial
+  if (Array.isArray(slide.canvas)) {
+    const nodes = slide.canvas.map((source) => {
+      const node = { ...source }
+      if (node.role === 'pageNumber')
+        node.text = `${String(index + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`
+      if (node.type === 'text')
+        node.overflow = lineCount(node.text, node.w, node.size) * node.size * 1.35 > node.h
+      if (node.type === 'chart') {
+        node.colors ||= [theme.accent, theme.ink, theme.muted]
+        node.scale = chartScale(node.chart)
+        node.preview = chartPreview(node.chart, node, theme)
+      }
+      return node
+    })
+    return { width: 1280, height: 720, background: slide.background || theme.bg, nodes }
+  }
   const nodes = []
   function rect(x, y, w, h, color) {
     nodes.push({ type: 'rect', x, y, w, h, color })
@@ -322,7 +343,12 @@ export function getPresentationIssues(deck) {
       if (!slide.title.trim())
         issues.push({ page: i + 1, message: '页面标题尚未填写。', blocking: false })
       const scene = buildSlideScene(slide, deck.theme, i, deck.slides.length)
-      if (scene.nodes.flatMap((node) => node.preview || [node]).some((node) => node.overflow))
+      if (
+        scene.nodes
+          .filter((node) => !node.hidden)
+          .flatMap((node) => node.preview || [node])
+          .some((node) => node.overflow)
+      )
         issues.push({
           page: i + 1,
           message: '内容超出版式容量，请缩短文字、拆页或切换版式。',
