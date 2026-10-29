@@ -16,6 +16,61 @@ function temporaryDirectory() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'zp-ppt-e2e-'))
 }
 
+test('PPT start choices preserve existing material and the studio fits both themes and narrow windows', async () => {
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await expect(window.getByRole('region', { name: '本地作品' })).toContainText('0 份作品')
+    await window.getByRole('button', { name: '客户提案', exact: true }).click()
+    const starter = await window.locator('#ppt-message').inputValue()
+    expect(starter).toContain('客户提案')
+    await expect(window.locator('#ppt-message')).toBeFocused()
+    await window.getByRole('button', { name: '工作汇报', exact: true }).click()
+    await expect(window.locator('#ppt-message')).toHaveValue(starter)
+    expect(
+      (await window.evaluate(() => window.launcher.getWorkspace())).presentations,
+    ).toHaveLength(0)
+    await window.locator('#ppt-message').fill('')
+    await window.getByRole('button', { name: '工作汇报', exact: true }).click()
+    await expect(window.locator('#ppt-message')).toHaveValue(/工作汇报/)
+
+    fs.mkdirSync(screenshotDir, { recursive: true })
+    for (const [width, theme] of [
+      [1440, 'dark'],
+      [1440, 'light'],
+      [900, 'dark'],
+      [720, 'light'],
+    ]) {
+      await app.evaluate(({ BrowserWindow }, size) => {
+        const main = BrowserWindow.getAllWindows()[0]
+        main.setMinimumSize(600, 600)
+        main.setSize(size, 960)
+      }, width)
+      expect(await window.evaluate(() => globalThis.innerWidth)).toBeLessThanOrEqual(width)
+      await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+      await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
+      await expect(window.locator('.ppt-studio textarea')).toHaveCount(1)
+      await expect(
+        window.getByRole('button', { name: '从空白作品开始', exact: true }),
+      ).toBeVisible()
+      const size = await window
+        .locator('#view')
+        .evaluate((element) => ({ width: element.clientWidth, content: element.scrollWidth }))
+      expect(size.content).toBeLessThanOrEqual(size.width + 1)
+      await window.screenshot({
+        path: path.join(screenshotDir, `studio-home-${width}-${theme}.png`),
+        animations: 'disabled',
+      })
+    }
+  } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('long title preview and exported editable PPTX share balanced lines across themes and window sizes', async () => {
   const directory = temporaryDirectory()
   let app

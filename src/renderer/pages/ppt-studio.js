@@ -402,7 +402,7 @@ export function createPptStudioPage({
       ${busy === 'chatting' ? `<p class="ppt-chat-status" role="status"><i data-lucide="ellipsis"></i>${draft ? '正在修改作品…' : '正在理解材料、组织内容…'}</p>` : ''}
       <div class="ppt-composer">
         <label for="ppt-message">${draft ? '继续描述修改要求' : '告诉我你想做什么 PPT'}</label>
-        <textarea id="ppt-message" data-ppt-scope="chat" data-ppt-field="message" rows="${draft ? 4 : 7}" maxlength="12000" aria-describedby="ppt-chat-hint" placeholder="${draft ? '例如：第三页改成方案对比，保留原来的数据。' : '粘贴比赛通知、项目材料或你的想法。\n例如：按这份通知帮我做一份参赛 PPT，我是机械专业大二学生，方向是智能制造。'}" ${disabled(Boolean(busy))}>${esc(composer)}</textarea>
+        <textarea id="ppt-message" data-ppt-scope="chat" data-ppt-field="message" rows="${draft ? 4 : 5}" maxlength="12000" aria-describedby="ppt-chat-hint" placeholder="${draft ? '例如：第三页改成方案对比，保留原来的数据。' : '粘贴项目材料、会议记录，或说说你的想法。\n例如：根据这些材料做一份客户提案，介绍我们的方案，控制在 8 分钟内。'}" ${disabled(Boolean(busy))}>${esc(composer)}</textarea>
         <div class="ppt-composer-footer"><span>${draft ? `当前第 ${selected + 1} 页 · Ctrl / ⌘ + Enter 发送` : 'Ctrl / ⌘ + Enter 发送 · Enter 换行'}</span>${button('send', busy === 'chatting' ? '处理中…' : '发送', 'arrow-up', disabled(Boolean(busy) || !profile || !composer.trim()), false)}</div>
       </div>
       <p class="ppt-chat-hint" id="ppt-chat-hint">${profile ? `使用 ${esc(profile.label)} · 发送本次对话${draft ? '与当前作品' : ''}，不读取资料库。` : '先配置一个模型，即可通过对话制作 PPT。'}</p>
@@ -411,7 +411,23 @@ export function createPptStudioPage({
     </section>`
   }
   function landingMarkup() {
-    return `<section class="ppt-start"><div class="ppt-start-heading"><span class="ppt-kicker">PPT 工作室</span><h2>把材料交给我，一起做成 PPT。</h2><p>直接粘贴通知、材料或想法。结构与排版交给我，缺少关键信息时再补充。</p></div>${conversationMarkup()}<div class="ppt-start-footer">${button('manual', '从空白作品开始', 'pen-line', disabled(Boolean(busy)))}</div></section>`
+    return `<section class="ppt-start">
+      <div class="ppt-start-heading"><span class="ppt-kicker">从想法，到一份好作品</span><h2>让你的想法，<br>有一份清楚的表达。</h2><p>粘贴材料，说清目标。一起把内容梳理好，再做成可以交付的 PPT。</p></div>
+      <div class="ppt-start-main">${conversationMarkup()}
+        <div class="ppt-start-footer"><div class="ppt-starters" aria-label="创作起点"><span>试着开始</span>${[
+          ['proposal', '客户提案'],
+          ['report', '工作汇报'],
+          ['pitch', '比赛路演'],
+        ]
+          .map(
+            ([id, label]) =>
+              `<button type="button" data-action="ppt-starter" data-starter="${id}" ${disabled(Boolean(busy))}>${label}<i data-lucide="arrow-up-right"></i></button>`,
+          )
+          .join(
+            '',
+          )}</div>${button('manual', '从空白作品开始', 'plus', disabled(Boolean(busy)))}</div>
+      </div>
+    </section>`
   }
   function galleryMarkup() {
     return `<section class="ppt-gallery" aria-label="本地作品"><div class="ppt-section-heading"><div><span class="ppt-kicker">本地作品</span><h2>继续上次的想法</h2></div><span>${projects().length} 份作品</span></div>${
@@ -456,7 +472,7 @@ export function createPptStudioPage({
   function renderPage() {
     if (!draft?.slides[selected]?.canvas) canvasEditor.reset()
     reportDirty()
-    return `<div class="ppt-studio">${presenting && draft ? presentationMarkup() : draft ? editorMarkup() : `${landingMarkup()}${designSamplesMarkup()}${projects().length ? galleryMarkup() : ''}`}</div>`
+    return `<div class="ppt-studio ${draft ? 'has-draft' : 'is-home'}">${presenting && draft ? presentationMarkup() : draft ? editorMarkup() : `${landingMarkup()}${designSamplesMarkup()}${galleryMarkup()}`}</div>`
   }
   function refreshPreview() {
     if (visualReport && visualSignature !== visualRevision(draft)) {
@@ -528,6 +544,25 @@ export function createPptStudioPage({
   async function handleAction(action, element) {
     if (!action.startsWith('ppt-')) return false
     if (busy) return true
+    if (action === 'ppt-starter') {
+      const starters = {
+        proposal:
+          '我想做一份客户提案。请先和我确认客户需求、方案价值与展示目标，再根据我补充的真实材料制作。',
+        report:
+          '我想做一份工作汇报。请根据我接下来提供的进展、数据和问题，帮我组织重点与下一步计划。',
+        pitch: '我想做一份比赛路演 PPT。请先确认比赛要求、项目情况与展示时长，再根据真实材料策划。',
+      }
+      if (!Object.hasOwn(starters, element.dataset.starter)) return true
+      if (composer.trim()) {
+        toast('输入框已有材料，已为你保留。清空后可以选择新的创作起点。')
+        document.querySelector('#ppt-message')?.focus()
+        return true
+      }
+      composer = starters[element.dataset.starter]
+      render()
+      document.querySelector('#ppt-message')?.focus()
+      return true
+    }
     if (action === 'ppt-complete-design') {
       await completeDesign()
       return true
