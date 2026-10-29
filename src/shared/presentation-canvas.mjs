@@ -126,6 +126,7 @@ export function canvasFromScene(scene, slide) {
     const node = globalThis.structuredClone(source)
     delete node.preview
     delete node.overflow
+    delete node.displayText
     delete node.scale
     node.id = globalThis.crypto.randomUUID()
     node.locked = false

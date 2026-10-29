@@ -15,6 +15,71 @@ const screenshotDir = path.join(os.tmpdir(), 'zp-ppt-studio-qa')
 function temporaryDirectory() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'zp-ppt-e2e-'))
 }
+
+test('long title preview and exported editable PPTX share balanced lines across themes and window sizes', async () => {
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const { materializeDesign } = require('../../src/shared/presentation-design.mjs')
+    const source = referenceDeck('proposal')
+    const title = '试点只验证三件事：口径、准确性、耗时变化'
+    source.slides[1].layout = 'statement'
+    source.slides[1].title = title
+    const deck = materializeDesign(source)
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await window.evaluate((value) => window.launcher.savePresentation(value), deck)
+    await window.reload()
+    await window.locator('.nav-item[data-page="ppt"]').click()
+    await window.locator('.ppt-project-open').first().click()
+    await window.getByRole('button', { name: '选择第 2 页', exact: true }).click()
+    const expected = '试点只验证三件事：\n口径、准确性、耗时变化'
+    for (const [width, theme] of [
+      [1280, 'dark'],
+      [900, 'light'],
+    ]) {
+      await app.evaluate(
+        ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setSize(size, 900),
+        width,
+      )
+      await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+      const titleNode = window
+        .locator('[data-ppt-preview] .ppt-text')
+        .filter({ hasText: '试点只验证三件事' })
+      await expect(titleNode).toHaveText(expected)
+      const metrics = await titleNode.evaluate((element) => ({
+        width: element.clientWidth,
+        contentWidth: element.scrollWidth,
+        height: element.clientHeight,
+        contentHeight: element.scrollHeight,
+      }))
+      expect(metrics.contentWidth).toBeLessThanOrEqual(metrics.width + 1)
+      expect(metrics.contentHeight).toBeLessThanOrEqual(metrics.height + 1)
+      fs.mkdirSync(screenshotDir, { recursive: true })
+      await window.locator('[data-ppt-preview]').screenshot({
+        path: path.join(screenshotDir, `balanced-title-${width}-${theme}.png`),
+        animations: 'disabled',
+      })
+    }
+    const target = path.join(directory, 'balanced.pptx')
+    await app.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath })
+    }, target)
+    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await expect.poll(() => fs.existsSync(target)).toBe(true)
+    const zip = await JSZip.loadAsync(fs.readFileSync(target))
+    const xml = await zip.file('ppt/slides/slide2.xml').async('string')
+    expect(xml).toContain('<a:t>试点只验证三件事：</a:t>')
+    expect(xml).toContain('<a:t>口径、准确性、耗时变化</a:t>')
+    const stored = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    expect(stored.slides[1].title).toBe(title)
+    expect(stored.slides[1].canvas.find((n) => n.field === 'title').text).toBe(title)
+  } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
 async function launch(directory) {
   const env = {
     ...process.env,
@@ -389,7 +454,12 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
       .dblclick()
     await expect(window.getByLabel('对象文字', { exact: true })).toBeFocused()
     await window.getByLabel('对象文字', { exact: true }).fill('用户可以直接操作每个对象')
-    await expect(preview).toContainText('用户可以直接操作每个对象')
+    await expect(
+      preview.getByRole('button', { name: '选择对象：用户可以直接操作每个对象', exact: true }),
+    ).toHaveText('用户可以直接\n操作每个对象')
+    await expect(window.getByLabel('对象文字', { exact: true })).toHaveValue(
+      '用户可以直接操作每个对象',
+    )
     const title = preview.locator('[data-node-id].is-selected')
     const original = await title.boundingBox()
     await window.mouse.move(original.x + 20, original.y + 20)

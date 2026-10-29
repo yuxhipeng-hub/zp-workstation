@@ -136,3 +136,46 @@ test('export refuses overflowing slides and preserves the existing target', asyn
   assert.ok(result.size > 1000)
   assert.deepEqual(fs.readdirSync(directory), ['existing.pptx'])
 })
+
+test('long titles use balanced semantic lines in preview and PPTX without changing editable text', async () => {
+  const title = '试点只验证三件事：口径、准确性、耗时变化'
+  for (const canvas of [false, true]) {
+    const deck = createPresentation()
+    const slide = deck.slides[1]
+    slide.layout = 'statement'
+    slide.title = title
+    if (canvas) {
+      const { materializeDesign } = require('../src/shared/presentation-design.mjs')
+      Object.assign(slide, materializeDesign(deck).slides[1])
+    }
+    const original = structuredClone(deck)
+    const node = buildSlideScene(slide).nodes.find((n) => n.text === title)
+    assert.equal(node.displayText, '试点只验证三件事：\n口径、准确性、耗时变化')
+    const zip = await JSZip.loadAsync(await presentationBuffer(deck))
+    const xml = await zip.file('ppt/slides/slide2.xml').async('string')
+    assert.match(xml, /<a:t>试点只验证三件事：<\/a:t>/)
+    assert.match(xml, /<a:t>口径、准确性、耗时变化<\/a:t>/)
+    assert.deepEqual(deck, original)
+    slide.title = '短标题'
+    if (canvas) slide.canvas.find((n) => n.field === 'title').text = slide.title
+    assert.equal(
+      buildSlideScene(slide).nodes.find((n) => n.text === slide.title).displayText,
+      undefined,
+    )
+  }
+})
+
+test('title balancing preserves explicit breaks and keeps English words and punctuation intact', () => {
+  const { balancedTitle } = require('../src/shared/presentation-text.mjs')
+  const node = { w: 520, h: 200, size: 48 }
+  assert.equal(balancedTitle({ ...node, text: '手动\n换行' }), '手动\n换行')
+  const title = 'PowerPoint presentation design workflow'
+  const lines = balancedTitle({ ...node, text: title }).split('\n')
+  assert.ok(lines.length > 1)
+  assert.equal(lines.join(''), title)
+  for (const word of title.split(' ')) assert.ok(lines.some((line) => line.includes(word)))
+  const chinese = '用明确的业务边界，验证方案与下一步行动'
+  const result = balancedTitle({ ...node, text: chinese })
+  assert.equal(result.replaceAll('\n', ''), chinese)
+  assert.ok(result.split('\n').every((line) => !/^[，、。！？：；）】》]/u.test(line)))
+})

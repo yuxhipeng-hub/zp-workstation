@@ -345,7 +345,7 @@ export function createPptStudioPage({
         return `<svg class="ppt-vector" style="${style}" viewBox="0 0 ${Math.max(1, node.w)} ${Math.max(1, node.h)}" aria-hidden="true"><line x1="${node.x1}" y1="${node.y1}" x2="${node.x2}" y2="${node.y2}" stroke="#${node.color}" stroke-width="${node.stroke || 2}"/></svg>`
       return node.type === 'rect' || node.type === 'ellipse'
         ? `<span class="ppt-node ppt-shape${selected}" style="${style}background:#${node.color};${node.type === 'ellipse' ? 'border-radius:50%;' : ''}" ${attrs}>${handle}</span>`
-        : `<span class="ppt-node ppt-text${selected}" style="${style}color:#${node.color};font-family:'${node.font}',sans-serif;font-size:${node.size / 12.8}cqw;font-weight:${node.bold ? 700 : 400};text-align:${node.align || 'left'}" ${attrs}>${esc(node.text)}${handle}</span>`
+        : `<span class="ppt-node ppt-text${selected}" style="${style}color:#${node.color};font-family:'${node.font}',sans-serif;font-size:${node.size / 12.8}cqw;font-weight:${node.bold ? 700 : 400};text-align:${node.align || 'left'}" ${attrs}>${esc(node.displayText ?? node.text)}${handle}</span>`
     }
     const nodes = scene.nodes
       .filter((node) => !node.hidden)

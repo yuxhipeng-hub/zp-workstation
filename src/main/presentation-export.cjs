@@ -92,7 +92,7 @@ async function presentationBuffer(input) {
           line: { color: node.color, transparency: 100 },
         })
       } else {
-        slide.addText(node.text, {
+        slide.addText(node.displayText ?? node.text, {
           ...box,
           fontFace: node.font,
           fontSize: node.size * 0.75,

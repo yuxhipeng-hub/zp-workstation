@@ -2,6 +2,7 @@ const {
   validatePresentationInput,
   buildSlideScene,
   getPresentationIssues,
+  getSlideLayoutIssues,
 } = require('../shared/presentation.mjs')
 const {
   canvasFromScene,
@@ -131,6 +132,16 @@ class PresentationQuality {
     try {
       for (let round = 0; round < 2; round++) {
         const pages = await this.renderPages(deck, { indices })
+        if (
+          pages.length !== indices.length ||
+          indices.some(
+            (index) =>
+              pages.filter(
+                (p) => p.pageId === deck.slides[index].id && p.page === index + 1 && p.data,
+              ).length !== 1,
+          )
+        )
+          throw new Error('渲染页面不完整或编号不匹配，未标记检查通过。')
         let issues = [],
           proposals = []
         for (let offset = 0; offset < pages.length; offset += 4) {
@@ -159,6 +170,12 @@ class PresentationQuality {
               ).patches || []),
             )
         }
+        const localIssues = indices.flatMap((index) =>
+          getSlideLayoutIssues(
+            buildSlideScene(deck.slides[index], deck.theme, index, deck.slides.length),
+          ).map((issue) => ({ ...issue, pageId: deck.slides[index].id })),
+        )
+        issues.push(...localIssues)
         if (!round) initialIssueCount = issues.length
         if (!round && proposals.length) {
           const parsed = parseVisualReview(

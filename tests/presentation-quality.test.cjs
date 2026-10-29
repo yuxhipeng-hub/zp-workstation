@@ -91,3 +91,49 @@ test('visual task errors release the lock and never claim that an unconfigured m
     d.slides.map((s, i) => ({ pageId: s.id, page: i + 1, data: visionProbe().images[0] }))
   assert.equal((await quality.inspect({ deck: deck() })).report.status, 'pass')
 })
+
+function quietQuality(renderPages) {
+  return new PresentationQuality({
+    aiService: {
+      getConfig: () => ({ visionProfileId: 'v' }),
+      resolveProfile: () => ({ model: 'v', supportsVision: true }),
+      requestVision: async () => '{"issues":[],"patches":[]}',
+    },
+    renderPages,
+  })
+}
+
+test('an empty model review cannot hide overlapping visible text boxes on the inspected page', async () => {
+  const source = deck(),
+    slide = source.slides[0]
+  const title = slide.canvas.find((n) => n.field === 'title')
+  slide.canvas.push({ ...title, id: 'overlap', field: undefined, text: '另一段文字' })
+  const quality = quietQuality(async () => [
+    { pageId: slide.id, page: 1, data: visionProbe().images[0] },
+  ])
+  const result = await quality.inspect({ deck: source, pageId: slide.id })
+  assert.equal(result.report.status, 'issues')
+  assert.ok(result.report.issues.some((i) => i.message.includes('重叠')))
+  slide.canvas.at(-1).hidden = true
+  assert.equal((await quality.inspect({ deck: source, pageId: slide.id })).report.status, 'pass')
+  // A problem on another page does not invalidate a clean selected page.
+  slide.canvas.at(-1).hidden = false
+  const other = source.slides[1]
+  quality.renderPages = async () => [{ pageId: other.id, page: 2, data: visionProbe().images[0] }]
+  assert.equal((await quality.inspect({ deck: source, pageId: other.id })).report.status, 'pass')
+})
+
+test('inspection rejects missing, duplicate and mismatched rendered pages instead of reporting pass', async () => {
+  const source = deck(),
+    slide = source.slides[0]
+  const page = { pageId: slide.id, page: 1, data: visionProbe().images[0] }
+  for (const pages of [
+    [],
+    [page, page],
+    [{ ...page, page: 2 }],
+    [{ ...page, pageId: 'unknown' }],
+  ]) {
+    const quality = quietQuality(async () => pages)
+    await assert.rejects(quality.inspect({ deck: source, pageId: slide.id }), /渲染页面/)
+  }
+})

@@ -4,6 +4,7 @@ import {
   structuredContentIssue,
 } from './presentation-content.mjs'
 import { buildStructuredSlide, chartPreview, chartScale } from './presentation-layouts.mjs'
+import { balancedTitle } from './presentation-text.mjs'
 
 /** PPT 工作室的作品契约和确定性布局。此模块没有文件系统、网络或 DOM 依赖。 */
 export const PRESENTATION_LIMITS = { projects: 100, slides: 40, points: 6 }
@@ -197,6 +198,57 @@ function lineCount(value, width, size) {
     }, 0)
 }
 
+function finishScene(scene, slide) {
+  for (const node of scene.nodes) {
+    if (node.type !== 'text' || node.text !== slide.title) continue
+    const display = balancedTitle(node)
+    if (display !== node.text) node.displayText = display
+    node.overflow = lineCount(display, node.w, node.size) * node.size * 1.35 > node.h
+  }
+  return scene
+}
+
+/** Local checks supplement model review; overlapping text boxes are warnings, not automatic edits. */
+export function getSlideLayoutIssues(scene) {
+  const visible = scene.nodes.filter((n) => !n.hidden)
+  const issues = []
+  for (const node of visible) {
+    if (
+      node.x < 0 ||
+      node.y < 0 ||
+      node.x + node.w > scene.width + 0.01 ||
+      node.y + node.h > scene.height + 0.01
+    )
+      issues.push({
+        objectId: node.id,
+        severity: 'error',
+        message: '对象超出页面边界，请调整位置或大小。',
+      })
+    if ((node.preview || [node]).some((n) => n.overflow))
+      issues.push({
+        objectId: node.id,
+        severity: 'error',
+        message: '内容超出版式容量，请缩短文字、拆页或切换版式。',
+      })
+  }
+  const text = visible.filter((n) => n.type === 'text' && n.text.trim())
+  for (let i = 0; i < text.length; i++) {
+    for (let j = i + 1; j < text.length; j++) {
+      const a = text[i],
+        b = text[j]
+      const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+      const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+      if (w > 4 && h > 4 && w * h > Math.min(a.w * a.h, b.w * b.h) * 0.05)
+        issues.push({
+          objectId: a.id,
+          severity: 'warning',
+          message: `文字框存在重叠，请核对“${a.text.slice(0, 16)}”与“${b.text.slice(0, 16)}”的间距。`,
+        })
+    }
+  }
+  return issues
+}
+
 /** 在 1280×720 画布上排版；字号自动适应到可读下限，剩余溢出明确报告。 */
 export function buildSlideScene(slide, themeId = 'editorial', index = 0, total = 1) {
   const theme = PRESENTATION_THEMES[themeId] || PRESENTATION_THEMES.editorial
@@ -214,7 +266,10 @@ export function buildSlideScene(slide, themeId = 'editorial', index = 0, total =
       }
       return node
     })
-    return { width: 1280, height: 720, background: slide.background || theme.bg, nodes }
+    return finishScene(
+      { width: 1280, height: 720, background: slide.background || theme.bg, nodes },
+      slide,
+    )
   }
   const nodes = []
   function rect(x, y, w, h, color) {
@@ -323,7 +378,7 @@ export function buildSlideScene(slide, themeId = 'editorial', index = 0, total =
       label(point, 750, 280 + i * rowHeight, 450, rowHeight - 10, 28, theme.ink, false, 18)
     })
   }
-  return { width: 1280, height: 720, background: theme.bg, nodes }
+  return finishScene({ width: 1280, height: 720, background: theme.bg, nodes }, slide)
 }
 
 export function getPresentationIssues(deck) {
@@ -351,18 +406,15 @@ export function getPresentationIssues(deck) {
       if (!slide.title.trim())
         issues.push({ page: i + 1, message: '页面标题尚未填写。', blocking: false })
       const scene = buildSlideScene(slide, deck.theme, i, deck.slides.length)
-      if (
-        scene.nodes
-          .filter((node) => !node.hidden)
-          .flatMap((node) => node.preview || [node])
-          .some((node) => node.overflow)
-      )
-        issues.push({
+      const layoutIssues = getSlideLayoutIssues(scene)
+      issues.push(
+        ...layoutIssues.map((issue) => ({
           page: i + 1,
-          message: '内容超出版式容量，请缩短文字、拆页或切换版式。',
-          blocking: true,
-        })
-      else if ([slide.body, ...slide.points].join('').length > 350)
+          message: issue.message,
+          blocking: issue.severity === 'error',
+        })),
+      )
+      if (!layoutIssues.length && [slide.body, ...slide.points].join('').length > 350)
         issues.push({ page: i + 1, message: '内容偏多，建议把细节移到演讲备注。', blocking: false })
       return issues
     }),
