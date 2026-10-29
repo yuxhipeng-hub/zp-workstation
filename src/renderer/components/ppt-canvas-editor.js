@@ -75,7 +75,8 @@ export function createPptCanvasEditor({
     return `<label class="ppt-object-field"><span>${esc(label)}</span><input type="${type}" aria-label="${esc(label)}" data-canvas-prop="${key}" value="${esc(value)}" ${attrs} ${disabled(readonly())}></label>`
   }
   function markup() {
-    if (!active || !slide()?.canvas) return ''
+    if (!active || !slide()?.canvas)
+      return '<section class="ppt-object-editor" aria-label="对象编辑"><div class="ppt-object-empty"><i data-lucide="mouse-pointer-2"></i><strong>选择一个对象</strong><p>点击画布上的文字、图形或图片，在这里调整。</p></div></section>'
     const item = node()
     visibleSelectionId = selectedId
     return `<section class="ppt-object-editor" aria-label="对象编辑">
@@ -101,9 +102,12 @@ export function createPptCanvasEditor({
         .join('')}</details>
     </section>`
   }
-  function attributes(item) {
-    if (!active || !item.id) return ''
-    return `data-action="ppt-canvas-select" data-node-id="${esc(item.id)}" role="button" aria-label="选择对象：${esc(name(item))}" tabindex="-1"`
+  function attributes(item, index) {
+    const boundField =
+      item.field ||
+      (item.type === 'text' &&
+        ['title', 'body', 'eyebrow'].find((key) => item.text && item.text === slide()?.[key]))
+    return `data-action="ppt-canvas-${active ? 'select' : 'pick'}" ${item.id ? `data-node-id="${esc(item.id)}"` : `data-canvas-index="${index}"`} ${boundField ? `data-canvas-field="${boundField}"` : ''} role="button" aria-label="选择对象：${esc(name(item))}" tabindex="-1"`
   }
   function selected(item) {
     return active && selectedId === item.id
@@ -178,6 +182,15 @@ export function createPptCanvasEditor({
     if (!action.startsWith('ppt-canvas-')) return false
     const command = action.slice(11)
     editKey = ''
+    if (command === 'pick') {
+      ensure()
+      const target = element.dataset.nodeId
+        ? slide().canvas.find((item) => item.id === element.dataset.nodeId)
+        : slide().canvas[Number(element.dataset.canvasIndex)]
+      selectedId = target?.id || null
+      render()
+      return true
+    }
     if (command === 'mode') {
       if (active) {
         active = false

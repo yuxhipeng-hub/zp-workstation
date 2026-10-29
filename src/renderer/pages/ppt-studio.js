@@ -329,13 +329,13 @@ export function createPptStudioPage({
   }
   function slideMarkup(slide, theme, index, total, interactive = false) {
     const scene = buildSlideScene(slide, theme, index, total)
-    const draw = (node, parent = null) => {
+    const draw = (node, parent = null, nodeIndex = 0) => {
       const x = parent ? ((node.x - parent.x) * 100) / parent.w : node.x / 12.8,
         y = parent ? ((node.y - parent.y) * 100) / parent.h : node.y / 7.2,
         w = parent ? (node.w * 100) / parent.w : node.w / 12.8,
         h = parent ? (node.h * 100) / parent.h : node.h / 7.2
       const style = `left:${x}%;top:${y}%;width:${w}%;height:${h}%;`
-      const attrs = interactive ? canvasEditor.attributes(node) : ''
+      const attrs = interactive && !parent ? canvasEditor.attributes(node, nodeIndex) : ''
       const selected = interactive && canvasEditor.selected(node) ? ' is-selected' : ''
       const handle = interactive ? canvasEditor.resizeHandle(node) : ''
       if (node.type === 'chart')
@@ -350,9 +350,9 @@ export function createPptStudioPage({
     }
     const nodes = scene.nodes
       .filter((node) => !node.hidden)
-      .map((node) => draw(node))
+      .map((node, index) => draw(node, null, index))
       .join('')
-    return `<div class="ppt-slide ${interactive && canvasEditor.isActive() ? 'is-editable' : ''}" style="background:#${scene.background}" role="${interactive && canvasEditor.isActive() ? 'group' : 'img'}" aria-label="第 ${index + 1} 页：${esc(slide.title || '未填写标题')}">${nodes}</div>`
+    return `<div class="ppt-slide ${interactive && canvasEditor.isActive() ? 'is-editable' : ''}" style="background:#${scene.background}" role="${interactive ? 'group' : 'img'}" aria-label="第 ${index + 1} 页：${esc(slide.title || '未填写标题')}">${nodes}</div>`
   }
   function previewMarkup() {
     if (!draft) return ''
@@ -442,31 +442,27 @@ export function createPptStudioPage({
         : '<div class="ppt-empty"><i data-lucide="panels-top-left"></i><p>你的第一份作品，将从这里开始。</p><span>保存后可以随时回来继续修改。</span></div>'
     }</section>`
   }
-  function contentPanelMarkup() {
+  function pageSettingsMarkup() {
     const slide = draft.slides[selected]
-    return `<section class="ppt-inspector" aria-label="页面内容与设计" data-scroll-preserve="ppt-inspector"><div class="ppt-inspector-heading"><strong>页面内容 · 第 ${selected + 1} 页</strong><span>修改文字、设计与演讲备注</span></div>
-          ${field('deck', 'title', '作品名称', draft.title, 100)}
-          ${draft.slides.some((page) => page.canvas) ? `<div class="ppt-field"><span>设计方向</span><strong>${esc(DESIGN_DIRECTIONS[draft.designDirection]?.name || '自由对象设计')}</strong><small>在直接编辑中调整对象颜色与布局。</small></div>` : `<label class="ppt-field"><span>视觉主题</span><select data-ppt-scope="deck" data-ppt-field="theme" ${disabled(Boolean(busy))}>${options(Object.fromEntries(Object.entries(PRESENTATION_THEMES).map(([id, theme]) => [id, theme.name])), draft.theme)}</select><small data-ppt-theme-description>${esc(PRESENTATION_THEMES[draft.theme].description)}</small></label>`}
-          ${!slide.canvas ? `<label class="ppt-field"><span>页面版式</span><select data-ppt-scope="slide" data-ppt-field="layout" ${disabled(Boolean(busy) || slide.locked)}>${options(PRESENTATION_LAYOUTS, slide.layout)}</select></label>` : ''}
-          ${field('slide', 'eyebrow', '页眉', slide.eyebrow, 60)}
-          ${field('slide', 'title', '页面标题', slide.title, 100, true)}
-          ${field('slide', 'body', '正文', slide.body, 1200, true)}
-          ${field('slide', 'points', '要点（每行一项，最多 6 项）', slide.points.join('\n'), 965, true, '每个要点最多 160 字。')}
-          ${field('slide', 'notes', '当前页演讲备注', slide.notes, 4000, true)}
-          <div class="ppt-page-actions">${iconButton('move-up', '向前移动页面', 'arrow-up', disabled(selected === 0 || Boolean(busy)))}${iconButton('move-down', '向后移动页面', 'arrow-down', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}${button('duplicate', '复制页面', 'copy', disabled(Boolean(busy) || draft.slides.length >= 40))}${iconButton('remove-slide', '删除当前页面', 'trash-2', disabled(draft.slides.length <= 1 || Boolean(busy)))}</div>
-        </section>`
+    if (slide.canvas) return ''
+    return `<details class="ppt-page-settings" data-disclosure-id="ppt-page-settings"><summary><i data-lucide="sliders-horizontal"></i><span>页面设置</span></summary><div class="ppt-page-settings-fields">
+      ${!draft.slides.some((page) => page.canvas) ? `<label class="ppt-field"><span>视觉主题</span><select data-ppt-scope="deck" data-ppt-field="theme" ${disabled(Boolean(busy))}>${options(Object.fromEntries(Object.entries(PRESENTATION_THEMES).map(([id, theme]) => [id, theme.name])), draft.theme)}</select><small data-ppt-theme-description>${esc(PRESENTATION_THEMES[draft.theme].description)}</small></label>` : ''}
+      <label class="ppt-field"><span>页面版式</span><select data-ppt-scope="slide" data-ppt-field="layout" ${disabled(Boolean(busy) || slide.locked)}>${options(PRESENTATION_LAYOUTS, slide.layout)}</select></label>
+    </div></details>`
+  }
+  function pageMenuMarkup() {
+    return `<details class="ppt-page-menu" data-disclosure-id="ppt-page-menu-${esc(draft.slides[selected].id)}"><summary aria-label="当前页面操作" title="当前页面操作"><i data-lucide="ellipsis"></i></summary><div class="ppt-page-menu-actions" role="group" aria-label="页面操作">${button('move-up', '向前移动页面', 'arrow-up', disabled(selected === 0 || Boolean(busy)))}${button('move-down', '向后移动页面', 'arrow-down', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}${button('duplicate', '复制页面', 'copy', disabled(Boolean(busy) || draft.slides.length >= 40))}${button('remove-slide', '删除当前页面', 'trash-2', disabled(draft.slides.length <= 1 || Boolean(busy)))}</div></details>`
   }
   function editorMarkup() {
     return `<section class="ppt-editor" aria-label="PPT 编辑器" aria-busy="${Boolean(busy)}">
-      <div class="ppt-editor-bar"><div class="ppt-editor-identity">${iconButton('home', '返回作品', 'arrow-left', disabled(Boolean(busy)))}<div><strong data-ppt-project-title>${esc(draft.title)}</strong><span data-ppt-save-state>${dirty() ? '有未保存的修改' : '已保存到本机'} · ${draft.slides.length} 页</span></div></div><div class="ppt-inline-actions"><div class="ppt-history-tools">${iconButton('undo', '撤销修改', 'undo-2', disabled(!history.length || Boolean(busy)))}${iconButton('redo', '重做修改', 'redo-2', disabled(!future.length || Boolean(busy)))}</div>${button('save', busy === 'saving' ? '保存中…' : '保存作品', 'save', disabled(Boolean(busy)))}${button('present', '演示', 'play', disabled(Boolean(busy)))}${button('export', busy === 'exporting' ? '导出中…' : '导出 PPTX', 'download', disabled(Boolean(busy)), false)}</div></div>
+      <div class="ppt-editor-bar"><div class="ppt-editor-identity">${iconButton('home', '返回作品', 'arrow-left', disabled(Boolean(busy)))}<div><label class="ppt-project-name"><span class="sr-only">作品名称</span><input id="ppt-deck-title" data-ppt-project-title data-ppt-scope="deck" data-ppt-field="title" value="${esc(draft.title)}" maxlength="100" title="点击修改作品名称" ${disabled(Boolean(busy))}></label><span data-ppt-save-state>${dirty() ? '有未保存的修改' : '已保存到本机'} · ${draft.slides.length} 页</span></div></div><div class="ppt-inline-actions"><div class="ppt-history-tools">${iconButton('undo', '撤销修改', 'undo-2', disabled(!history.length || Boolean(busy)))}${iconButton('redo', '重做修改', 'redo-2', disabled(!future.length || Boolean(busy)))}</div>${button('save', busy === 'saving' ? '保存中…' : '保存作品', 'save', disabled(Boolean(busy)))}${button('present', '演示', 'play', disabled(Boolean(busy)))}${button('export', busy === 'exporting' ? '导出中…' : '导出 PPTX', 'download', disabled(Boolean(busy)), false)}</div></div>
       ${error ? `<div class="ppt-error" role="alert">${esc(error)}</div>` : ''}
       <div class="ppt-workspace">
-        <aside class="ppt-filmstrip" aria-label="幻灯片列表" data-scroll-preserve="ppt-pages"><div class="ppt-filmstrip-head"><span>页面 <b>${draft.slides.length}</b></span>${iconButton('add-slide', '添加页面', 'plus', disabled(Boolean(busy) || draft.slides.length >= 40))}</div>${draft.slides.map((item, i) => `<button class="ppt-thumbnail ${selected === i ? 'is-selected' : ''}" data-action="ppt-select" data-index="${i}" aria-label="选择第 ${i + 1} 页" aria-pressed="${selected === i}" ${disabled(Boolean(busy))}><div class="ppt-thumbnail-art" data-ppt-thumb="${i}">${slideMarkup(item, draft.theme, i, draft.slides.length)}</div><span><b>${String(i + 1).padStart(2, '0')}</b><span data-ppt-thumb-title="${i}">${esc(item.title || '未填写标题')}</span></span></button>`).join('')}</aside>
-        <div class="ppt-canvas-area"><div class="ppt-canvas-toolbar" role="toolbar" aria-label="画布工具">${canvasEditor.toolbarMarkup(Boolean(busy))}${button('canvas-mode', canvasEditor.isActive() ? '完成直接编辑' : '直接编辑', 'mouse-pointer-2', disabled(Boolean(busy)))}</div><div class="ppt-canvas-surface"><div class="ppt-stage-meta"><span data-ppt-page-label>${esc(pageLabel())}</span><span>16 : 9</span></div><div class="ppt-stage" data-ppt-preview tabindex="0" aria-label="幻灯片画布">${previewMarkup()}</div><div class="ppt-canvas-footer"><span>${canvasEditor.isActive() ? '拖动移动 · 右下角缩放 · 方向键微调' : '选择页面，预览你的演示'}</span><div class="ppt-page-navigation">${iconButton('previous', '上一页', 'chevron-left', disabled(selected === 0 || Boolean(busy)))}<span>${selected + 1} / ${draft.slides.length}</span>${iconButton('next', '下一页', 'chevron-right', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}</div></div></div><div class="ppt-delivery-area"><div data-ppt-checks>${issuesMarkup()}</div>${visualReportMarkup()}${strategyMarkup()}</div></div>
+        <aside class="ppt-filmstrip" aria-label="幻灯片列表" data-scroll-preserve="ppt-pages"><div class="ppt-filmstrip-head"><span>页面 <b>${draft.slides.length}</b></span>${iconButton('add-slide', '添加页面', 'plus', disabled(Boolean(busy) || draft.slides.length >= 40))}</div>${draft.slides.map((item, i) => `<article class="ppt-page-item"><button class="ppt-thumbnail ${selected === i ? 'is-selected' : ''}" data-action="ppt-select" data-index="${i}" aria-label="选择第 ${i + 1} 页" aria-pressed="${selected === i}" ${disabled(Boolean(busy))}><div class="ppt-thumbnail-art" data-ppt-thumb="${i}">${slideMarkup(item, draft.theme, i, draft.slides.length)}</div><span><b>${String(i + 1).padStart(2, '0')}</b><span data-ppt-thumb-title="${i}">${esc(item.title || '未填写标题')}</span></span></button>${selected === i ? pageMenuMarkup() : ''}</article>`).join('')}</aside>
+        <div class="ppt-canvas-area"><div class="ppt-canvas-toolbar" role="toolbar" aria-label="画布工具">${canvasEditor.toolbarMarkup(Boolean(busy))}${pageSettingsMarkup()}${button('canvas-mode', canvasEditor.isActive() ? '完成直接编辑' : '直接编辑', 'mouse-pointer-2', disabled(Boolean(busy)))}</div><div class="ppt-canvas-surface"><div class="ppt-stage-meta"><span data-ppt-page-label>${esc(pageLabel())}</span><span>16 : 9</span></div><div class="ppt-stage" data-ppt-preview tabindex="0" aria-label="幻灯片画布">${previewMarkup()}</div><div class="ppt-canvas-footer"><span>${canvasEditor.isActive() ? '拖动移动 · 右下角缩放 · 方向键微调' : '选择页面，预览你的演示'}</span><div class="ppt-page-navigation">${iconButton('previous', '上一页', 'chevron-left', disabled(selected === 0 || Boolean(busy)))}<span>${selected + 1} / ${draft.slides.length}</span>${iconButton('next', '下一页', 'chevron-right', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}</div></div></div><details class="ppt-speaker-notes" data-disclosure-id="ppt-speaker-notes"><summary><i data-lucide="notebook-pen"></i><span>演讲备注</span></summary>${field('slide', 'notes', '当前页演讲备注', draft.slides[selected].notes, 4000, true)}</details><div class="ppt-delivery-area"><div data-ppt-checks>${issuesMarkup()}</div>${visualReportMarkup()}${strategyMarkup()}</div></div>
         <aside class="ppt-editor-side" aria-label="编辑侧栏"><nav class="ppt-side-tabs" aria-label="编辑面板">${[
           ['chat', '对话助手'],
-          ['content', '手动编辑'],
-          ['objects', '对象属性'],
+          ['objects', '属性'],
         ]
           .map(
             ([id, label]) =>
@@ -474,7 +470,7 @@ export function createPptStudioPage({
           )
           .join(
             '',
-          )}</nav><div class="ppt-side-body" data-scroll-preserve="ppt-side-body">${inspectorPanel === 'content' ? contentPanelMarkup() : inspectorPanel === 'objects' ? canvasEditor.markup() : conversationMarkup()}</div>${canvasEditor.isActive() ? `<div class="ppt-side-footer">${button('canvas-chat', inspectorPanel === 'chat' ? '返回画布编辑' : '对话修改所选对象', 'message-square', disabled(Boolean(busy)))}</div>` : ''}</aside>
+          )}</nav><div class="ppt-side-body" data-scroll-preserve="ppt-side-body">${inspectorPanel === 'objects' ? canvasEditor.markup() : conversationMarkup()}</div>${canvasEditor.isActive() ? `<div class="ppt-side-footer">${button('canvas-chat', inspectorPanel === 'chat' ? '返回画布编辑' : '对话修改所选对象', 'message-square', disabled(Boolean(busy)))}</div>` : ''}</aside>
       </div>
     </section>`
   }
@@ -510,7 +506,7 @@ export function createPptStudioPage({
     if (status)
       status.textContent = `${dirty() ? '有未保存的修改' : '已保存到本机'} · ${draft.slides.length} 页`
     const title = document.querySelector('[data-ppt-project-title]')
-    if (title) title.textContent = draft.title
+    if (title) title.value = draft.title
     const label = document.querySelector('[data-ppt-page-label]')
     if (label) label.textContent = pageLabel()
     const checks = document.querySelector('[data-ppt-checks]')
@@ -666,10 +662,7 @@ export function createPptStudioPage({
     }
     if (action === 'ppt-panel') {
       const next = element.dataset.panel
-      if (!['chat', 'content', 'objects'].includes(next)) return true
-      if (next === 'objects' && !canvasEditor.isActive()) {
-        canvasEditor.handleAction('ppt-canvas-mode', element)
-      }
+      if (!['chat', 'objects'].includes(next)) return true
       inspectorPanel = next
       render()
       return true
@@ -695,12 +688,9 @@ export function createPptStudioPage({
     if (command === 'manual') {
       if (!(await canReplace(element))) return true
       setDraft(createPresentation())
-      inspectorPanel = 'content'
     } else if (command === 'send') {
       await sendMessage()
       return true
-    } else if (command === 'toggle-manual') {
-      inspectorPanel = inspectorPanel === 'content' ? 'chat' : 'content'
     } else if (command === 'home') {
       if (!(await canReplace(element))) return true
       canvasEditor.reset()
@@ -793,6 +783,11 @@ export function createPptStudioPage({
   }
   function handleKeydown(event) {
     if (busy || document.querySelector('#dialogRoot [role="dialog"]')) return
+    if (event.target?.id === 'ppt-deck-title' && event.key === 'Enter') {
+      event.preventDefault()
+      event.target.blur()
+      return
+    }
     if (
       event.target?.id === 'ppt-message' &&
       event.key === 'Enter' &&

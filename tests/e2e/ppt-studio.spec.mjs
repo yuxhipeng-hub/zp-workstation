@@ -16,6 +16,32 @@ function temporaryDirectory() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'zp-ppt-e2e-'))
 }
 
+async function editSlideText(window, field, value) {
+  await window.locator(`[data-ppt-preview] [data-canvas-field="${field}"]`).click()
+  await window.getByLabel('对象文字', { exact: true }).fill(value)
+}
+
+async function expectSlideText(window, field, value) {
+  await expect
+    .poll(async () =>
+      window
+        .locator(`[data-ppt-preview] [data-canvas-field="${field}"]`)
+        .evaluate((element) => element.textContent.replaceAll('\n', '')),
+    )
+    .toBe(value.replaceAll('\n', ''))
+}
+
+async function openNotes(window) {
+  if ((await window.locator('.ppt-speaker-notes').getAttribute('open')) === null)
+    await window.locator('.ppt-speaker-notes > summary').click()
+}
+
+async function pageAction(window, label) {
+  if ((await window.locator('.ppt-page-menu').getAttribute('open')) === null)
+    await window.locator('.ppt-page-menu > summary').click()
+  await window.getByRole('button', { name: label, exact: true }).click()
+}
+
 test('PPT groups insert tools and selected-object properties without losing edits when switching panels', async () => {
   const directory = temporaryDirectory()
   let app
@@ -29,6 +55,11 @@ test('PPT groups insert tools and selected-object properties without losing edit
     await window.reload()
     await window.locator('.nav-item[data-page="ppt"]').click()
     await window.locator('.ppt-project-open').click()
+    await expect(window.locator('.ppt-side-tabs > button')).toHaveCount(2)
+    await expect(window.getByRole('button', { name: '手动编辑', exact: true })).toHaveCount(0)
+    await window.getByRole('button', { name: '属性', exact: true }).click()
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+    await expect(window.locator('.ppt-page-settings')).toHaveCount(0)
     const toolbar = window.getByRole('toolbar', { name: '画布工具' })
     const preview = window.locator('[data-ppt-preview]')
     await expect(toolbar.getByRole('button', { name: '色块', exact: true })).toHaveAttribute(
@@ -41,7 +72,7 @@ test('PPT groups insert tools and selected-object properties without losing edit
     const shapeId = await preview.locator('.is-selected').getAttribute('data-node-id')
     const shape = preview.locator(`[data-node-id="${shapeId}"]`)
     await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 1)
-    await expect(window.getByRole('button', { name: '对象属性', exact: true })).toHaveAttribute(
+    await expect(window.getByRole('button', { name: '属性', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -363,7 +394,7 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     await window.locator('#ppt-message').press('Control+Enter')
     await expect(window.locator('.ppt-sample-grid article')).toHaveCount(3)
     await window.getByRole('button', { name: '按此方向生成整套', exact: true }).click()
-    await expect(window.locator('[data-ppt-project-title]')).toHaveText('智能制造职业规划')
+    await expect(window.locator('[data-ppt-project-title]')).toHaveValue('智能制造职业规划')
     await expect(window.locator('.ppt-thumbnail')).toHaveCount(3)
     await expect(window.locator('.ppt-inspector')).toHaveCount(0)
     await expect(window.locator('.ppt-message')).toHaveCount(4)
@@ -382,19 +413,18 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     expect((await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]).toEqual(
       before,
     )
-    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
+    await openNotes(window)
     await expect(window.locator('#ppt-slide-notes')).toHaveValue(before.slides[1].notes)
     await window.getByRole('button', { name: '撤销修改', exact: true }).click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue(before.slides[1].title)
+    await expectSlideText(window, 'title', before.slides[1].title)
     await window.getByRole('button', { name: '重做修改', exact: true }).click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('从机械基础走向智能制造')
+    await expectSlideText(window, 'title', '从机械基础走向智能制造')
     await window.getByRole('button', { name: '对话助手', exact: true }).click()
     await window.locator('#ppt-message').fill('触发无效回复')
     await window.getByRole('button', { name: '发送', exact: true }).click()
     await expect(window.locator('.ppt-error')).toContainText('输入和原作品已保留')
     await expect(window.locator('#ppt-message')).toHaveValue('触发无效回复')
-    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('从机械基础走向智能制造')
+    await expectSlideText(window, 'title', '从机械基础走向智能制造')
     await window.getByRole('button', { name: '对话助手', exact: true }).click()
     await expect(window.locator('.ppt-message')).toHaveCount(6)
     await window.locator('#ppt-message').fill('重新修改当前页标题')
@@ -732,16 +762,19 @@ test('PPT studio edits, reorders, saves, exports native objects and survives res
     await expect(window.locator('.nav-section-tools')).toContainText('工具')
     await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await window.locator('#ppt-deck-title').fill('客户提案 <测试>')
-    await window.locator('#ppt-slide-title').fill('让客户看清真正的价值')
-    await window.locator('#ppt-slide-notes').fill('这是一段只进入备注的讲稿。')
+    await window.locator('.ppt-page-settings > summary').click()
     await window.locator('[data-ppt-field="theme"]').selectOption('midnight')
+    await editSlideText(window, 'title', '让客户看清真正的价值')
+    await openNotes(window)
+    await window.locator('#ppt-slide-notes').fill('这是一段只进入备注的讲稿。')
+
     await window.getByRole('button', { name: '选择第 2 页', exact: true }).click()
-    await window.locator('#ppt-slide-body').fill('以真实证据支持这个判断。')
+    await editSlideText(window, 'body', '以真实证据支持这个判断。')
     await window.getByRole('button', { name: '添加页面', exact: true }).click()
-    await window.locator('#ppt-slide-title').fill('新增案例')
-    await window.getByRole('button', { name: '向前移动页面', exact: true }).click()
+    await editSlideText(window, 'title', '新增案例')
+    await pageAction(window, '向前移动页面')
     await expect(window.locator('[data-ppt-page-label]')).toContainText('第 2 页')
-    await window.getByRole('button', { name: '复制页面', exact: true }).click()
+    await pageAction(window, '复制页面')
     await expect(window.locator('.ppt-thumbnail')).toHaveCount(5)
     await window.getByRole('button', { name: '撤销修改', exact: true }).click()
     await expect(window.locator('.ppt-thumbnail')).toHaveCount(4)
@@ -770,8 +803,8 @@ test('PPT studio edits, reorders, saves, exports native objects and survives res
     app = launched.app
     window = launched.window
     await window.locator('.ppt-project-open').filter({ hasText: '客户提案 <测试>' }).click()
-    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('让客户看清真正的价值')
+    await expectSlideText(window, 'title', '让客户看清真正的价值')
+    await openNotes(window)
     await expect(window.locator('#ppt-slide-notes')).toHaveValue('这是一段只进入备注的讲稿。')
     await expect(window.locator('.ppt-thumbnail')).toHaveCount(4)
     await window.getByRole('button', { name: '演示', exact: true }).click()
@@ -795,16 +828,16 @@ test('PPT studio keeps drafts when leaving is canceled and confirms project dele
     await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await window.locator('#ppt-deck-title').fill('保留作品')
     await window.getByRole('button', { name: '保存作品', exact: true }).click()
-    await window.locator('#ppt-slide-title').fill('还没有保存的标题')
+    await editSlideText(window, 'title', '还没有保存的标题')
     await window.evaluate(() => window.launcher.patchSettings({ minimizeToTray: false }))
     await app.evaluate(({ dialog, BrowserWindow }) => {
       dialog.showMessageBoxSync = () => 0
       BrowserWindow.getAllWindows()[0].close()
     })
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('还没有保存的标题')
+    await expectSlideText(window, 'title', '还没有保存的标题')
     await window.locator('.nav-item[data-page="today"]').click()
     await window.locator('.nav-item[data-page="ppt"]').click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('还没有保存的标题')
+    await expectSlideText(window, 'title', '还没有保存的标题')
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await expect(window.getByRole('dialog').getByRole('combobox')).toHaveCount(0)
     await expect(window.getByRole('dialog').getByRole('button')).toHaveCount(3)
@@ -815,16 +848,15 @@ test('PPT studio keeps drafts when leaving is canceled and confirms project dele
       window.getByRole('dialog').getByRole('button', { name: '不保存', exact: true }),
     ).toBeVisible()
     await window.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('还没有保存的标题')
+    await expectSlideText(window, 'title', '还没有保存的标题')
     await expect(window.getByRole('button', { name: '返回作品', exact: true })).toBeFocused()
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await window.keyboard.press('Escape')
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('还没有保存的标题')
+    await expectSlideText(window, 'title', '还没有保存的标题')
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await window.getByRole('dialog').getByRole('button', { name: '不保存', exact: true }).click()
     await window.locator('.ppt-project-open').click()
-    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('从一个好想法开始')
+    await expectSlideText(window, 'title', '从一个好想法开始')
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await window.getByRole('button', { name: '删除作品：保留作品', exact: true }).click()
     await window.getByRole('dialog').getByRole('button', { name: '确定', exact: true }).click()
@@ -849,7 +881,7 @@ test('PPT studio saves directly from its three-button dialog and keeps the draft
     const window = launched.window
     await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await window.locator('#ppt-deck-title').fill('直接保存的作品')
-    await window.locator('#ppt-slide-title').fill('需要保存的新标题')
+    await editSlideText(window, 'title', '需要保存的新标题')
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     const dialog = window.getByRole('dialog')
     const saveButton = dialog.getByRole('button', { name: '保存', exact: true })
@@ -871,7 +903,7 @@ test('PPT studio saves directly from its three-button dialog and keeps the draft
     fs.mkdirSync(temporaryPath)
     await saveButton.click()
     await expect(window.locator('.ppt-error')).toContainText('保存失败')
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('需要保存的新标题')
+    await expectSlideText(window, 'title', '需要保存的新标题')
     await expect(window.locator('.ppt-gallery')).toHaveCount(0)
     expect(
       (await window.evaluate(() => window.launcher.getWorkspace())).presentations,
@@ -881,8 +913,7 @@ test('PPT studio saves directly from its three-button dialog and keeps the draft
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
     await expect(window.locator('.ppt-project-open')).toContainText('直接保存的作品')
     await window.locator('.ppt-project-open').click()
-    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
-    await expect(window.locator('#ppt-slide-title')).toHaveValue('需要保存的新标题')
+    await expectSlideText(window, 'title', '需要保存的新标题')
     await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
   } finally {
     if (fs.existsSync(temporaryPath) && fs.statSync(temporaryPath).isDirectory())
@@ -933,7 +964,6 @@ test('PPT studio leaves consistent space between content and the outer frame', a
           animations: 'disabled',
         })
         await window.locator('.ppt-project-open').click()
-        await window.getByRole('button', { name: '手动编辑', exact: true }).click()
         const editorGaps = await window.locator('.ppt-studio').evaluate((root) => {
           const outer = root.getBoundingClientRect()
           const box = (selector) => root.querySelector(selector).getBoundingClientRect()
@@ -974,10 +1004,10 @@ test('PPT studio keeps narrow light and dark layouts usable and escapes editable
       animations: 'disabled',
     })
     await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
-    await window.locator('#ppt-slide-title').fill('<img src=x onerror="window.pptInjected=true">')
+    await editSlideText(window, 'title', '<img src=x onerror="window.pptInjected=true">')
     await expect(window.locator('.ppt-stage img')).toHaveCount(0)
     expect(await window.evaluate(() => window.pptInjected)).toBeUndefined()
-    await window.locator('#ppt-slide-title').fill('把一个好想法，讲清楚')
+    await editSlideText(window, 'title', '把一个好想法，讲清楚')
     await window.locator('.view').evaluate((element) => {
       element.scrollTop = 0
     })
@@ -992,8 +1022,8 @@ test('PPT studio keeps narrow light and dark layouts usable and escapes editable
       .locator('.ppt-studio')
       .evaluate((element) => element.scrollWidth - element.clientWidth)
     expect(overflow).toBeLessThanOrEqual(1)
-    await window.locator('#ppt-slide-title').focus()
-    await expect(window.locator('#ppt-slide-title')).toBeFocused()
+    await window.getByLabel('对象文字', { exact: true }).focus()
+    await expect(window.getByLabel('对象文字', { exact: true })).toBeFocused()
     await window.locator('.view').evaluate((element) => {
       element.scrollTop = 0
     })
@@ -1001,7 +1031,7 @@ test('PPT studio keeps narrow light and dark layouts usable and escapes editable
       path: path.join(screenshotDir, 'editor-light-narrow.png'),
       animations: 'disabled',
     })
-    await window.locator('#ppt-slide-body').fill('长文本'.repeat(300))
+    await editSlideText(window, 'body', '长文本'.repeat(300))
     await expect(window.locator('[data-ppt-checks]')).toContainText('超出版式容量')
     await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
     await expect(window.locator('.ppt-error')).toContainText('超出版式容量')
