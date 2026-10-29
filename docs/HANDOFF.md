@@ -15,7 +15,7 @@
 - 当前任务：`codex/ui-studio-refresh`，基于 `35b718c`，仅重设计 PPT 板块 UI，风格待用户验收。
   页面列表、中央画布、右侧「对话 / 属性」；名称、备注和页面操作已归位。主开发为 Codex。
   上轮 `aa8fd43` 的标题断行与排版检查已完成；智能录入和资料库分支保持独立。
-- GitHub：2026-10-29 已同步 `codex/ppt-layout-quality`；当前 UI 分支尚未推送。
+- GitHub：2026-10-29 已同步 `codex/ui-studio-refresh`（实现截至 `52672da`）与 `codex/ppt-layout-quality`。
   手机读本分支的本页、[PPT 规格](specs/002-ppt-studio.md)、[验证记录](PPT_ENGINE_EVALUATION.md)；
   独立进度见[全部分支](https://github.com/yuxhipeng-hub/zp-workstation/branches)。`main` 仍是发布基线，本次未合并或发布。
 - 接续先核对本页与 Git。用户强调只重设计 PPT 板块，勿扩大全局范围；重视简洁和可操作性。
