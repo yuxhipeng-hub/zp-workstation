@@ -25,7 +25,7 @@ export function createPptCanvasEditor({
     item.name ||
     (item.type === 'text'
       ? item.text.slice(0, 24) || '空文字'
-      : { rect: '矩形', ellipse: '圆形', chart: '图表', image: '图片' }[item.type])
+      : { rect: '矩形色块', ellipse: '圆形', chart: '图表', image: '图片' }[item.type])
   function reset() {
     active = false
     selectedId = null
@@ -63,8 +63,13 @@ export function createPptCanvasEditor({
     selectedId = item.id
     render()
   }
-  function button(action, label, extra = '') {
-    return `<button type="button" class="button secondary" data-action="ppt-canvas-${action}" ${extra}>${esc(label)}</button>`
+  function button(action, label, extra = '', icon = '', compact = false) {
+    const hint = action === 'add-rect' ? '添加矩形色块：用作底色、强调条或区域分隔' : label
+    return `<button type="button" class="${compact ? 'ppt-icon-button' : 'ppt-tool-button'}" data-action="ppt-canvas-${action}" title="${esc(hint)}" aria-label="${esc(label)}" ${extra}>${icon ? `<i data-lucide="${icon}"></i>` : ''}${compact ? '' : `<span>${esc(label)}</span>`}</button>`
+  }
+  function toolbarMarkup(busy = false) {
+    const locked = busy || slide()?.locked
+    return `<div class="ppt-insert-tools" role="group" aria-label="插入元素">${button('add-text', '文字', disabled(locked), 'type')}${button('add-rect', '色块', `${disabled(locked)} aria-describedby="ppt-shape-purpose"`, 'square')}${button('image', '图片', disabled(locked), 'image')}<span class="ppt-toolbar-divider" aria-hidden="true"></span>${button('page-lock', slide()?.locked ? '解锁页面' : '锁定页面', disabled(busy), slide()?.locked ? 'lock-keyhole' : 'lock-keyhole-open', true)}<span class="sr-only" id="ppt-shape-purpose">添加矩形色块，用作底色、强调条或区域分隔。</span></div>`
   }
   function field(key, label, value, type = 'number', attrs = '') {
     return `<label class="ppt-object-field"><span>${esc(label)}</span><input type="${type}" aria-label="${esc(label)}" data-canvas-prop="${key}" value="${esc(value)}" ${attrs} ${disabled(readonly())}></label>`
@@ -74,18 +79,18 @@ export function createPptCanvasEditor({
     const item = node()
     visibleSelectionId = selectedId
     return `<section class="ppt-object-editor" aria-label="对象编辑">
-      <div class="ppt-object-toolbar">${button('add-text', '文字', disabled(slide().locked))}${button('add-rect', '矩形', disabled(slide().locked))}${button('image', '图片', disabled(slide().locked))}${button('page-lock', slide().locked ? '解锁页面' : '锁定页面')}<span>拖动移动 · 右下角缩放 · 方向键微调</span></div>
       ${
         item
-          ? `<div class="ppt-object-properties"><strong>${esc(name(item))}</strong>${button('lock', item.locked ? '解锁对象' : '锁定对象', disabled(slide().locked))}${button('duplicate', '复制对象', disabled(slide().locked))}${button('hide', item.hidden ? '显示对象' : '隐藏对象', disabled(readonly()))}${button('delete', '删除对象', disabled(readonly()))}${button('front', '上移图层', disabled(readonly()))}${button('back', '下移图层', disabled(readonly()))}
-      ${item.type === 'text' ? `<label class="ppt-object-text"><span>对象文字</span><textarea aria-label="对象文字" data-canvas-prop="text" maxlength="${{ title: 100, body: 1200, eyebrow: 60 }[item.field] || 4000}" rows="3" ${disabled(readonly())}>${esc(item.text)}</textarea></label><div class="ppt-object-style">${field('size', '字号', item.size, 'number', 'min="8" max="160"')}${field('color', '颜色', `#${item.color}`, 'color')}${button('bold', item.bold ? '取消加粗' : '加粗', `${disabled(readonly())} aria-pressed="${Boolean(item.bold)}"`)}${['left', 'center', 'right'].map((align, i) => button(`align-${align}`, ['左对齐', '居中', '右对齐'][i], `${disabled(readonly())} aria-pressed="${item.align === align}"`)).join('')}</div>` : ''}
-      ${['rect', 'ellipse'].includes(item.type) ? field('color', '填充颜色', `#${item.color}`, 'color') : ''}
-      ${item.type === 'image' ? `<div class="ppt-object-style">${button('contain', '完整显示', disabled(readonly()))}${button('cover', '填满裁切', disabled(readonly()))}${button('replace-image', '替换图片', disabled(readonly()))}</div>` : ''}
+          ? `<div class="ppt-object-properties"><header class="ppt-object-heading"><div><span>${esc({ text: '文字', rect: '形状', ellipse: '形状', image: '图片', chart: '图表' }[item.type])}</span><strong>${esc(name(item))}</strong></div><div class="ppt-object-quick-actions" role="group" aria-label="对象操作">${button('lock', item.locked ? '解锁对象' : '锁定对象', `${disabled(slide().locked)} aria-pressed="${Boolean(item.locked)}"`, item.locked ? 'lock-keyhole' : 'lock-keyhole-open', true)}${button('duplicate', '复制对象', disabled(slide().locked), 'copy', true)}${button('delete', '删除对象', disabled(readonly()), 'trash-2', true)}</div></header>
+      ${item.type === 'text' ? `<label class="ppt-object-text"><span>对象文字</span><textarea aria-label="对象文字" data-canvas-prop="text" maxlength="${{ title: 100, body: 1200, eyebrow: 60 }[item.field] || 4000}" rows="4" ${disabled(readonly())}>${esc(item.text)}</textarea></label><div class="ppt-object-style">${field('size', '字号', item.size, 'number', 'min="8" max="160"')}${field('color', '颜色', `#${item.color}`, 'color')}</div><div class="ppt-format-controls" role="group" aria-label="文字格式">${button('bold', item.bold ? '取消加粗' : '加粗', `${disabled(readonly())} aria-pressed="${Boolean(item.bold)}"`, 'bold', true)}<span class="ppt-toolbar-divider" aria-hidden="true"></span>${['left', 'center', 'right'].map((align, i) => button(`align-${align}`, ['左对齐', '居中', '右对齐'][i], `${disabled(readonly())} aria-pressed="${item.align === align}"`, `align-${align}`, true)).join('')}</div>` : ''}
+      ${['rect', 'ellipse'].includes(item.type) ? `${field('color', '填充颜色', `#${item.color}`, 'color')}<p class="ppt-object-hint">色块可用作底色、强调条或区域分隔。拖动调整位置，右下角调整大小。</p>` : ''}
+      ${item.type === 'image' ? `<div class="ppt-image-fit" role="group" aria-label="图片显示方式">${button('contain', '完整显示', `${disabled(readonly())} aria-pressed="${item.fit !== 'cover'}"`, 'scan')}${button('cover', '填满裁切', `${disabled(readonly())} aria-pressed="${item.fit === 'cover'}"`, 'crop')}${button('replace-image', '替换图片', disabled(readonly()), 'image-up')}</div>` : ''}
       ${item.type === 'chart' ? `<details class="ppt-chart-data"><summary>编辑图表数据</summary><div class="ppt-chart-table"><table><thead><tr><th>分类</th>${item.chart.series.map((s) => `<th>${esc(s.name)}</th>`).join('')}</tr></thead><tbody>${item.chart.categories.map((category, i) => `<tr><td><input aria-label="第 ${i + 1} 项分类" data-canvas-chart="categories.${i}" value="${esc(category)}" maxlength="24" ${disabled(readonly())}></td>${item.chart.series.map((s, si) => `<td><input aria-label="${esc(s.name)} 第 ${i + 1} 项数值" type="number" step="any" data-canvas-chart="series.${si}.values.${i}" value="${s.values[i]}" ${disabled(readonly())}></td>`).join('')}</tr>`).join('')}</tbody></table></div>${field('chart.source', '数据来源', item.chart.source, 'text', 'maxlength="200"')}${field('chart.unit', '单位', item.chart.unit, 'text', 'maxlength="24"')}</details>` : ''}
-      <details><summary>精确位置与大小</summary><div class="ppt-object-geometry">${['x', 'y', 'w', 'h'].map((key, i) => field(key, ['水平位置', '垂直位置', '宽度', '高度'][i], Number(item[key].toFixed(1)), 'number', 'step="1"')).join('')}</div></details></div>`
-          : '<p class="ppt-object-hint">点击画布上的文字、图形或图表开始编辑。</p>'
+      <details class="ppt-object-arrange" data-disclosure-id="ppt-object-arrange"><summary>排列与显示</summary><div class="ppt-arrange-controls">${button('front', '上移图层', disabled(readonly()), 'bring-to-front')}${button('back', '下移图层', disabled(readonly()), 'send-to-back')}${button('hide', item.hidden ? '显示对象' : '隐藏对象', disabled(readonly()), item.hidden ? 'eye' : 'eye-off')}</div></details>
+      <details data-disclosure-id="ppt-object-geometry"><summary>精确位置与大小</summary><div class="ppt-object-geometry">${['x', 'y', 'w', 'h'].map((key, i) => field(key, ['水平位置', '垂直位置', '宽度', '高度'][i], Number(item[key].toFixed(1)), 'number', 'step="1"')).join('')}</div></details></div>`
+          : '<div class="ppt-object-empty"><i data-lucide="mouse-pointer-2"></i><strong>选择一个对象</strong><p>点击画布上的文字、图形或图片，在这里调整。</p><span>拖动移动 · 方向键微调</span></div>'
       }
-      <details class="ppt-layer-list"><summary>对象与图层 · ${slide().canvas.length}</summary>${[
+      <details class="ppt-layer-list" data-disclosure-id="ppt-object-layers"><summary>对象与图层 · ${slide().canvas.length}</summary>${[
         ...slide().canvas,
       ]
         .reverse()
@@ -369,6 +374,7 @@ export function createPptCanvasEditor({
   }
   return {
     markup,
+    toolbarMarkup,
     attributes,
     selected,
     resizeHandle,

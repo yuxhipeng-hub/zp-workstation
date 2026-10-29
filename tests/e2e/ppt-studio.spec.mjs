@@ -16,6 +16,109 @@ function temporaryDirectory() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'zp-ppt-e2e-'))
 }
 
+test('PPT groups insert tools and selected-object properties without losing edits when switching panels', async () => {
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    const { materializeDesign } = require('../../src/shared/presentation-design.mjs')
+    const deck = materializeDesign(referenceDeck('proposal'))
+    await window.evaluate((value) => window.launcher.savePresentation(value), deck)
+    await window.reload()
+    await window.locator('.nav-item[data-page="ppt"]').click()
+    await window.locator('.ppt-project-open').click()
+    const toolbar = window.getByRole('toolbar', { name: '画布工具' })
+    const preview = window.locator('[data-ppt-preview]')
+    await expect(toolbar.getByRole('button', { name: '色块', exact: true })).toHaveAttribute(
+      'title',
+      /底色、强调条/,
+    )
+    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
+    const originalCount = await preview.locator('[data-node-id]').count()
+    await toolbar.getByRole('button', { name: '色块', exact: true }).click()
+    const shapeId = await preview.locator('.is-selected').getAttribute('data-node-id')
+    const shape = preview.locator(`[data-node-id="${shapeId}"]`)
+    await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 1)
+    await expect(window.getByRole('button', { name: '对象属性', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    const properties = window.getByRole('region', { name: '对象编辑' })
+    await expect(properties).toContainText('色块可用作底色')
+    await expect(properties.getByRole('button', { name: '图片', exact: true })).toHaveCount(0)
+    await expect(
+      properties.getByRole('button', { name: '上移图层', exact: true }),
+    ).not.toBeVisible()
+    await properties.getByRole('button', { name: '复制对象', exact: true }).click()
+    await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 2)
+    await properties.getByText('排列与显示', { exact: true }).click()
+    await properties.getByRole('button', { name: '隐藏对象', exact: true }).click()
+    await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 1)
+    await properties.getByRole('button', { name: '显示对象', exact: true }).click()
+    await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 2)
+    await properties.getByRole('button', { name: '锁定对象', exact: true }).click()
+    await expect(properties.getByLabel('填充颜色', { exact: true })).toBeDisabled()
+    await expect(properties.getByRole('button', { name: '删除对象', exact: true })).toBeDisabled()
+    await properties.getByRole('button', { name: '解锁对象', exact: true }).click()
+    await properties.getByRole('button', { name: '删除对象', exact: true }).click()
+    await shape.click()
+    await properties.getByText('精确位置与大小', { exact: true }).click()
+    await properties.getByLabel('宽度', { exact: true }).fill('12')
+    await properties.getByLabel('高度', { exact: true }).fill('180')
+    await properties.getByLabel('水平位置', { exact: true }).fill('54')
+    await properties.getByLabel('垂直位置', { exact: true }).fill('290')
+    await window.getByRole('button', { name: '对话助手', exact: true }).click()
+    await expect(window.locator('#ppt-message')).toBeVisible()
+    await shape.click()
+    await expect(properties.getByLabel('宽度', { exact: true })).toHaveValue('12')
+    if (
+      await properties
+        .locator('[data-disclosure-id="ppt-object-geometry"]')
+        .evaluate((element) => element.open)
+    )
+      await properties.getByText('精确位置与大小', { exact: true }).click()
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
+    if (await taskDismiss.isVisible()) await taskDismiss.click()
+    await expect(window.locator('#toasts .toast')).toHaveCount(0)
+    fs.mkdirSync(screenshotDir, { recursive: true })
+    for (const [width, theme] of [
+      [1440, 'dark'],
+      [1440, 'light'],
+      [900, 'dark'],
+      [720, 'light'],
+    ]) {
+      await app.evaluate(({ BrowserWindow }, size) => {
+        const main = BrowserWindow.getAllWindows()[0]
+        main.setMinimumSize(600, 600)
+        main.setSize(size, 960)
+      }, width)
+      await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+      await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
+      expect(await window.evaluate(() => globalThis.innerWidth)).toBeLessThanOrEqual(width)
+      const overflow = await window
+        .locator('.ppt-studio')
+        .evaluate((element) => element.scrollWidth - element.clientWidth)
+      expect(overflow).toBeLessThanOrEqual(1)
+      expect((await preview.boundingBox()).width).toBeGreaterThan(250)
+      await window.locator('.view').evaluate((element) => {
+        element.scrollTop = 0
+      })
+      await window.screenshot({
+        path: path.join(screenshotDir, `editor-ui-${width}-${theme}.png`),
+        animations: 'disabled',
+      })
+    }
+    const stored = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    expect(stored.slides[0].canvas.find((item) => item.type === 'rect' && item.x === 54).w).toBe(12)
+  } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('PPT start choices preserve existing material and the studio fits both themes and narrow windows', async () => {
   const directory = temporaryDirectory()
   let app
@@ -23,7 +126,7 @@ test('PPT start choices preserve existing material and the studio fits both them
     const launched = await launch(directory)
     app = launched.app
     const window = launched.window
-    await expect(window.getByRole('region', { name: '本地作品' })).toContainText('0 份作品')
+    await expect(window.getByRole('region', { name: '本地作品' })).toHaveCount(0)
     await window.getByRole('button', { name: '客户提案', exact: true }).click()
     const starter = await window.locator('#ppt-message').inputValue()
     expect(starter).toContain('客户提案')
@@ -285,11 +388,14 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     await expect(window.locator('#ppt-slide-title')).toHaveValue(before.slides[1].title)
     await window.getByRole('button', { name: '重做修改', exact: true }).click()
     await expect(window.locator('#ppt-slide-title')).toHaveValue('从机械基础走向智能制造')
+    await window.getByRole('button', { name: '对话助手', exact: true }).click()
     await window.locator('#ppt-message').fill('触发无效回复')
     await window.getByRole('button', { name: '发送', exact: true }).click()
     await expect(window.locator('.ppt-error')).toContainText('输入和原作品已保留')
     await expect(window.locator('#ppt-message')).toHaveValue('触发无效回复')
+    await window.getByRole('button', { name: '手动编辑', exact: true }).click()
     await expect(window.locator('#ppt-slide-title')).toHaveValue('从机械基础走向智能制造')
+    await window.getByRole('button', { name: '对话助手', exact: true }).click()
     await expect(window.locator('.ppt-message')).toHaveCount(6)
     await window.locator('#ppt-message').fill('重新修改当前页标题')
     await window.getByRole('button', { name: '发送', exact: true }).click()
@@ -302,7 +408,7 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     expect(after.slides[2]).toEqual(before.slides[2])
     expect(after.slides[1].notes).toBe(before.slides[1].notes)
     fs.mkdirSync(screenshotDir, { recursive: true })
-    await window.getByRole('button', { name: '收起编辑', exact: true }).click()
+    await window.getByRole('button', { name: '对话助手', exact: true }).click()
     await window.evaluate(() => window.launcher.patchSettings({ theme: 'dark' }))
     await expect(window.locator('body')).toHaveAttribute('data-theme', 'dark')
     await window.locator('.view').evaluate((element) => {
