@@ -36,11 +36,141 @@ async function openNotes(window) {
     await window.locator('.ppt-speaker-notes > summary').click()
 }
 
+async function exportDeck(window, format = 'pptx') {
+  await window.locator('.ppt-export-menu > summary').click()
+  await window.locator(`button[data-action="ppt-export"][data-format="${format}"]`).click()
+}
+
 async function pageAction(window, label) {
   if ((await window.locator('.ppt-page-menu').getAttribute('open')) === null)
     await window.locator('.ppt-page-menu > summary').click()
   await window.getByRole('button', { name: label, exact: true }).click()
 }
+
+test('PPT menus dismiss outside and on Escape while the concise creation panel and notes stay usable', async () => {
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
+    await expect(window.locator('.ppt-assistant-heading')).toHaveText('创作')
+    await expect(window.locator('.ppt-chat-welcome')).toHaveCount(0)
+    await expect(window.locator('.ppt-side-body .ppt-chat-hint')).toHaveCount(0)
+    expect((await window.locator('#ppt-message').boundingBox()).height).toBeGreaterThanOrEqual(160)
+    await window.locator('#ppt-message').fill('保留这段尚未发送的要求')
+    for (const selector of [
+      '.ppt-utility-menu:not(.ppt-export-menu)',
+      '.ppt-page-settings',
+      '.ppt-page-menu',
+      '.ppt-export-menu',
+    ]) {
+      const menus = window.locator(selector)
+      for (let index = 0; index < (await menus.count()); index++) {
+        const menu = menus.nth(index)
+        await menu.locator(':scope > summary').click()
+        await expect(menu).toHaveAttribute('open', '')
+        await window.locator('.ppt-canvas-hint').click()
+        await expect(menu).not.toHaveAttribute('open', '')
+        await menu.locator(':scope > summary').click()
+        await menu.locator(':scope > summary').focus()
+        await window.keyboard.press('Escape')
+        await expect(menu).not.toHaveAttribute('open', '')
+        await expect(menu.locator(':scope > summary')).toBeFocused()
+      }
+    }
+    await window.locator('.ppt-page-settings > summary').click()
+    await window.locator('.ppt-page-settings-fields').click({ position: { x: 6, y: 6 } })
+    await expect(window.locator('.ppt-page-settings')).toHaveAttribute('open', '')
+    await window.locator('#ppt-message').click()
+    await expect(window.locator('.ppt-page-settings')).not.toHaveAttribute('open', '')
+    await expect(window.locator('#ppt-message')).toHaveValue('保留这段尚未发送的要求')
+    await openNotes(window)
+    await expect(window.locator('.ppt-notes-hint')).toContainText('不显示在幻灯片正文中')
+    await window.getByLabel('当前页讲稿', { exact: true }).fill('开场先说明本次讨论的目标。')
+    await window.locator('#ppt-message').click()
+    await expect(window.locator('.ppt-speaker-notes')).toHaveAttribute('open', '')
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    const stored = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    expect(stored.slides[0].notes).toBe('开场先说明本次讨论的目标。')
+  } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('PPT exports valid PowerPoint, Word, Markdown and actual PDF files from the format menu', async () => {
+  test.setTimeout(120000)
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    const { materializeDesign } = require('../../src/shared/presentation-design.mjs')
+    const deck = materializeDesign(referenceDeck('proposal'))
+    deck.slides[0].notes = '导出讲稿测试：保留原文与中文。'
+    await window.evaluate((value) => window.launcher.savePresentation(value), deck)
+    await window.reload()
+    await window.locator('.nav-item[data-page="ppt"]').click()
+    await window.locator('.ppt-project-open').click()
+    fs.mkdirSync(screenshotDir, { recursive: true })
+    for (const format of ['pptx', 'docx', 'md', 'pdf']) {
+      const target = path.join(directory, `export.${format}`)
+      await app.evaluate(({ dialog }, filePath) => {
+        dialog.showSaveDialog = async () => ({ canceled: false, filePath })
+      }, target)
+      await exportDeck(window, format)
+      await expect.poll(() => fs.existsSync(target), { timeout: 60000 }).toBe(true)
+      await expect(window.locator('.ppt-export-menu > summary')).toBeVisible()
+      const bytes = fs.readFileSync(target)
+      expect(bytes.length).toBeGreaterThan(100)
+      if (format === 'pptx') {
+        const zip = await JSZip.loadAsync(bytes)
+        expect(zip.file(/^ppt\/slides\/slide\d+\.xml$/)).toHaveLength(deck.slides.length)
+      } else if (format === 'docx') {
+        const zip = await JSZip.loadAsync(bytes)
+        const text = (await require('mammoth').extractRawText({ buffer: bytes })).value
+        expect(text).toContain(deck.slides[0].title)
+        expect(text).toContain(deck.slides[0].notes)
+        expect(await zip.file('word/document.xml').async('string')).toContain('<w:tbl>')
+      } else if (format === 'md') {
+        expect(bytes.toString('utf8')).toContain(deck.slides[0].notes)
+        expect(bytes.toString('utf8')).toContain('| 分类 |')
+      } else {
+        const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+        const document = await getDocument({
+          data: new Uint8Array(bytes),
+          useSystemFonts: true,
+          isEvalSupported: false,
+        }).promise
+        try {
+          expect(document.numPages).toBe(deck.slides.length)
+        } finally {
+          await document.destroy()
+        }
+      }
+      fs.copyFileSync(target, path.join(screenshotDir, `feedback-export.${format}`))
+    }
+    await expect(window.locator('#toasts .toast')).toHaveCount(0)
+    const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
+    if (await taskDismiss.isVisible()) await taskDismiss.click()
+    for (const theme of ['light', 'dark']) {
+      await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+      await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
+      await window.locator('.ppt-export-menu > summary').click()
+      await window.screenshot({
+        path: path.join(screenshotDir, `feedback-export-menu-${theme}.png`),
+        animations: 'disabled',
+      })
+      await window.locator('.ppt-canvas-hint').click()
+    }
+  } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 test('PPT keeps AI available while every artwork element can be selected, edited and recovered', async () => {
   const directory = temporaryDirectory()
@@ -269,7 +399,7 @@ test('long title preview and exported editable PPTX share balanced lines across 
     await app.evaluate(({ dialog }, filePath) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath })
     }, target)
-    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await exportDeck(window)
     await expect.poll(() => fs.existsSync(target)).toBe(true)
     const zip = await JSZip.loadAsync(fs.readFileSync(target))
     const xml = await zip.file('ppt/slides/slide2.xml').async('string')
@@ -612,7 +742,7 @@ test('PPT plans structured pages, previews chart edits and exports an editable n
     await app.evaluate(({ dialog }, filePath) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath })
     }, target)
-    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await exportDeck(window)
     await expect.poll(() => fs.existsSync(target)).toBe(true)
     const zip = await JSZip.loadAsync(fs.readFileSync(target))
     expect(await zip.file('ppt/charts/chart1.xml').async('string')).toContain('c:lineChart')
@@ -628,8 +758,8 @@ test('PPT plans structured pages, previews chart edits and exports an editable n
       5, 4, 1,
     ])
     expect(edited.slides[2].chart.series[0].values).toEqual([5, 4, 1])
-    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
-    await expect(window.locator('.ppt-editor-bar button[data-action="ppt-export"]')).toBeEnabled()
+    await exportDeck(window)
+    await expect(window.locator('.ppt-export-menu > summary')).toBeEnabled()
     await expect
       .poll(async () => {
         const editedZip = await JSZip.loadAsync(fs.readFileSync(target))
@@ -666,6 +796,7 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
       '用户可以直接操作每个对象',
     )
     const title = preview.locator('[data-node-id].is-selected')
+    await title.scrollIntoViewIfNeeded()
     const original = await title.boundingBox()
     await window.mouse.move(original.x + 20, original.y + 20)
     await window.mouse.down()
@@ -682,9 +813,17 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
     await preview.focus()
     await window.keyboard.press('Delete')
     await expect(preview.locator('[data-node-id]')).toHaveCount(beforeDuplicate)
-    await preview
-      .getByRole('button', { name: '选择对象：用户可以直接操作每个对象', exact: true })
+    // 拖动后标题可能与正文相交，验证用户可以通过元素列表重新选中遮挡对象。
+    await window.getByLabel('所有元素', { exact: true }).click()
+    await window
+      .locator('.ppt-layer-list')
+      .getByRole('button', { name: '用户可以直接操作每个对象', exact: true })
       .click()
+    await window.getByLabel('所有元素', { exact: true }).click()
+    await expect(preview.locator('[data-canvas-field="title"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     await window.getByText('文字样式', { exact: true }).click()
     await window.getByLabel('字号', { exact: true }).fill('40')
     await window.getByText('更多调整', { exact: true }).click()
@@ -733,7 +872,7 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
     await app.evaluate(({ dialog }, filePath) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath })
     }, target)
-    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await exportDeck(window)
     await expect.poll(() => fs.existsSync(target)).toBe(true)
     const zip = await JSZip.loadAsync(fs.readFileSync(target))
     const xml = await zip.file('ppt/slides/slide1.xml').async('string')
@@ -806,7 +945,7 @@ test('PPT studio edits, reorders, saves, exports native objects and survives res
     await app.evaluate(({ dialog }, filePath) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath })
     }, target)
-    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await exportDeck(window)
     await expect.poll(() => fs.existsSync(target)).toBe(true)
     const zip = await JSZip.loadAsync(fs.readFileSync(target))
     expect(await zip.file('ppt/slides/slide1.xml').async('string')).toContain(
@@ -1052,7 +1191,7 @@ test('PPT studio keeps narrow light and dark layouts usable and escapes editable
     })
     await editSlideText(window, 'body', '长文本'.repeat(300))
     await expect(window.locator('[data-ppt-checks]')).toContainText('超出版式容量')
-    await window.getByRole('button', { name: '导出 PPTX', exact: true }).click()
+    await exportDeck(window)
     await expect(window.locator('.ppt-error')).toContainText('超出版式容量')
   } finally {
     if (app) await close(app)

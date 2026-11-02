@@ -49,6 +49,52 @@ function harness(overrides = {}) {
   return { handlers, calls }
 }
 
+test('export formats are whitelisted before dialogs and each format uses its own selected path', async () => {
+  const written = []
+  const dialogs = []
+  const { handlers } = harness({
+    dialog: {
+      showSaveDialog: async (_window, options) => {
+        dialogs.push(options)
+        return { canceled: false, filePath: 'chosen' }
+      },
+    },
+    writePresentation: async (_deck, target, options) => {
+      written.push([target, options.format])
+      return { filePath: target }
+    },
+  })
+  const handler = handlers.get('presentation:export')
+  for (const format of ['exe', '__proto__', {}, null])
+    await assert.rejects(handler(null, { deck: createPresentation(), format }), /格式/)
+  assert.equal(dialogs.length, 0)
+  for (const format of ['pptx', 'pdf', 'docx', 'md']) {
+    await handler(null, { deck: createPresentation(), format })
+    assert.equal(path.extname(dialogs.at(-1).defaultPath), `.${format}`)
+    assert.deepEqual(dialogs.at(-1).filters[0].extensions, [format])
+  }
+  assert.deepEqual(written, [
+    ['chosen.pptx', 'pptx'],
+    ['chosen.pdf', 'pdf'],
+    ['chosen.docx', 'docx'],
+    ['chosen.md', 'md'],
+  ])
+})
+
+test('text exports preserve complete content even when the slide needs layout changes', async () => {
+  const { handlers } = harness()
+  const deck = createPresentation()
+  deck.slides[0].body = '完整内容'.repeat(260)
+  await assert.rejects(
+    handlers.get('presentation:export')(null, { deck, format: 'pdf' }),
+    /超出版式容量/,
+  )
+  assert.equal(
+    (await handlers.get('presentation:export')(null, { deck, format: 'docx' })).canceled,
+    true,
+  )
+})
+
 test('image IPC uses the native selection dialog and releases its lock on cancel or failure', async () => {
   let finish
   const selected = []
@@ -253,4 +299,13 @@ test('PPT preload exposes only the specific presentation operations', () => {
     ],
   )
   assert.equal(exposed.ipcRenderer, undefined)
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[3])), [
+    'presentation:export',
+    { deck: { title: 'deck' }, format: 'pptx' },
+  ])
+  exposed.exportPresentation({ title: '文稿' }, 'docx')
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), [
+    'presentation:export',
+    { deck: { title: '文稿' }, format: 'docx' },
+  ])
 })

@@ -2,7 +2,8 @@ const path = require('node:path')
 const { validatePresentationInput, getPresentationIssues } = require('../shared/presentation.mjs')
 const { cleanPresentationBrief } = require('./presentation-ai.cjs')
 const { cleanPresentationChat } = require('./presentation-chat.cjs')
-const { exportPresentation } = require('./presentation-export.cjs')
+const { exportPresentationFile } = require('./presentation-delivery.cjs')
+const { PRESENTATION_EXPORT_FORMATS } = require('../shared/presentation-export-formats.mjs')
 const { readPresentationImage } = require('./presentation-image.cjs')
 const { PresentationQuality } = require('./presentation-quality.cjs')
 
@@ -15,7 +16,7 @@ function registerPresentationIpc({
   getMainWindow,
   getExportDirectory,
   onPresentationDirty,
-  writePresentation = exportPresentation,
+  writePresentation = exportPresentationFile,
   qualityService = new PresentationQuality({ aiService }),
 }) {
   ipcMain.handle('presentation:dirty', (_event, value) => {
@@ -84,22 +85,32 @@ function registerPresentationIpc({
   })
   let exportBusy = false
   ipcMain.handle('presentation:export', async (_event, input) => {
-    const deck = validatePresentationInput(input)
-    if (getPresentationIssues(deck).some((issue) => issue.blocking))
+    const wrapped = input && Object.hasOwn(input, 'deck')
+    const format = wrapped ? input.format : 'pptx'
+    if (typeof format !== 'string' || !Object.hasOwn(PRESENTATION_EXPORT_FORMATS, format))
+      throw new Error('导出格式无效。')
+    const deck = validatePresentationInput(wrapped ? input.deck : input)
+    if (
+      ['pptx', 'pdf'].includes(format) &&
+      getPresentationIssues(deck).some((issue) => issue.blocking)
+    )
       throw new Error('部分页面内容超出版式容量，请根据交付检查调整后导出。')
     if (exportBusy) throw new Error('已有作品正在导出，请稍候。')
     exportBusy = true
     try {
       const name =
         deck.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '') || '演示文稿'
+      const selectedFormat = PRESENTATION_EXPORT_FORMATS[format]
       const result = await dialog.showSaveDialog(getMainWindow(), {
-        title: '导出可编辑 PPTX',
-        defaultPath: path.join(getExportDirectory(), `${name}.pptx`),
-        filters: [{ name: 'PowerPoint 演示文稿', extensions: ['pptx'] }],
+        title: `导出 ${selectedFormat.label}`,
+        defaultPath: path.join(getExportDirectory(), `${name}.${format}`),
+        filters: [{ name: selectedFormat.label, extensions: [format] }],
       })
       if (result.canceled || !result.filePath) return { canceled: true }
-      const target = /\.pptx$/i.test(result.filePath) ? result.filePath : `${result.filePath}.pptx`
-      return await writePresentation(deck, target)
+      const target = result.filePath.toLowerCase().endsWith(`.${format}`)
+        ? result.filePath
+        : `${result.filePath}.${format}`
+      return await writePresentation(deck, target, { format })
     } finally {
       exportBusy = false
     }

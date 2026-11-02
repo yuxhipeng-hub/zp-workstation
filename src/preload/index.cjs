@@ -36,7 +36,8 @@ contextBridge.exposeInMainWorld('launcher', {
   testVisionProfile: (id) => ipcRenderer.invoke('ai:vision-test', id),
   setVisionProfile: (id) => ipcRenderer.invoke('ai:vision-profile', id),
   choosePresentationImage: () => ipcRenderer.invoke('presentation:image'),
-  exportPresentation: (input) => ipcRenderer.invoke('presentation:export', input),
+  exportPresentation: (input, format = 'pptx') =>
+    ipcRenderer.invoke('presentation:export', { deck: input, format }),
   listCourses: () => ipcRenderer.invoke('workspace:courses'),
   createCourse: (input) => ipcRenderer.invoke('workspace:course-create', input),
   renameCourse: (id, name) => ipcRenderer.invoke('workspace:course-rename', id, name),
