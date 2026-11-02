@@ -10,7 +10,7 @@ import {
 import { createPptCanvasEditor } from '../components/ppt-canvas-editor.js'
 import { DESIGN_DIRECTIONS, materializeDesign } from '../../shared/presentation-design.mjs'
 
-/** 独立 PPT 页面：手动和 AI 共同编辑结构化作品，只有显式保存才写入工作区。 */
+/** 独立 PPT 页面：AI 主导创作，选中对象后按需修改，只有显式保存才写入工作区。 */
 export function createPptStudioPage({
   state,
   api,
@@ -30,7 +30,6 @@ export function createPptStudioPage({
   let busy = ''
   let error = ''
   let presenting = false
-  let inspectorPanel = 'chat'
   let composer = ''
   let messages = []
   let reportedDirty = false
@@ -43,10 +42,7 @@ export function createPptStudioPage({
     getDeck: () => draft,
     getIndex: () => selected,
     checkpoint,
-    render: () => {
-      inspectorPanel = canvasEditor.isActive() ? 'objects' : 'chat'
-      render()
-    },
+    render,
     refresh: refreshPreview,
     reportDirty,
     escapeHtml: esc,
@@ -92,7 +88,6 @@ export function createPptStudioPage({
     messages = []
     composer = ''
     error = ''
-    inspectorPanel = 'chat'
     presenting = false
   }
   function checkpoint() {
@@ -398,13 +393,13 @@ export function createPptStudioPage({
   function conversationMarkup() {
     const profile = activeAiProfile()
     return `<section class="ppt-conversation" aria-label="PPT 对话" aria-busy="${busy === 'chatting'}">
-      ${draft ? '<div class="ppt-chat-heading"><strong>一起完善这份 PPT</strong><span>直接说你想怎么改</span></div>' : ''}
+      ${draft && !messages.length && !canvasEditor.selectedId() ? '<div class="ppt-chat-welcome"><i data-lucide="sparkles"></i><strong>把修改交给 AI</strong><p>说说想调整哪里。也可以选中画布上的元素，再告诉我怎么改。</p></div>' : ''}
       ${messages.length ? `<div class="ppt-chat-log" role="log" aria-label="创作对话" aria-live="polite" data-scroll-preserve="ppt-chat">${messages.map((message) => `<article class="ppt-message ppt-message-${message.role}"><strong>${message.role === 'user' ? '你' : 'PPT 助手'}</strong><p>${esc(message.content)}</p></article>`).join('')}</div>` : ''}
       ${busy === 'chatting' ? `<p class="ppt-chat-status" role="status"><i data-lucide="ellipsis"></i>${draft ? '正在修改作品…' : '正在理解材料、组织内容…'}</p>` : ''}
       <div class="ppt-composer">
         <label for="ppt-message">${draft ? '继续描述修改要求' : '告诉我你想做什么 PPT'}</label>
-        <textarea id="ppt-message" data-ppt-scope="chat" data-ppt-field="message" rows="${draft ? 4 : 5}" maxlength="12000" aria-describedby="ppt-chat-hint" placeholder="${draft ? '例如：第三页改成方案对比，保留原来的数据。' : '粘贴项目材料、会议记录，或说说你的想法。\n例如：根据这些材料做一份客户提案，介绍我们的方案，控制在 8 分钟内。'}" ${disabled(Boolean(busy))}>${esc(composer)}</textarea>
-        <div class="ppt-composer-footer"><span>${draft ? `当前第 ${selected + 1} 页 · Ctrl / ⌘ + Enter 发送` : 'Ctrl / ⌘ + Enter 发送 · Enter 换行'}</span>${button('send', busy === 'chatting' ? '处理中…' : '发送', 'arrow-up', disabled(Boolean(busy) || !profile || !composer.trim()), false)}</div>
+        <textarea id="ppt-message" data-ppt-scope="chat" data-ppt-field="message" rows="${draft ? 3 : 5}" maxlength="12000" aria-describedby="ppt-chat-hint" placeholder="${draft ? '例如：让这一页更简洁，保留关键数据。' : '粘贴项目材料、会议记录，或说说你的想法。\n例如：根据这些材料做一份客户提案，介绍我们的方案，控制在 8 分钟内。'}" ${disabled(Boolean(busy))}>${esc(composer)}</textarea>
+        <div class="ppt-composer-footer"><span>${draft ? `第 ${selected + 1} 页${canvasEditor.selectedId() ? ' · 已选中元素' : ''}` : 'Ctrl / ⌘ + Enter 发送 · Enter 换行'}</span>${button('send', busy === 'chatting' ? '处理中…' : '发送', 'arrow-up', disabled(Boolean(busy) || !profile || !composer.trim()), false)}</div>
       </div>
       <p class="ppt-chat-hint" id="ppt-chat-hint">${profile ? `使用 ${esc(profile.label)} · 发送本次对话${draft ? '与当前作品' : ''}，不读取资料库。` : '先配置一个模型，即可通过对话制作 PPT。'}</p>
       ${!profile ? '<button type="button" class="button secondary" data-page-jump="ai">配置模型</button>' : ''}
@@ -459,18 +454,8 @@ export function createPptStudioPage({
       ${error ? `<div class="ppt-error" role="alert">${esc(error)}</div>` : ''}
       <div class="ppt-workspace">
         <aside class="ppt-filmstrip" aria-label="幻灯片列表" data-scroll-preserve="ppt-pages"><div class="ppt-filmstrip-head"><span>页面 <b>${draft.slides.length}</b></span>${iconButton('add-slide', '添加页面', 'plus', disabled(Boolean(busy) || draft.slides.length >= 40))}</div>${draft.slides.map((item, i) => `<article class="ppt-page-item"><button class="ppt-thumbnail ${selected === i ? 'is-selected' : ''}" data-action="ppt-select" data-index="${i}" aria-label="选择第 ${i + 1} 页" aria-pressed="${selected === i}" ${disabled(Boolean(busy))}><div class="ppt-thumbnail-art" data-ppt-thumb="${i}">${slideMarkup(item, draft.theme, i, draft.slides.length)}</div><span><b>${String(i + 1).padStart(2, '0')}</b><span data-ppt-thumb-title="${i}">${esc(item.title || '未填写标题')}</span></span></button>${selected === i ? pageMenuMarkup() : ''}</article>`).join('')}</aside>
-        <div class="ppt-canvas-area"><div class="ppt-canvas-toolbar" role="toolbar" aria-label="画布工具">${canvasEditor.toolbarMarkup(Boolean(busy))}${pageSettingsMarkup()}${button('canvas-mode', canvasEditor.isActive() ? '完成直接编辑' : '直接编辑', 'mouse-pointer-2', disabled(Boolean(busy)))}</div><div class="ppt-canvas-surface"><div class="ppt-stage-meta"><span data-ppt-page-label>${esc(pageLabel())}</span><span>16 : 9</span></div><div class="ppt-stage" data-ppt-preview tabindex="0" aria-label="幻灯片画布">${previewMarkup()}</div><div class="ppt-canvas-footer"><span>${canvasEditor.isActive() ? '拖动移动 · 右下角缩放 · 方向键微调' : '选择页面，预览你的演示'}</span><div class="ppt-page-navigation">${iconButton('previous', '上一页', 'chevron-left', disabled(selected === 0 || Boolean(busy)))}<span>${selected + 1} / ${draft.slides.length}</span>${iconButton('next', '下一页', 'chevron-right', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}</div></div></div><details class="ppt-speaker-notes" data-disclosure-id="ppt-speaker-notes"><summary><i data-lucide="notebook-pen"></i><span>演讲备注</span></summary>${field('slide', 'notes', '当前页演讲备注', draft.slides[selected].notes, 4000, true)}</details><div class="ppt-delivery-area"><div data-ppt-checks>${issuesMarkup()}</div>${visualReportMarkup()}${strategyMarkup()}</div></div>
-        <aside class="ppt-editor-side" aria-label="编辑侧栏"><nav class="ppt-side-tabs" aria-label="编辑面板">${[
-          ['chat', '对话助手'],
-          ['objects', '属性'],
-        ]
-          .map(
-            ([id, label]) =>
-              `<button type="button" data-action="ppt-panel" data-panel="${id}" aria-pressed="${inspectorPanel === id}" ${disabled(Boolean(busy))}>${label}</button>`,
-          )
-          .join(
-            '',
-          )}</nav><div class="ppt-side-body" data-scroll-preserve="ppt-side-body">${inspectorPanel === 'objects' ? canvasEditor.markup() : conversationMarkup()}</div>${canvasEditor.isActive() ? `<div class="ppt-side-footer">${button('canvas-chat', inspectorPanel === 'chat' ? '返回画布编辑' : '对话修改所选对象', 'message-square', disabled(Boolean(busy)))}</div>` : ''}</aside>
+        <div class="ppt-canvas-area"><div class="ppt-canvas-toolbar" role="toolbar" aria-label="画布工具"><span class="ppt-canvas-hint">选中元素，直接修改或告诉 AI</span><div class="ppt-canvas-utilities">${canvasEditor.toolbarMarkup(Boolean(busy))}${pageSettingsMarkup()}</div></div><div class="ppt-canvas-surface"><div class="ppt-stage-meta"><span data-ppt-page-label>${esc(pageLabel())}</span><span>16 : 9</span></div><div class="ppt-stage" data-ppt-preview tabindex="0" aria-label="幻灯片画布">${previewMarkup()}</div><div class="ppt-canvas-footer"><span>${draft.slides[selected].locked ? '页面已锁定' : '点击选择 · 双击修改文字'}</span><div class="ppt-page-navigation">${iconButton('previous', '上一页', 'chevron-left', disabled(selected === 0 || Boolean(busy)))}<span>${selected + 1} / ${draft.slides.length}</span>${iconButton('next', '下一页', 'chevron-right', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}</div></div></div><details class="ppt-speaker-notes" data-disclosure-id="ppt-speaker-notes"><summary><i data-lucide="notebook-pen"></i><span>演讲备注</span></summary>${field('slide', 'notes', '当前页演讲备注', draft.slides[selected].notes, 4000, true)}</details><div class="ppt-delivery-area"><div data-ppt-checks>${issuesMarkup()}</div>${visualReportMarkup()}${strategyMarkup()}</div></div>
+        <aside class="ppt-editor-side" aria-label="AI 创作助手"><header class="ppt-assistant-heading"><div><i data-lucide="sparkles"></i><strong>AI 助手</strong></div><span>与你一起完善</span></header><div class="ppt-selection-body" data-scroll-preserve="ppt-selection">${canvasEditor.markup()}</div><div class="ppt-side-body" data-scroll-preserve="ppt-side-body">${conversationMarkup()}</div></aside>
       </div>
     </section>`
   }
@@ -604,7 +589,6 @@ export function createPptStudioPage({
             role: 'assistant',
             content: `图片理解（${result.model}）：${result.message}`,
           })
-          inspectorPanel = 'chat'
         } else {
           const result = await api.inspectPresentation({
             deck: snapshot,
@@ -660,30 +644,11 @@ export function createPptStudioPage({
       }
       return true
     }
-    if (action === 'ppt-panel') {
-      const next = element.dataset.panel
-      if (!['chat', 'objects'].includes(next)) return true
-      inspectorPanel = next
-      render()
-      return true
-    }
-    if (action === 'ppt-canvas-chat') {
-      inspectorPanel = inspectorPanel === 'chat' ? 'objects' : 'chat'
-      render()
-      return true
-    }
-    if (action === 'ppt-canvas-select' && inspectorPanel !== 'objects') {
-      inspectorPanel = 'objects'
-      canvasEditor.handleAction(action, element)
-      render()
-      return true
-    }
     if (canvasEditor.handleAction(action, element)) return true
     editKey = ''
     const command = action.slice(4)
     if (['select', 'previous', 'next'].includes(command)) {
       canvasEditor.reset()
-      if (inspectorPanel === 'objects') inspectorPanel = 'chat'
     }
     if (command === 'manual') {
       if (!(await canReplace(element))) return true
@@ -698,7 +663,6 @@ export function createPptStudioPage({
       pendingDesign = null
       messages = []
       composer = ''
-      inspectorPanel = 'chat'
       error = ''
     } else if (command === 'open') {
       if (!(await canReplace(element))) return true

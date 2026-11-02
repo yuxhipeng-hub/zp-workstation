@@ -2,6 +2,59 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 const { createPptStudioPage } = require('../src/renderer/pages/ppt-studio.js')
 const { createPresentation } = require('../src/shared/presentation.mjs')
+const { materializeDesign } = require('../src/shared/presentation-design.mjs')
+
+test('selecting existing artwork keeps AI conversation available and does not change the saved deck', async (t) => {
+  const previousDocument = globalThis.document
+  globalThis.document = { querySelector: () => null, querySelectorAll: () => [] }
+  t.after(() => {
+    if (previousDocument === undefined) delete globalThis.document
+    else globalThis.document = previousDocument
+  })
+  const source = materializeDesign(createPresentation())
+  let stored
+  const page = createPptStudioPage({
+    state: { page: 'ppt', workspace: { presentations: [source] } },
+    api: {
+      setPresentationDirty: async () => {},
+      savePresentation: async (deck) => {
+        stored = deck
+        return { presentations: [deck] }
+      },
+    },
+    escapeHtml: (v) => String(v),
+    render: () => {},
+    toast: () => {},
+    openChoiceDialog: async () => null,
+    openSaveChangesDialog: async () => null,
+    activeAiProfile: () => ({ label: '测试' }),
+  })
+  await page.handleAction('ppt-open', { dataset: { id: source.id } })
+  page.handleInput({
+    dataset: { pptScope: 'chat', pptField: 'message' },
+    value: '把选中的元素改得更简洁',
+  })
+  const before = page.renderPage()
+  assert.doesNotMatch(before, /ppt-canvas-mode|ppt-canvas-add-rect|ppt-side-tabs/)
+  const scene = require('../src/shared/presentation.mjs').buildSlideScene(
+    source.slides[0],
+    source.theme,
+    0,
+    source.slides.length,
+  )
+  for (const item of scene.nodes) {
+    await page.handleAction('ppt-canvas-pick', { dataset: { nodeId: item.id } })
+    const html = page.renderPage()
+    assert.match(html, /aria-label="对象编辑"/)
+    assert.match(html, /id="ppt-message"/)
+    assert.match(html, /把选中的元素改得更简洁/)
+    assert.match(html, /取消选择/)
+  }
+  await page.handleAction('ppt-canvas-clear', {})
+  assert.doesNotMatch(page.renderPage(), /aria-label="对象编辑"/)
+  await page.handleAction('ppt-save', {})
+  assert.deepEqual(stored, source)
+})
 
 test('background model and save completions keep the app unsaved-state signal accurate', async (t) => {
   const previousDocument = globalThis.document

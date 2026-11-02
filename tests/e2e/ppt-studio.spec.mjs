@@ -42,7 +42,7 @@ async function pageAction(window, label) {
   await window.getByRole('button', { name: label, exact: true }).click()
 }
 
-test('PPT groups insert tools and selected-object properties without losing edits when switching panels', async () => {
+test('PPT keeps AI available while every artwork element can be selected, edited and recovered', async () => {
   const directory = temporaryDirectory()
   let app
   try {
@@ -51,66 +51,78 @@ test('PPT groups insert tools and selected-object properties without losing edit
     const window = launched.window
     const { materializeDesign } = require('../../src/shared/presentation-design.mjs')
     const deck = materializeDesign(referenceDeck('proposal'))
+    const original = structuredClone(deck.slides[0].canvas)
     await window.evaluate((value) => window.launcher.savePresentation(value), deck)
     await window.reload()
     await window.locator('.nav-item[data-page="ppt"]').click()
     await window.locator('.ppt-project-open').click()
-    await expect(window.locator('.ppt-side-tabs > button')).toHaveCount(2)
-    await expect(window.getByRole('button', { name: '手动编辑', exact: true })).toHaveCount(0)
-    await window.getByRole('button', { name: '属性', exact: true }).click()
-    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
-    await expect(window.locator('.ppt-page-settings')).toHaveCount(0)
     const toolbar = window.getByRole('toolbar', { name: '画布工具' })
     const preview = window.locator('[data-ppt-preview]')
-    await expect(toolbar.getByRole('button', { name: '色块', exact: true })).toHaveAttribute(
-      'title',
-      /底色、强调条/,
-    )
-    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
-    const originalCount = await preview.locator('[data-node-id]').count()
-    await toolbar.getByRole('button', { name: '色块', exact: true }).click()
-    const shapeId = await preview.locator('.is-selected').getAttribute('data-node-id')
-    const shape = preview.locator(`[data-node-id="${shapeId}"]`)
-    await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 1)
-    await expect(window.getByRole('button', { name: '属性', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    await expect(window.locator('.ppt-side-tabs')).toHaveCount(0)
+    await expect(window.getByRole('button', { name: '直接编辑', exact: true })).toHaveCount(0)
+    await expect(toolbar.getByRole('button', { name: '色块', exact: true })).toHaveCount(0)
+    await expect(window.getByRole('region', { name: '对象编辑' })).toHaveCount(0)
+    await window.locator('#ppt-message').fill('请把选中的元素改得更简洁')
+    for (const item of original) {
+      const object = preview.locator('[data-node-id="' + item.id + '"]')
+      await expect(object).toHaveAttribute('tabindex', '0')
+      await toolbar.getByLabel('所有元素', { exact: true }).click()
+      await toolbar.locator('[data-node-id="' + item.id + '"]').click()
+      await expect(object).toHaveAttribute('aria-pressed', 'true')
+      await expect(window.getByRole('region', { name: '对象编辑' })).toBeVisible()
+      await expect(window.locator('#ppt-message')).toBeVisible()
+      await expect(window.locator('#ppt-message')).toHaveValue('请把选中的元素改得更简洁')
+      await toolbar.getByLabel('所有元素', { exact: true }).click()
+    }
+    await window.getByRole('button', { name: '取消选择', exact: true }).click()
+    await expect(window.getByRole('region', { name: '对象编辑' })).toHaveCount(0)
+    const title = preview.locator('[data-canvas-field="title"]')
+    await title.focus()
+    await window.keyboard.press('Enter')
+    await expect(title).toHaveAttribute('aria-pressed', 'true')
+    await window.keyboard.press('Escape')
+    await expect(window.getByRole('region', { name: '对象编辑' })).toHaveCount(0)
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    const untouched = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    expect(untouched.slides[0].canvas).toEqual(original)
+    const shapeId = original.find((item) => item.type === 'rect').id
+    const shape = preview.locator('[data-node-id="' + shapeId + '"]')
+    await toolbar.getByLabel('所有元素', { exact: true }).click()
+    await toolbar.locator('[data-node-id="' + shapeId + '"]').click()
+    await toolbar.getByLabel('所有元素', { exact: true }).click()
     const properties = window.getByRole('region', { name: '对象编辑' })
-    await expect(properties).toContainText('色块可用作底色')
-    await expect(properties.getByRole('button', { name: '图片', exact: true })).toHaveCount(0)
-    await expect(
-      properties.getByRole('button', { name: '上移图层', exact: true }),
-    ).not.toBeVisible()
+    await properties.getByText('更多调整', { exact: true }).click()
     await properties.getByRole('button', { name: '复制对象', exact: true }).click()
-    await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 2)
-    await properties.getByText('排列与显示', { exact: true }).click()
+    await expect(preview.locator('[data-node-id]')).toHaveCount(original.length + 1)
     await properties.getByRole('button', { name: '隐藏对象', exact: true }).click()
-    await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 1)
+    await expect(preview.locator('[data-node-id]')).toHaveCount(original.length)
+    await properties.getByRole('button', { name: '取消选择', exact: true }).click()
+    await toolbar.getByLabel('所有元素', { exact: true }).click()
+    await toolbar.getByRole('button', { name: /已隐藏/ }).click()
+    await toolbar.getByLabel('所有元素', { exact: true }).click()
+    await properties.getByText('更多调整', { exact: true }).click()
     await properties.getByRole('button', { name: '显示对象', exact: true }).click()
-    await expect(preview.locator('[data-node-id]')).toHaveCount(originalCount + 2)
+    await expect(preview.locator('[data-node-id]')).toHaveCount(original.length + 1)
     await properties.getByRole('button', { name: '锁定对象', exact: true }).click()
     await expect(properties.getByLabel('填充颜色', { exact: true })).toBeDisabled()
     await expect(properties.getByRole('button', { name: '删除对象', exact: true })).toBeDisabled()
     await properties.getByRole('button', { name: '解锁对象', exact: true }).click()
     await properties.getByRole('button', { name: '删除对象', exact: true }).click()
-    await shape.click()
+    await toolbar.getByLabel('所有元素', { exact: true }).click()
+    await toolbar.locator('[data-node-id="' + shapeId + '"]').click()
+    await toolbar.getByLabel('所有元素', { exact: true }).click()
     await properties.getByText('精确位置与大小', { exact: true }).click()
     await properties.getByLabel('宽度', { exact: true }).fill('12')
     await properties.getByLabel('高度', { exact: true }).fill('180')
     await properties.getByLabel('水平位置', { exact: true }).fill('54')
     await properties.getByLabel('垂直位置', { exact: true }).fill('290')
-    await window.getByRole('button', { name: '对话助手', exact: true }).click()
-    await expect(window.locator('#ppt-message')).toBeVisible()
-    await shape.click()
-    await expect(properties.getByLabel('宽度', { exact: true })).toHaveValue('12')
-    if (
-      await properties
-        .locator('[data-disclosure-id="ppt-object-geometry"]')
-        .evaluate((element) => element.open)
-    )
-      await properties.getByText('精确位置与大小', { exact: true }).click()
+    await expect(shape).toHaveAttribute('style', /left:4.21875%/)
+    await properties.getByText('精确位置与大小', { exact: true }).click()
     await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    const stored = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
+    expect(stored.slides[0].canvas.find((item) => item.id === shapeId).w).toBe(12)
+    await window.getByRole('button', { name: '取消选择', exact: true }).click()
+    await preview.locator('[data-canvas-field="title"]').click()
     const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
     if (await taskDismiss.isVisible()) await taskDismiss.click()
     await expect(window.locator('#toasts .toast')).toHaveCount(0)
@@ -128,22 +140,24 @@ test('PPT groups insert tools and selected-object properties without losing edit
       }, width)
       await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
       await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
-      expect(await window.evaluate(() => globalThis.innerWidth)).toBeLessThanOrEqual(width)
       const overflow = await window
         .locator('.ppt-studio')
         .evaluate((element) => element.scrollWidth - element.clientWidth)
       expect(overflow).toBeLessThanOrEqual(1)
       expect((await preview.boundingBox()).width).toBeGreaterThan(250)
+      await expect(window.locator('#ppt-message')).toBeVisible()
+      const assistantBox = await window.locator('.ppt-editor-side').boundingBox()
+      const inputBox = await window.locator('#ppt-message').boundingBox()
+      expect(inputBox.y).toBeGreaterThanOrEqual(assistantBox.y)
+      expect(inputBox.y + inputBox.height).toBeLessThanOrEqual(assistantBox.y + assistantBox.height)
       await window.locator('.view').evaluate((element) => {
         element.scrollTop = 0
       })
       await window.screenshot({
-        path: path.join(screenshotDir, `editor-ui-${width}-${theme}.png`),
+        path: path.join(screenshotDir, 'editor-ai-' + width + '-' + theme + '.png'),
         animations: 'disabled',
       })
     }
-    const stored = (await window.evaluate(() => window.launcher.getWorkspace())).presentations[0]
-    expect(stored.slides[0].canvas.find((item) => item.type === 'rect' && item.x === 54).w).toBe(12)
   } finally {
     if (app) await close(app)
     fs.rmSync(directory, { recursive: true, force: true })
@@ -419,13 +433,13 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     await expectSlideText(window, 'title', before.slides[1].title)
     await window.getByRole('button', { name: '重做修改', exact: true }).click()
     await expectSlideText(window, 'title', '从机械基础走向智能制造')
-    await window.getByRole('button', { name: '对话助手', exact: true }).click()
+
     await window.locator('#ppt-message').fill('触发无效回复')
     await window.getByRole('button', { name: '发送', exact: true }).click()
     await expect(window.locator('.ppt-error')).toContainText('输入和原作品已保留')
     await expect(window.locator('#ppt-message')).toHaveValue('触发无效回复')
     await expectSlideText(window, 'title', '从机械基础走向智能制造')
-    await window.getByRole('button', { name: '对话助手', exact: true }).click()
+
     await expect(window.locator('.ppt-message')).toHaveCount(6)
     await window.locator('#ppt-message').fill('重新修改当前页标题')
     await window.getByRole('button', { name: '发送', exact: true }).click()
@@ -438,7 +452,7 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     expect(after.slides[2]).toEqual(before.slides[2])
     expect(after.slides[1].notes).toBe(before.slides[1].notes)
     fs.mkdirSync(screenshotDir, { recursive: true })
-    await window.getByRole('button', { name: '对话助手', exact: true }).click()
+
     await window.evaluate(() => window.launcher.patchSettings({ theme: 'dark' }))
     await expect(window.locator('body')).toHaveAttribute('data-theme', 'dark')
     await window.locator('.view').evaluate((element) => {
@@ -473,12 +487,12 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
     await expect(window.locator('.ppt-message')).toHaveCount(2)
     expect(requests.at(-1).payload.messages).toHaveLength(2)
     expect(requests.at(-1).context.selectedSlideId).toBe(after.slides[0].id)
-    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
+
     await window
       .locator('[data-ppt-preview]')
       .getByRole('button', { name: '选择对象：从机械基础走向智能制造', exact: true })
       .click()
-    await window.getByRole('button', { name: '对话修改所选对象', exact: true }).click()
+
     await window.locator('#ppt-message').fill('修改这个对象，其他内容保留')
     await window.getByRole('button', { name: '发送', exact: true }).click()
     await expect(window.locator('.ppt-message')).toHaveCount(4)
@@ -603,7 +617,7 @@ test('PPT plans structured pages, previews chart edits and exports an editable n
     const zip = await JSZip.loadAsync(fs.readFileSync(target))
     expect(await zip.file('ppt/charts/chart1.xml').async('string')).toContain('c:lineChart')
     expect(zip.file(/^ppt\/embeddings\/.*\.xlsx$/)).toHaveLength(1)
-    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
+
     await window.locator('[data-ppt-preview] .ppt-chart-node').click()
     await window.getByText('编辑图表数据', { exact: true }).click()
     await window.getByLabel('现状 第 1 项数值', { exact: true }).fill('5')
@@ -637,7 +651,7 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
     app = launched.app
     const window = launched.window
     await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
-    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
+
     const preview = window.locator('[data-ppt-preview]')
     await preview.getByRole('button', { name: '选择对象：从一个好想法开始', exact: true }).click()
     await preview
@@ -671,7 +685,9 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
     await preview
       .getByRole('button', { name: '选择对象：用户可以直接操作每个对象', exact: true })
       .click()
+    await window.getByText('文字样式', { exact: true }).click()
     await window.getByLabel('字号', { exact: true }).fill('40')
+    await window.getByText('更多调整', { exact: true }).click()
     await window.getByRole('button', { name: '锁定对象', exact: true }).click()
     await expect(window.getByLabel('对象文字', { exact: true })).toBeDisabled()
     await expect(window.getByRole('button', { name: '删除对象', exact: true })).toBeDisabled()
@@ -679,9 +695,11 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
     await expect(window.getByLabel('对象文字', { exact: true })).toBeEnabled()
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await window.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
-    await expect(window.getByRole('button', { name: '完成直接编辑', exact: true })).toBeVisible()
+    await expect(window.locator('#ppt-message')).toBeVisible()
     await window.getByRole('button', { name: '锁定页面', exact: true }).click()
+    await window.getByLabel('添加元素', { exact: true }).click()
     await expect(window.getByRole('button', { name: '图片', exact: true })).toBeDisabled()
+    await window.getByLabel('添加元素', { exact: true }).click()
     await window.getByRole('button', { name: '解锁页面', exact: true }).click()
     const imagePath = path.join(directory, 'sample.png')
     await sharp({
@@ -697,6 +715,7 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
     await app.evaluate(({ dialog }, filePath) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
     }, imagePath)
+    await window.getByLabel('添加元素', { exact: true }).click()
     await window.getByRole('button', { name: '图片', exact: true }).click()
     await expect(preview.locator('img')).toHaveCount(1)
     await window.getByRole('button', { name: '填满裁切', exact: true }).click()
@@ -741,7 +760,7 @@ test('PPT canvas supports direct text editing, positioning, locks, image import 
         })
       }
     }
-    await window.getByRole('button', { name: '完成直接编辑', exact: true }).click()
+
     await window.getByRole('button', { name: '返回作品', exact: true }).click()
     await window.locator('.ppt-project-open').click()
     await expect(preview).toContainText('用户可以直接操作每个对象')

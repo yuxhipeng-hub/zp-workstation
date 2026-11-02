@@ -108,7 +108,7 @@ test('model settings verifies pictures, assigns a separate visual role and check
     await expect(window.locator('#pptVisionProfile')).toHaveValue(visionId)
     await window.locator('.nav-item[data-page="ppt"]').click()
     await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
-    await window.getByRole('button', { name: '直接编辑', exact: true }).click()
+
     const imagePath = path.join(directory, 'photo.png')
     await sharp({ create: { width: 320, height: 180, channels: 3, background: '#2472b2' } })
       .png()
@@ -116,6 +116,7 @@ test('model settings verifies pictures, assigns a separate visual role and check
     await app.evaluate(({ dialog }, filePath) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
     }, imagePath)
+    await window.getByLabel('添加元素', { exact: true }).click()
     await window.getByRole('button', { name: '图片', exact: true }).click()
     await window.getByText('图片理解与视觉检查', { exact: true }).click()
     await window.getByRole('button', { name: '理解选中图片', exact: true }).click()
@@ -125,12 +126,13 @@ test('model settings verifies pictures, assigns a separate visual role and check
       timeout: 60000,
     })
     await expect(window.locator('.ppt-visual-report')).toContainText('未发现明显视觉问题')
-    await window.getByRole('button', { name: '返回画布编辑', exact: true }).click()
-    await window.locator('.ppt-layer-list summary').click()
+    await window.getByLabel('所有元素', { exact: true }).click()
     await window
       .locator('.ppt-layer-list')
       .getByRole('button', { name: '从一个好想法开始', exact: true })
       .click()
+    await window.getByLabel('所有元素', { exact: true }).click()
+    await window.getByText('文字样式', { exact: true }).click()
     await window.getByLabel('字号', { exact: true }).fill('42')
     await expect(window.locator('.ppt-visual-report')).toContainText('作品已修改')
     expect(
