@@ -12,12 +12,12 @@
 - 发布基线：`package.json` 当前版本为 `0.7.0`；`main` 已发布并同步，GitHub Release
   `v0.7.0` 为 Latest，安装包、blockmap、SHA-256 与 `latest.json` 由
   `Release ZP Workbench` 流水线生成。2026-10-24 的真机应用内升级已验证。
-- 当前任务：`codex/ppt-feedback-exports`，基于 `1e6903f`。主开发 Codex，本轮仅本地。
+- 当前任务：`codex/ppt-feedback-exports`，基于 `1e6903f`。主开发 Codex，实现提交 `3646ce1`。
   PPT 菜单外点/Esc 收起，新增 PDF、Word 文稿和 Markdown 导出；右栏「创作」精简文案，
   放大聊天框，演讲备注改称「讲稿」并解释用途。其他功能分支保持独立，风格与 Office 待验收。
-- GitHub：2026-10-29 已同步 `codex/ui-studio-refresh`（实现截至 `52672da`）与 `codex/ppt-layout-quality`。
-  手机读本分支的本页、[PPT 规格](specs/002-ppt-studio.md)、[验证记录](PPT_ENGINE_EVALUATION.md)；
-  独立进度见[全部分支](https://github.com/yuxhipeng-hub/zp-workstation/branches)。`main` 仍是发布基线，本次未合并或发布。
+- GitHub：2026-11-03 尝试上传 `codex/ppt-feedback-exports`，GitHub TLS 握手失败，尚未同步。
+  Git 当前代理为 `127.0.0.1:7897`；直连与代理连通检查均失败。网络恢复后推送当前分支并核对远端 SHA。
+  上次记录已同步 `codex/ui-studio-refresh` 与 `codex/ppt-layout-quality`；`main` 仍是发布基线，本次未合并或发布。
 - 接续先核对本页与 Git。用户强调只重设计 PPT 板块，勿扩大全局范围；重视简洁和可操作性。
 - 产品方向：2026-10-28 用户明确不再局限学习场景，希望用工作站帮助自己开展业务、赚取收入。
   当前切入点为面向多种场景的 PPT 设计工作室，长期追求内容策划、精美视觉、精确修改和可靠交付。
@@ -92,6 +92,7 @@
 
 | 日期       | 状态   | 任务                                                               | 验证 / 后续                                                          |
 | ---------- | ------ | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| 2026-11-03 | 待上传 | 更新 PPT 分支交接与远端同步状态                                    | handoff 已更新；GitHub TLS 握手失败，网络恢复后重试当前分支推送      |
 | 2026-11-02 | 待验收 | PPT 菜单外点关闭、四格式导出、创作侧栏精简与讲稿说明               | verify通过：单测207、E2E34；实际导出与Word渲染检查通过；Office待验收 |
 | 2026-11-02 | 待验收 | PPT AI优先交互与Apple风格：移除模式/色块入口、全元素选择和轻量编辑 | 单测200、PPT E2E12、构建/类型/Lint通过；风格与Office待用户验收       |
 | 2026-10-29 | 待验收 | PPT长标题均衡断行、本地排版检查和渲染完整性保护                    | 单测199、E2E30、verify通过；8页重渲染与内容比对通过；Office待验收    |
