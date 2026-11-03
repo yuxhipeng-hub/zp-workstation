@@ -1181,6 +1181,16 @@
   align-items: start;
   min-height: 600px;
 }
+.ppt-editor .ppt-workspace.is-side-collapsed {
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+.ppt-editor-side[hidden] {
+  display: none;
+}
+.ppt-studio [data-ppt-side-toggle][aria-expanded='true'] {
+  background: var(--panel-active);
+  color: var(--text);
+}
 .ppt-workspace > .ppt-filmstrip {
   grid-column: 1;
   grid-row: 1;
@@ -1560,6 +1570,9 @@
   background: var(--panel);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 8%, transparent);
 }
+.ppt-side-body .ppt-conversation:not(:has(.ppt-chat-log)) .ppt-composer {
+  margin-top: 0;
+}
 .ppt-side-body .ppt-composer textarea {
   height: 180px;
   min-height: 140px;
@@ -1686,6 +1699,9 @@
   .ppt-editor .ppt-workspace {
     grid-template-columns: minmax(0, 1fr) 292px;
   }
+  .ppt-editor .ppt-workspace.is-side-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .ppt-workspace > .ppt-filmstrip {
     grid-column: 1 / -1;
     grid-row: 1;
@@ -1718,7 +1734,7 @@
     height: clamp(520px, calc(100dvh - 350px), 800px);
   }
 }
-@container (width < 650px) {
+@container (width < 820px) {
   .ppt-editor .ppt-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1733,9 +1749,22 @@
     grid-column: 1;
     grid-row: 3;
     position: static;
-    height: 560px;
     border-top: 1px solid var(--line);
     border-left: 0;
+    border-radius: 0 0 18px 18px;
+    height: auto;
+    min-height: 360px;
+    max-height: 660px;
+  }
+  .ppt-side-body > .ppt-conversation {
+    height: auto;
+  }
+  .ppt-side-body .ppt-chat-log {
+    flex: auto;
+    max-height: 260px;
+  }
+  .ppt-selection-body {
+    max-height: 300px;
   }
   .ppt-canvas-surface {
     padding-inline: 16px;

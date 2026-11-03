@@ -32,6 +32,7 @@ export function createPptStudioPage({
   let busy = ''
   let error = ''
   let presenting = false
+  let sideOpen = true
   let composer = ''
   let messages = []
   let reportedDirty = false
@@ -91,6 +92,7 @@ export function createPptStudioPage({
     composer = ''
     error = ''
     presenting = false
+    sideOpen = true
   }
   function checkpoint() {
     if (!draft) return
@@ -469,12 +471,12 @@ export function createPptStudioPage({
   }
   function editorMarkup() {
     return `<section class="ppt-editor" aria-label="PPT 编辑器" aria-busy="${Boolean(busy)}">
-      <div class="ppt-editor-bar"><div class="ppt-editor-identity">${iconButton('home', '返回作品', 'arrow-left', disabled(Boolean(busy)))}<div><label class="ppt-project-name"><span class="sr-only">作品名称</span><input id="ppt-deck-title" data-ppt-project-title data-ppt-scope="deck" data-ppt-field="title" value="${esc(draft.title)}" maxlength="100" title="点击修改作品名称" ${disabled(Boolean(busy))}></label><span data-ppt-save-state>${dirty() ? '有未保存的修改' : '已保存到本机'} · ${draft.slides.length} 页</span></div></div><div class="ppt-inline-actions"><div class="ppt-history-tools">${iconButton('undo', '撤销修改', 'undo-2', disabled(!history.length || Boolean(busy)))}${iconButton('redo', '重做修改', 'redo-2', disabled(!future.length || Boolean(busy)))}</div>${button('save', busy === 'saving' ? '保存中…' : '保存作品', 'save', disabled(Boolean(busy)))}${button('present', '演示', 'play', disabled(Boolean(busy)))}${exportMenuMarkup()}</div></div>
+      <div class="ppt-editor-bar"><div class="ppt-editor-identity">${iconButton('home', '返回作品', 'arrow-left', disabled(Boolean(busy)))}<div><label class="ppt-project-name"><span class="sr-only">作品名称</span><input id="ppt-deck-title" data-ppt-project-title data-ppt-scope="deck" data-ppt-field="title" value="${esc(draft.title)}" maxlength="100" title="点击修改作品名称" ${disabled(Boolean(busy))}></label><span data-ppt-save-state>${dirty() ? '有未保存的修改' : '已保存到本机'} · ${draft.slides.length} 页</span></div></div><div class="ppt-inline-actions"><div class="ppt-history-tools">${iconButton('undo', '撤销修改', 'undo-2', disabled(!history.length || Boolean(busy)))}${iconButton('redo', '重做修改', 'redo-2', disabled(!future.length || Boolean(busy)))}</div>${button('save', busy === 'saving' ? '保存中…' : '保存作品', 'save', disabled(Boolean(busy)))}${button('present', '演示', 'play', disabled(Boolean(busy)))}${exportMenuMarkup()}${button('toggle-side', '创作', 'panel-right', `data-ppt-side-toggle aria-controls="ppt-creation-panel" aria-expanded="${sideOpen}" title="${sideOpen ? '收起' : '展开'}创作侧栏"`)}</div></div>
       ${error ? `<div class="ppt-error" role="alert">${esc(error)}</div>` : ''}
-      <div class="ppt-workspace">
+      <div class="ppt-workspace ${sideOpen ? '' : 'is-side-collapsed'}">
         <aside class="ppt-filmstrip" aria-label="幻灯片列表" data-scroll-preserve="ppt-pages"><div class="ppt-filmstrip-head"><span>页面 <b>${draft.slides.length}</b></span>${iconButton('add-slide', '添加页面', 'plus', disabled(Boolean(busy) || draft.slides.length >= 40))}</div>${draft.slides.map((item, i) => `<article class="ppt-page-item"><button class="ppt-thumbnail ${selected === i ? 'is-selected' : ''}" data-action="ppt-select" data-index="${i}" aria-label="选择第 ${i + 1} 页" aria-pressed="${selected === i}" ${disabled(Boolean(busy))}><div class="ppt-thumbnail-art" data-ppt-thumb="${i}">${slideMarkup(item, draft.theme, i, draft.slides.length)}</div><span><b>${String(i + 1).padStart(2, '0')}</b><span data-ppt-thumb-title="${i}">${esc(item.title || '未填写标题')}</span></span></button>${selected === i ? pageMenuMarkup() : ''}</article>`).join('')}</aside>
         <div class="ppt-canvas-area"><div class="ppt-canvas-toolbar" role="toolbar" aria-label="画布工具"><span class="ppt-canvas-hint">选中元素，直接修改或告诉 AI</span><div class="ppt-canvas-utilities">${canvasEditor.toolbarMarkup(Boolean(busy))}${pageSettingsMarkup()}</div></div><div class="ppt-canvas-surface"><div class="ppt-stage-meta"><span data-ppt-page-label>${esc(pageLabel())}</span><span>16 : 9</span></div><div class="ppt-stage" data-ppt-preview tabindex="0" aria-label="幻灯片画布">${previewMarkup()}</div><div class="ppt-canvas-footer"><span>${draft.slides[selected].locked ? '页面已锁定' : '点击选择 · 双击修改文字'}</span><div class="ppt-page-navigation">${iconButton('previous', '上一页', 'chevron-left', disabled(selected === 0 || Boolean(busy)))}<span>${selected + 1} / ${draft.slides.length}</span>${iconButton('next', '下一页', 'chevron-right', disabled(selected === draft.slides.length - 1 || Boolean(busy)))}</div></div></div><details class="ppt-speaker-notes" data-disclosure-id="ppt-speaker-notes"><summary><i data-lucide="notebook-pen"></i><span>讲稿</span></summary><p class="ppt-notes-hint">给自己看的讲述提示，不显示在幻灯片正文中。导出 PPTX 会保留在备注区。</p>${field('slide', 'notes', '当前页讲稿', draft.slides[selected].notes, 4000, true)}</details><div class="ppt-delivery-area"><div data-ppt-checks>${issuesMarkup()}</div>${visualReportMarkup()}${strategyMarkup()}</div></div>
-        <aside class="ppt-editor-side" aria-label="创作"><header class="ppt-assistant-heading"><strong>创作</strong></header><div class="ppt-selection-body" data-scroll-preserve="ppt-selection">${canvasEditor.markup()}</div><div class="ppt-side-body" data-scroll-preserve="ppt-side-body">${conversationMarkup()}</div></aside>
+        <aside id="ppt-creation-panel" class="ppt-editor-side" aria-label="创作" ${sideOpen ? '' : 'hidden'}><header class="ppt-assistant-heading"><strong>创作</strong>${iconButton('toggle-side', '收起创作侧栏', 'panel-right-close')}</header><div class="ppt-selection-body" data-scroll-preserve="ppt-selection">${canvasEditor.markup()}</div><div class="ppt-side-body" data-scroll-preserve="ppt-side-body">${conversationMarkup()}</div></aside>
       </div>
     </section>`
   }
@@ -555,6 +557,16 @@ export function createPptStudioPage({
   }
   async function handleAction(action, element) {
     if (!action.startsWith('ppt-')) return false
+    if (action === 'ppt-toggle-side' && draft) {
+      sideOpen = !sideOpen
+      render()
+      // The shared render restores scroll on the next frame; return focus after it.
+      requestAnimationFrame(() => {
+        if (state.page !== 'ppt' || presenting) return
+        document.querySelector('[data-ppt-side-toggle]')?.focus()
+      })
+      return true
+    }
     if (busy) return true
     if (action === 'ppt-starter') {
       const starters = {
@@ -663,6 +675,7 @@ export function createPptStudioPage({
       }
       return true
     }
+    if (action === 'ppt-canvas-pick') sideOpen = true
     if (canvasEditor.handleAction(action, element)) return true
     editKey = ''
     const command = action.slice(4)
@@ -823,7 +836,14 @@ export function createPptStudioPage({
   function handlePointer(event) {
     if (event.type === 'pointerdown' && event.button === 0)
       dismissPptPopovers(document, event.target)
-    if (!busy && !presenting) canvasEditor.handlePointer(event)
+    if (!busy && !presenting) {
+      if (
+        ['pointerdown', 'dblclick'].includes(event.type) &&
+        event.target.closest?.('[data-ppt-preview] [data-node-id]')
+      )
+        sideOpen = true
+      canvasEditor.handlePointer(event)
+    }
   }
   return { renderPage, handleAction, handleInput, handleKeydown, handlePointer }
 }

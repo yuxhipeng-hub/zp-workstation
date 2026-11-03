@@ -100,6 +100,92 @@ test('PPT menus dismiss outside and on Escape while the concise creation panel a
   }
 })
 
+test('PPT keeps the canvas usable at narrow widths and preserves edits when creation is collapsed', async () => {
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    await window.locator('#ppt-message').fill('保留这段未发送的修改要求')
+    const toggle = window.locator('[data-ppt-side-toggle]')
+    const side = window.locator('#ppt-creation-panel')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const full = (await window.locator('[data-ppt-preview]').boundingBox()).width
+    await toggle.click()
+    await expect(side).toBeHidden()
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+    expect((await window.locator('[data-ppt-preview]').boundingBox()).width).toBeGreaterThan(full)
+    await expect(toggle).toBeFocused()
+    await toggle.press('Enter')
+    await expect(side).toBeVisible()
+    await expect(window.locator('#ppt-message')).toHaveValue('保留这段未发送的修改要求')
+    await window.getByRole('button', { name: '收起创作侧栏', exact: true }).click()
+    await expect(toggle).toBeFocused()
+    // Selecting artwork must reveal its controls, even after hiding the panel.
+    await window.locator('[data-ppt-preview] [data-canvas-field="title"]').click()
+    await expect(side).toBeVisible()
+    await expect(window.getByLabel('对象文字', { exact: true })).toBeVisible()
+    await window.getByLabel('对象文字', { exact: true }).fill('保留手动修改后的标题')
+    await toggle.click()
+    await toggle.click()
+    await expect(window.getByLabel('对象文字', { exact: true })).toHaveValue('保留手动修改后的标题')
+    await window.getByRole('button', { name: '取消选择', exact: true }).click()
+    await window.getByRole('button', { name: '保存作品', exact: true }).click()
+    await expect(window.locator('#toasts .toast')).toHaveCount(0)
+    const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
+    if (await taskDismiss.isVisible()) await taskDismiss.click()
+    for (const theme of ['dark', 'light']) {
+      await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
+      for (const width of [1440, 1080, 980, 720]) {
+        await app.evaluate(
+          ({ BrowserWindow }, value) => BrowserWindow.getAllWindows()[0].setSize(value, 900),
+          width,
+        )
+        const canvas = await window.locator('[data-ppt-preview]').boundingBox()
+        const area = await window.locator('.ppt-canvas-area').boundingBox()
+        const panel = await side.boundingBox()
+        const editor = await window.locator('.ppt-editor').boundingBox()
+        const input = await window.locator('#ppt-message').boundingBox()
+        if (editor.width < 820) {
+          expect(canvas.width).toBeGreaterThan(area.width * 0.85)
+          expect(panel.y).toBeGreaterThanOrEqual(area.y + area.height - 1)
+          expect(input.y - panel.y).toBeLessThan(110)
+        }
+        expect(
+          await window.locator('.ppt-editor').evaluate((el) => el.scrollWidth - el.clientWidth),
+        ).toBeLessThanOrEqual(1)
+        fs.mkdirSync(screenshotDir, { recursive: true })
+        await window.locator('.ppt-editor-bar').scrollIntoViewIfNeeded()
+        await window.screenshot({
+          path: path.join(screenshotDir, `responsive-${width}-${theme}.png`),
+          animations: 'disabled',
+        })
+        if (editor.width < 820) {
+          await side.scrollIntoViewIfNeeded()
+          await window.screenshot({
+            path: path.join(screenshotDir, `responsive-creation-${width}-${theme}.png`),
+            animations: 'disabled',
+          })
+          await window.getByRole('button', { name: '收起创作侧栏', exact: true }).click()
+          await expect(side).toBeHidden()
+          await expect(toggle).toBeFocused()
+          await expect(toggle).toBeInViewport()
+          await toggle.press('Enter')
+          await expect(side).toBeVisible()
+        }
+      }
+    }
+    await expect(window.locator('[data-ppt-save-state]')).toContainText('已保存到本机')
+    await expect(window.locator('#ppt-message')).toHaveValue('保留这段未发送的修改要求')
+  } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('PPT exports valid PowerPoint, Word, Markdown and actual PDF files from the format menu', async () => {
   test.setTimeout(120000)
   const directory = temporaryDirectory()
