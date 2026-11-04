@@ -380,14 +380,17 @@ test('PPT keeps AI available while every artwork element can be selected, edited
   }
 })
 
-test('PPT home dust reacts inside and outside the composer while the edge flows', async () => {
+test('PPT home grain responds locally and keeps a soft focus edge with reduced motion', async () => {
   const directory = temporaryDirectory()
   let app
   try {
     const launched = await launch(directory)
     app = launched.app
     const window = launched.window
+    await window.evaluate(() => window.launcher.patchSettings({ theme: 'dark' }))
+    await expect(window.locator('body')).toHaveAttribute('data-theme', 'dark')
     const layer = window.locator('ppt-home-particles canvas')
+    await expect(window.locator('ppt-home-particles')).toHaveAttribute('data-renderer', 'shader')
     const geometry = () =>
       layer.evaluate((canvas) => {
         const view = canvas.closest('main')
@@ -409,73 +412,73 @@ test('PPT home dust reacts inside and outside the composer while the edge flows'
     const composer = window.locator('.ppt-start .ppt-composer')
     await expect(composer).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 
-    const alphaAround = (point) =>
-      layer.evaluate((canvas, location) => {
-        const bounds = canvas.getBoundingClientRect()
-        const scale = canvas.width / canvas.clientWidth
-        const radius = 45 * scale
-        const pixels = canvas
-          .getContext('2d')
-          .getImageData(
-            (location.x - bounds.left) * scale - radius,
-            (location.y - bounds.top) * scale - radius,
-            radius * 2,
-            radius * 2,
-          ).data
-        let alpha = 0
-        for (let index = 3; index < pixels.length; index += 4) alpha += pixels[index]
-        return alpha
-      }, point)
+    async function colorEnergy(clip, edgeWidth = 0) {
+      const { data, info } = await sharp(await window.screenshot({ clip }))
+        .removeAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+      const edge = edgeWidth * (info.width / clip.width)
+      let energy = 0
+      let count = 0
+      for (let y = 0; y < info.height; y++) {
+        for (let x = 0; x < info.width; x++) {
+          if (edge && Math.min(x, y, info.width - x - 1, info.height - y - 1) > edge) continue
+          const index = (y * info.width + x) * info.channels
+          const r = data[index],
+            g = data[index + 1],
+            b = data[index + 2]
+          energy += Math.max(r, g, b) - Math.min(r, g, b)
+          count++
+        }
+      }
+      return energy / count
+    }
     const view = await layer.boundingBox()
     const box = await composer.boundingBox()
     const outside = { x: view.x + 66, y: view.y + 62 }
     const inside = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-    const outsideAlpha = () => alphaAround(outside)
-    const insideAlpha = () => alphaAround(inside)
+    const square = ({ x, y }) => ({
+      x: Math.round(x - 34),
+      y: Math.round(y - 34),
+      width: 68,
+      height: 68,
+    })
+    const outsideEnergy = () => colorEnergy(square(outside))
+    const insideEnergy = () => colorEnergy(square(inside))
     await window.mouse.move(1, 1)
-    const baseline = await outsideAlpha()
-    const insideBaseline = await insideAlpha()
-    expect(baseline).toBeGreaterThan(0)
-    expect(insideBaseline).toBeGreaterThan(baseline * 0.15)
-    expect(insideBaseline).toBeLessThan(baseline * 0.5)
+    const baseline = await outsideEnergy()
+    const insideBaseline = await insideEnergy()
+    expect(baseline).toBeGreaterThan(3)
+    expect(insideBaseline).toBeLessThan(baseline * 0.65)
     await window.mouse.move(outside.x, outside.y)
-    await expect.poll(outsideAlpha).toBeGreaterThan(baseline * 1.25)
+    await expect.poll(outsideEnergy).toBeGreaterThan(baseline * 1.3)
     await window.mouse.move(inside.x, inside.y)
-    await expect.poll(outsideAlpha).toBeLessThan(baseline * 1.2)
-    await expect.poll(insideAlpha).toBeGreaterThan(insideBaseline * 1.6)
-    const borderOpacity = () =>
-      composer.evaluate((el) => Number(globalThis.getComputedStyle(el, '::before').opacity))
-    const edgeGradient = () =>
-      composer.evaluate((el) => globalThis.getComputedStyle(el, '::before').backgroundImage)
-    const initialGradient = await edgeGradient()
-    expect(initialGradient).toContain('conic-gradient')
-    await expect.poll(edgeGradient).not.toBe(initialGradient)
-    await expect.poll(borderOpacity).toBe(1)
+    await expect.poll(outsideEnergy).toBeLessThan(baseline * 1.25)
+    await expect.poll(insideEnergy).toBeGreaterThan(insideBaseline * 1.6)
     await window.mouse.move(1, 1)
-    await expect.poll(borderOpacity).toBeCloseTo(0.85)
-    await expect.poll(insideAlpha).toBeLessThan(insideBaseline * 1.3)
+    await expect.poll(insideEnergy).toBeLessThan(insideBaseline * 1.35)
 
     await window.emulateMedia({ reducedMotion: 'reduce' })
-    expect(
-      await layer.evaluate(async (canvas) => {
-        const image = canvas.toDataURL()
-        for (let index = 0; index < 5; index += 1)
-          await new Promise((resolve) => globalThis.requestAnimationFrame(resolve))
-        return image === canvas.toDataURL()
-      }),
-    ).toBe(true)
-    expect(
-      await composer.evaluate((el) => globalThis.getComputedStyle(el, '::before').animationName),
-    ).toBe('none')
+    const still = await window.screenshot({ clip: square(outside) })
+    await window.mouse.move(outside.x, outside.y)
+    expect((await window.screenshot({ clip: square(outside) })).equals(still)).toBe(true)
     const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
     if (await taskDismiss.isVisible()) await taskDismiss.click()
+    const edgeClip = {
+      x: Math.round(box.x - 4),
+      y: Math.round(box.y - 4),
+      width: Math.round(box.width + 8),
+      height: Math.round(box.height + 8),
+    }
+    const idleEdge = await colorEnergy(edgeClip, 9)
     const input = window.locator('#ppt-message')
     await input.fill('透明的输入区仍能清楚阅读和选字。')
     await input.press('Control+a')
     expect(await input.evaluate((el) => el.selectionEnd - el.selectionStart)).toBe(
       (await input.inputValue()).length,
     )
-    await expect.poll(borderOpacity).toBe(1)
+    await expect(input).toBeFocused()
+    await expect.poll(() => colorEnergy(edgeClip, 9)).toBeGreaterThan(idleEdge * 1.12)
     await input.press('End')
     fs.mkdirSync(screenshotDir, { recursive: true })
     await window.screenshot({

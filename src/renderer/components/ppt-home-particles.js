@@ -1,189 +1,179 @@
-const CELL_SIZE = 14
-const MAX_PARTICLES = 6800
-const POINTER_RADIUS = 116
-const SPRITE_SIZE = 14
-const HUE_STEP = 2
+import { createGrainRenderer } from './ppt-home-grain-shader.js'
 
-let particleAtlas
-
-function getParticleAtlas() {
-  if (particleAtlas) return particleAtlas
-  const atlas = document.createElement('canvas')
-  atlas.width = (360 / HUE_STEP) * SPRITE_SIZE
-  atlas.height = SPRITE_SIZE
-  const context = atlas.getContext('2d')
-  const radius = SPRITE_SIZE / 2
-  for (let hue = 0; hue < 360; hue += HUE_STEP) {
-    const start = (hue / HUE_STEP) * SPRITE_SIZE
-    const center = start + radius
-    const light = context.createRadialGradient(center, radius, 0, center, radius, radius)
-    light.addColorStop(0, `hsl(${hue}, 92%, 73%)`)
-    light.addColorStop(0.5, `hsl(${(hue + 10) % 360}, 91%, 53%)`)
-    light.addColorStop(1, `hsl(${(hue + 18) % 360} 92% 52% / 0)`)
-    context.fillStyle = light
-    context.fillRect(start, 0, SPRITE_SIZE, SPRITE_SIZE)
+function createStaticRenderer(canvas) {
+  const context = canvas.getContext('2d')
+  const tile = document.createElement('canvas')
+  tile.width = tile.height = 288
+  const tileContext = tile.getContext('2d')
+  const texture = tileContext.createImageData(tile.width, tile.height)
+  const colors = [
+    [92, 157, 234],
+    [112, 92, 238],
+    [201, 105, 215],
+    [227, 152, 103],
+  ]
+  for (let y = 0; y < tile.height; y += 3) {
+    for (let x = 0; x < tile.width; x += 3) {
+      const color = colors[Math.floor(Math.random() * colors.length)]
+      const opacity = 19 + Math.random() * 28
+      for (let dy = 0; dy < 3; dy += 1) {
+        for (let dx = 0; dx < 3; dx += 1) {
+          const index = ((y + dy) * tile.width + x + dx) * 4
+          texture.data.set(color, index)
+          texture.data[index + 3] = opacity * (1 - Math.hypot(dx - 1, dy - 1) * 0.56)
+        }
+      }
+    }
   }
-  particleAtlas = atlas
-  return atlas
-}
-
-function distanceFromReadingArea(x, y, area) {
-  const dx = Math.abs(x - area.centerX) - area.halfWidth + area.radius
-  const dy = Math.abs(y - area.centerY) - area.halfHeight + area.radius
-  return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - area.radius
-}
-
-function readingAreaOpacity(distance) {
-  // Fade across the rounded edge. Inside, only a trace of the original particle remains.
-  const blend = Math.max(0, Math.min(1, (distance + 10) / 34))
-  return 0.28 + 0.72 * blend * blend * (3 - 2 * blend)
+  tileContext.putImageData(texture, 0, 0)
+  const pattern = context.createPattern(tile, 'repeat')
+  pattern.setTransform(new DOMMatrix().scale(1 / 3))
+  return {
+    resize(width, height) {
+      context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0)
+    },
+    draw({ area, width, height }) {
+      context.clearRect(0, 0, width, height)
+      context.fillStyle = pattern
+      context.fillRect(0, 0, width, height)
+      context.save()
+      context.globalCompositeOperation = 'destination-out'
+      context.fillStyle = 'rgba(0,0,0,0.28)'
+      for (const margin of [26, 17, 8, 0]) {
+        context.beginPath()
+        context.roundRect(
+          area.x - area.width / 2 - margin,
+          area.y - area.height / 2 - margin,
+          area.width + margin * 2,
+          area.height + margin * 2,
+          area.radius + margin,
+        )
+        context.fill()
+      }
+      context.restore()
+    },
+    dispose() {},
+  }
 }
 
 class PptHomeParticles extends HTMLElement {
   connectedCallback() {
     const view = this.closest('main')
-    const canvas = this.querySelector('canvas')
+    let canvas = this.querySelector('canvas')
     const composer = this.parentElement?.querySelector('.ppt-start .ppt-composer')
-    const context = canvas?.getContext('2d')
-    if (!view || !context) return
-    const atlas = getParticleAtlas()
-    const cornerRadius = composer ? parseFloat(getComputedStyle(composer).borderTopLeftRadius) : 0
-
+    if (!view || !canvas || !composer) return
     const listeners = new AbortController()
     const { signal } = listeners
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
-    let particles = []
+    const radius = parseFloat(getComputedStyle(composer).borderTopLeftRadius) || 0
+    let renderer = createGrainRenderer(canvas)
+    let animated = Boolean(renderer)
     let width = 0
     let height = 0
-    let scale = 0
     let frame = 0
     let previousTime = 0
-    let elapsed = 0
+    let time = 0
+    let focus = 0
     let pointer = null
+    const cursor = { x: 0, y: 0, strength: 0 }
+
+    const useStaticRenderer = () => {
+      // A canvas that has owned a GL context cannot be reused for 2D drawing.
+      const replacement = document.createElement('canvas')
+      canvas.replaceWith(replacement)
+      canvas = replacement
+      animated = false
+      this.dataset.renderer = 'static'
+      renderer = createStaticRenderer(canvas)
+    }
+    if (renderer) this.dataset.renderer = 'shader'
+    else useStaticRenderer()
 
     function draw() {
-      context.clearRect(0, 0, width, height)
+      if (!width || !height) return
       const bounds = canvas.getBoundingClientRect()
-      const composerBounds = composer?.getBoundingClientRect()
-      const readingArea = composerBounds && {
-        centerX: composerBounds.left - bounds.left + composerBounds.width / 2,
-        centerY: composerBounds.top - bounds.top + composerBounds.height / 2,
-        halfWidth: composerBounds.width / 2,
-        halfHeight: composerBounds.height / 2,
-        radius: cornerRadius,
+      const box = composer.getBoundingClientRect()
+      const focused = composer.matches(':focus-within') ? 1 : 0
+      const still = reducedMotion.matches || !animated
+      focus = still ? focused : focus + (focused - focus) * 0.16
+      if (pointer) {
+        cursor.x = pointer.x - bounds.left
+        cursor.y = pointer.y - bounds.top
       }
-      const cursor = pointer && { x: pointer.x - bounds.left, y: pointer.y - bounds.top }
-      const pointerInReadingArea =
-        cursor && readingArea && distanceFromReadingArea(cursor.x, cursor.y, readingArea) <= 0
-      const pushDistance = pointerInReadingArea ? 7 : 9
-      const colorPhase = elapsed * 0.24
-      for (const particle of particles) {
-        const x = particle.x + Math.sin(elapsed * 0.46 + particle.phase) * 4
-        const y = particle.y + Math.cos(elapsed * 0.37 + particle.phase) * 5
-        let ripple = 0
-        let offsetX = 0
-        let offsetY = 0
-        if (cursor) {
-          const dx = x - cursor.x
-          const dy = y - cursor.y
-          const squaredDistance = dx * dx + dy * dy
-          if (squaredDistance < POINTER_RADIUS * POINTER_RADIUS) {
-            const distance = Math.sqrt(squaredDistance)
-            ripple = 1 - distance / POINTER_RADIUS
-            const push = (ripple * pushDistance) / Math.max(distance, 1)
-            offsetX = dx * push
-            offsetY = dy * push
-          }
-        }
-        particle.offsetX += (offsetX - particle.offsetX) * 0.15
-        particle.offsetY += (offsetY - particle.offsetY) * 0.15
-        particle.glow += (ripple - particle.glow) * 0.15
-        const drawX = x + particle.offsetX
-        const drawY = y + particle.offsetY
-        const visibility = readingArea
-          ? readingAreaOpacity(distanceFromReadingArea(drawX, drawY, readingArea))
-          : 1
-        const hueWave = Math.sin(colorPhase + particle.colorOffset)
-        const hue = particle.amber ? 34 + hueWave * 12 : 237 + hueWave * 54
-        const spriteX = Math.floor(hue / HUE_STEP) * SPRITE_SIZE
-        const radius = Math.min(1.28, particle.radius + particle.glow * 0.4)
-        context.globalAlpha = Math.min(1, particle.opacity * visibility + particle.glow * 0.45)
-        context.drawImage(
-          atlas,
-          spriteX,
-          0,
-          SPRITE_SIZE,
-          SPRITE_SIZE,
-          drawX - radius,
-          drawY - radius,
-          radius * 2,
-          radius * 2,
-        )
-      }
-      context.globalAlpha = 1
+      cursor.strength = still ? 0 : cursor.strength + ((pointer ? 1 : 0) - cursor.strength) * 0.23
+      renderer.draw({
+        width,
+        height,
+        area: {
+          x: box.left - bounds.left + box.width / 2,
+          y: box.top - bounds.top + box.height / 2,
+          width: box.width,
+          height: box.height,
+          radius,
+        },
+        cursor,
+        time,
+        focus,
+        light: document.body.dataset.theme === 'light',
+      })
     }
 
     function tick(now) {
       if (now - previousTime >= 30) {
-        if (previousTime) elapsed += Math.min((now - previousTime) / 1000, 0.08)
+        if (previousTime) time += Math.min((now - previousTime) / 1000, 0.08)
         previousTime = now
         draw()
       }
       frame = requestAnimationFrame(tick)
     }
 
+    function redrawStatic() {
+      if (document.hidden || (animated && !reducedMotion.matches)) return
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(draw)
+    }
+
     function syncMotion() {
       cancelAnimationFrame(frame)
-      frame = 0
       previousTime = 0
       pointer = null
+      cursor.strength = 0
       if (document.hidden) return
-      if (reducedMotion.matches) {
-        for (const particle of particles) particle.offsetX = particle.offsetY = particle.glow = 0
-        draw()
-      } else {
-        frame = requestAnimationFrame(tick)
-      }
+      if (animated && !reducedMotion.matches) frame = requestAnimationFrame(tick)
+      else redrawStatic()
     }
 
     const resize = () => {
-      const nextWidth = view.clientWidth
-      const nextHeight = view.clientHeight
-      const nextScale = Math.min(2, window.devicePixelRatio || 1)
-      if (width === nextWidth && height === nextHeight && scale === nextScale) return
-      width = nextWidth
-      height = nextHeight
-      scale = nextScale
+      width = view.clientWidth
+      height = view.clientHeight
+      if (!width || !height) return
+      const scale = Math.min(
+        1.5,
+        window.devicePixelRatio || 1,
+        Math.sqrt(2600000 / (width * height)),
+      )
+      const pixelWidth = Math.round(width * scale)
+      const pixelHeight = Math.round(height * scale)
       this.style.setProperty('--ppt-particle-height', `${height}px`)
-      canvas.width = Math.round(width * scale)
-      canvas.height = Math.round(height * scale)
-      context.setTransform(scale, 0, 0, scale, 0, 0)
-
-      const cellSize = Math.max(CELL_SIZE, Math.sqrt((width * height) / MAX_PARTICLES))
-      const columns = Math.ceil(width / cellSize)
-      const rows = Math.ceil(height / cellSize)
-      particles = Array.from({ length: columns * rows }, (_, index) => {
-        const column = ((index % columns) + Math.random()) / columns
-        const row = (Math.floor(index / columns) + Math.random()) / rows
-        return {
-          x: column * width,
-          y: row * height,
-          phase: Math.random() * Math.PI * 2,
-          colorOffset: column * 4.7 + row * 2.3 + Math.random() * 0.2,
-          amber: Math.random() < 0.05,
-          radius: Math.random() < 0.08 ? 0.88 + Math.random() * 0.14 : 0.5 + Math.random() * 0.36,
-          opacity: 0.65 + Math.random() * 0.25,
-          offsetX: 0,
-          offsetY: 0,
-          glow: 0,
-        }
-      })
+      if (canvas.width !== pixelWidth) canvas.width = pixelWidth
+      if (canvas.height !== pixelHeight) canvas.height = pixelHeight
+      renderer.resize(width, height)
+      redrawStatic()
     }
 
+    canvas.addEventListener(
+      'webglcontextlost',
+      () => {
+        useStaticRenderer()
+        resize()
+        syncMotion()
+      },
+      { signal },
+    )
     view.addEventListener(
       'pointermove',
       (event) => {
-        if (event.pointerType !== 'touch' && !reducedMotion.matches)
+        if (animated && !reducedMotion.matches && event.pointerType !== 'touch')
           pointer = { x: event.clientX, y: event.clientY }
       },
       { passive: true, signal },
@@ -191,21 +181,14 @@ class PptHomeParticles extends HTMLElement {
     const clearPointer = () => (pointer = null)
     view.addEventListener('pointerleave', clearPointer, { signal })
     view.addEventListener('pointercancel', clearPointer, { signal })
-    view.addEventListener(
-      'scroll',
-      () => {
-        if (reducedMotion.matches) draw()
-      },
-      { passive: true, signal },
-    )
+    view.addEventListener('scroll', redrawStatic, { passive: true, signal })
+    composer.addEventListener('focusin', redrawStatic, { signal })
+    composer.addEventListener('focusout', redrawStatic, { signal })
     document.addEventListener('visibilitychange', syncMotion, { signal })
     reducedMotion.addEventListener('change', syncMotion, { signal })
-    const observer = new ResizeObserver(() => {
-      resize()
-      if (reducedMotion.matches) draw()
-    })
+    const observer = new ResizeObserver(resize)
     observer.observe(view)
-    if (composer) observer.observe(composer)
+    observer.observe(composer)
     resize()
     syncMotion()
 
@@ -213,6 +196,7 @@ class PptHomeParticles extends HTMLElement {
       cancelAnimationFrame(frame)
       observer.disconnect()
       listeners.abort()
+      renderer.dispose()
     }
   }
 

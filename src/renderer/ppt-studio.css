@@ -802,122 +802,56 @@ ppt-home-particles > canvas {
   flex-shrink: 0;
 }
 
-@property --ppt-composer-edge-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
-@keyframes ppt-composer-edge-flow {
-  to {
-    --ppt-composer-edge-angle: 360deg;
-  }
-}
-
 .ppt-start .ppt-composer {
-  --ppt-composer-cyan: #38e7f4;
-  --ppt-composer-blue: #6d9bff;
-  --ppt-composer-violet: #bd93ff;
-  --ppt-composer-pink: #ff82c7;
-  --ppt-composer-amber: #ffaf73;
-  position: relative;
   border-color: transparent;
-  border-radius: var(--radius-lg);
+  border-radius: 24px;
+  padding: 4px 8px;
   background: transparent;
-  box-shadow:
-    -2px 0 11px color-mix(in srgb, var(--ppt-composer-cyan) 14%, transparent),
-    2px 0 11px color-mix(in srgb, var(--ppt-composer-pink) 14%, transparent);
-  transition: box-shadow var(--motion-base);
-}
-
-body[data-theme='light'] .ppt-start .ppt-composer {
-  --ppt-composer-cyan: #008ca9;
-  --ppt-composer-blue: #4071e5;
-  --ppt-composer-violet: #8151dd;
-  --ppt-composer-pink: #ca4195;
-  --ppt-composer-amber: #dd703d;
-}
-
-.ppt-start .ppt-composer::before {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  padding: 2px;
-  border-radius: inherit;
-  background: conic-gradient(
-    from var(--ppt-composer-edge-angle),
-    var(--ppt-composer-cyan),
-    var(--ppt-composer-blue) 64deg,
-    var(--ppt-composer-violet) 119deg,
-    var(--ppt-composer-pink) 178deg,
-    var(--ppt-composer-amber) 226deg,
-    var(--ppt-composer-violet) 281deg,
-    var(--ppt-composer-cyan)
-  );
-  mask:
-    linear-gradient(white 0 0) content-box,
-    linear-gradient(white 0 0);
-  mask-composite: exclude;
-  opacity: 0.85;
-  pointer-events: none;
-  animation: ppt-composer-edge-flow 8s linear infinite;
-  transition: opacity var(--motion-base);
-  content: '';
-}
-
-.ppt-start .ppt-composer:hover::before {
-  opacity: 1;
-}
-
-.ppt-start .ppt-composer:hover {
-  box-shadow:
-    -2px 0 13px color-mix(in srgb, var(--ppt-composer-cyan) 23%, transparent),
-    2px 0 13px color-mix(in srgb, var(--ppt-composer-pink) 23%, transparent);
 }
 
 .ppt-start .ppt-composer:focus-within {
   border-color: transparent;
   outline: none;
+}
+
+.ppt-studio.is-home:not(:has(ppt-home-particles[data-renderer='shader'])) .ppt-composer {
+  --ppt-reading-light: color-mix(in srgb, var(--info) 30%, transparent);
   box-shadow:
-    -2px 0 15px color-mix(in srgb, var(--ppt-composer-cyan) 32%, transparent),
-    2px 0 15px color-mix(in srgb, var(--ppt-composer-pink) 32%, transparent);
+    -6px -3px 20px -10px var(--ppt-reading-light),
+    6px 4px 22px -12px var(--ppt-reading-light);
 }
 
-.ppt-start .ppt-composer:focus-within::before {
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ppt-start .ppt-composer,
-  .ppt-start .ppt-composer::before {
-    transition: none;
-    animation: none;
-  }
+.ppt-studio.is-home:not(:has(ppt-home-particles[data-renderer='shader']))
+  .ppt-composer:focus-within {
+  outline: 1px solid var(--ppt-reading-light);
+  outline-offset: 2px;
+  box-shadow: 0 0 18px var(--ppt-reading-light);
 }
 
 @media (forced-colors: active) {
-  .ppt-start .ppt-composer {
-    border-color: ButtonText;
-  }
-
   .ppt-start .ppt-composer:focus-within {
     outline: 2px solid Highlight;
   }
 }
 
 .ppt-start .ppt-composer textarea {
-  height: 164px;
+  height: clamp(124px, 18vh, 168px);
   min-height: 120px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .ppt-start .ppt-composer-footer {
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
+  padding-block: 8px 12px;
+}
+
+.ppt-start .ppt-composer-footer .button {
+  padding-inline: 16px;
+  border-radius: 999px;
 }
 
 .ppt-start .ppt-composer > label {
-  color: var(--text);
+  color: var(--text-secondary);
+  font-size: 11px;
   font-weight: 500;
 }
 
