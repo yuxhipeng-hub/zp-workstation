@@ -11,6 +11,17 @@ import { createPptCanvasEditor } from '../components/ppt-canvas-editor.js'
 import { DESIGN_DIRECTIONS, materializeDesign } from '../../shared/presentation-design.mjs'
 import { PRESENTATION_EXPORT_FORMATS } from '../../shared/presentation-export-formats.mjs'
 import { dismissPptPopovers } from '../lib/ppt-popovers.js'
+import { PPT_HOME_EXAMPLES } from '../lib/ppt-home-examples.js'
+
+const recentProjectLimit = 6
+const projectDateFormat = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
 
 /** 独立 PPT 页面：AI 主导创作，选中对象后按需修改，只有显式保存才写入工作区。 */
 export function createPptStudioPage({
@@ -37,6 +48,8 @@ export function createPptStudioPage({
   let messages = []
   let reportedDirty = false
   let pendingDesign = null
+  let exampleScene = 'proposal'
+  let examplePage = 0
   let visualReport = null
   let visualSignature = ''
   let visualJob = null
@@ -410,35 +423,57 @@ export function createPptStudioPage({
     </section>`
   }
   function landingMarkup() {
-    return `<section class="ppt-start">
-      <div class="ppt-start-heading"><h2>这次，要做什么演示？</h2><p>把材料放在这里，或直接说说你的目标。</p></div>
-      <div class="ppt-start-main">${conversationMarkup()}
-        <div class="ppt-start-footer"><div class="ppt-starters" aria-label="创作起点"><span>试着开始</span>${[
-          ['proposal', '客户提案'],
-          ['report', '工作汇报'],
-          ['pitch', '比赛路演'],
-        ]
+    return `<section class="ppt-start${pendingDesign ? '' : ' has-showcase'}">
+      <div class="ppt-start-main">
+        <div class="ppt-start-heading"><h2>这次，要做什么演示？</h2><p>粘贴手上的材料，或直接说说这份演示要解决什么。</p></div>
+        ${conversationMarkup()}
+        <div class="ppt-start-footer"><div class="ppt-starters" role="group" aria-label="创作起点">${Object.entries(
+          PPT_HOME_EXAMPLES,
+        )
           .map(
-            ([id, label]) =>
-              `<button type="button" data-action="ppt-starter" data-starter="${id}" ${disabled(Boolean(busy))}>${label}<i data-lucide="arrow-up-right"></i></button>`,
+            ([id, example]) =>
+              `<button type="button" data-action="ppt-starter" data-starter="${id}" ${pendingDesign ? '' : `aria-pressed="${exampleScene === id}"`} ${disabled(Boolean(busy))}>${esc(example.label)}<i data-lucide="arrow-up-right"></i></button>`,
           )
           .join(
             '',
           )}</div>${button('manual', '从空白作品开始', 'plus', disabled(Boolean(busy)))}</div>
       </div>
+      ${pendingDesign ? '' : exampleMarkup()}
+    </section>`
+  }
+  function exampleMarkup() {
+    const { label, deck } = PPT_HOME_EXAMPLES[exampleScene]
+    const pageLabels = [
+      '封面',
+      { proposal: '方案页', report: '进展页', pitch: '产品页' }[exampleScene],
+      '数据页',
+    ]
+    const preview = (index) =>
+      slideMarkup(deck.slides[index], deck.theme, index, deck.slides.length)
+    return `<section class="ppt-home-showcase" aria-label="内置样稿">
+      <div class="ppt-home-showcase-head"><div><span>工作室样稿</span><h3>${esc(label)}</h3></div><span>0${examplePage + 1} / 03</span></div>
+      <div class="ppt-home-example-stage" data-ppt-example-stage tabindex="-1" role="group" aria-label="${esc(`${pageLabels[examplePage]}：${deck.slides[examplePage].title}`)}">${preview(examplePage)}</div>
+      <div class="ppt-home-showcase-footer"><div class="ppt-home-example-thumbs" role="group" aria-label="切换样稿页面">
+        ${pageLabels.map((pageLabel, index) => (index === examplePage ? '' : `<button type="button" data-action="ppt-example-page" data-index="${index}" aria-label="${esc(`查看样稿${pageLabel}`)}" ${disabled(Boolean(busy))}><div aria-hidden="true">${preview(index)}</div><small>${esc(pageLabel)}</small></button>`)).join('')}
+      </div>${button('starter', '以此开始', 'arrow-up-right', `data-starter="${exampleScene}" ${disabled(Boolean(busy))}`)}</div>
     </section>`
   }
   function galleryMarkup() {
-    return `<section class="ppt-gallery" aria-label="本地作品"><div class="ppt-section-heading"><div><h2>最近作品</h2></div><span>${projects().length} 份作品</span></div>${
-      projects().length
-        ? `<div class="ppt-project-grid">${projects()
-            .map(
-              (deck) =>
-                `<article class="ppt-project"><button class="ppt-project-open" data-action="ppt-open" data-id="${esc(deck.id)}"><div class="ppt-project-preview">${slideMarkup(deck.slides[0], deck.theme, 0, deck.slides.length)}</div><strong>${esc(deck.title)}</strong><span>${esc(PRESENTATION_SCENES[deck.scene])} · ${deck.slides.length} 页</span></button>${iconButton('delete-project', `删除作品：${deck.title}`, 'trash-2', `data-id="${esc(deck.id)}"`)}</article>`,
-            )
-            .join('')}</div>`
-        : '<div class="ppt-empty"><i data-lucide="panels-top-left"></i><p>你的第一份作品，将从这里开始。</p><span>保存后可以随时回来继续修改。</span></div>'
-    }</section>`
+    const recent = projects().toSorted(
+      (a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0),
+    )
+    const cards = (decks) =>
+      `<div class="ppt-project-grid">${decks
+        .map((deck) => {
+          const updated = new Date(deck.updatedAt)
+          const modified = Number.isFinite(updated.getTime())
+            ? `<time datetime="${updated.toISOString()}">修改于 ${esc(projectDateFormat.format(updated))}</time>`
+            : ''
+          return `<article class="ppt-project"><button class="ppt-project-open" data-action="ppt-open" data-id="${esc(deck.id)}"><div class="ppt-project-preview">${slideMarkup(deck.slides[0], deck.theme, 0, deck.slides.length)}</div><strong>${esc(deck.title)}</strong><span>${esc(PRESENTATION_SCENES[deck.scene])} · ${deck.slides.length} 页${modified}</span></button>${iconButton('delete-project', `删除作品：${deck.title}`, 'trash-2', `data-id="${esc(deck.id)}"`)}</article>`
+        })
+        .join('')}</div>`
+    const earlier = recent.slice(recentProjectLimit)
+    return `<section class="ppt-gallery" aria-label="本地作品"><div class="ppt-section-heading"><div><h2>最近作品</h2></div><span>${recent.length} 份作品</span></div>${cards(recent.slice(0, recentProjectLimit))}${earlier.length ? `<details class="ppt-gallery-more" data-disclosure-id="ppt-gallery-more"><summary>更早的 ${earlier.length} 份作品</summary>${cards(earlier)}</details>` : ''}</section>`
   }
   function pageSettingsMarkup() {
     const slide = draft.slides[selected]
@@ -489,7 +524,6 @@ export function createPptStudioPage({
     if (draft)
       return `<div class="ppt-studio has-draft">${presenting ? presentationMarkup() : editorMarkup()}</div>`
     return `<div class="ppt-studio is-home">
-      <ppt-home-particles aria-hidden="true"><canvas></canvas></ppt-home-particles>
       <div class="ppt-home-content">${landingMarkup()}${designSamplesMarkup()}${projects().length ? galleryMarkup() : ''}</div>
     </div>`
   }
@@ -573,23 +607,33 @@ export function createPptStudioPage({
       return true
     }
     if (busy) return true
+    if (action === 'ppt-example-page' && !draft && !pendingDesign) {
+      const index = Number(element.dataset.index)
+      if (
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= PPT_HOME_EXAMPLES[exampleScene].deck.slides.length
+      )
+        return true
+      examplePage = index
+      render()
+      requestAnimationFrame(() => document.querySelector('[data-ppt-example-stage]')?.focus())
+      return true
+    }
     if (action === 'ppt-starter') {
-      const starters = {
-        proposal:
-          '我想做一份客户提案。请先和我确认客户需求、方案价值与展示目标，再根据我补充的真实材料制作。',
-        report:
-          '我想做一份工作汇报。请根据我接下来提供的进展、数据和问题，帮我组织重点与下一步计划。',
-        pitch: '我想做一份比赛路演 PPT。请先确认比赛要求、项目情况与展示时长，再根据真实材料策划。',
+      const scene = element.dataset.starter
+      if (!Object.hasOwn(PPT_HOME_EXAMPLES, scene)) return true
+      if (exampleScene !== scene) {
+        exampleScene = scene
+        examplePage = 0
       }
-      if (!Object.hasOwn(starters, element.dataset.starter)) return true
       if (composer.trim()) {
         toast('输入框已有材料，已为你保留。清空后可以选择新的创作起点。')
-        document.querySelector('#ppt-message')?.focus()
-        return true
+      } else {
+        composer = PPT_HOME_EXAMPLES[scene].prompt
       }
-      composer = starters[element.dataset.starter]
       render()
-      document.querySelector('#ppt-message')?.focus()
+      requestAnimationFrame(() => document.querySelector('#ppt-message')?.focus())
       return true
     }
     if (action === 'ppt-complete-design') {

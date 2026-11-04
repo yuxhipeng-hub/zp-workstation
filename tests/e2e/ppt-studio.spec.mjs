@@ -380,113 +380,54 @@ test('PPT keeps AI available while every artwork element can be selected, edited
   }
 })
 
-test('PPT home grain responds locally and keeps a soft focus edge with reduced motion', async () => {
+test('PPT home previews sample pages, keeps input, and retains access to earlier projects', async () => {
   const directory = temporaryDirectory()
   let app
   try {
     const launched = await launch(directory)
     app = launched.app
     const window = launched.window
-    await window.evaluate(() => window.launcher.patchSettings({ theme: 'dark' }))
-    await expect(window.locator('body')).toHaveAttribute('data-theme', 'dark')
-    const layer = window.locator('ppt-home-particles canvas')
-    await expect(window.locator('ppt-home-particles')).toHaveAttribute('data-renderer', 'shader')
-    const geometry = () =>
-      layer.evaluate((canvas) => {
-        const view = canvas.closest('main')
-        const { x, y, width, height } = canvas.getBoundingClientRect()
-        const bounds = view.getBoundingClientRect()
-        return {
-          fillsView:
-            x === bounds.x &&
-            y === bounds.y &&
-            width === view.clientWidth &&
-            height === view.clientHeight &&
-            bounds.bottom === view.parentElement.getBoundingClientRect().bottom,
-          pointerEvents: globalThis.getComputedStyle(canvas).pointerEvents,
-        }
-      })
-    await expect.poll(async () => (await geometry()).fillsView).toBe(true)
-    const { pointerEvents } = await geometry()
-    expect(pointerEvents).toBe('none')
-    const composer = window.locator('.ppt-start .ppt-composer')
-    await expect(composer).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-
-    async function colorEnergy(clip, edgeWidth = 0) {
-      const { data, info } = await sharp(await window.screenshot({ clip }))
-        .removeAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true })
-      const edge = edgeWidth * (info.width / clip.width)
-      let energy = 0
-      let count = 0
-      for (let y = 0; y < info.height; y++) {
-        for (let x = 0; x < info.width; x++) {
-          if (edge && Math.min(x, y, info.width - x - 1, info.height - y - 1) > edge) continue
-          const index = (y * info.width + x) * info.channels
-          const r = data[index],
-            g = data[index + 1],
-            b = data[index + 2]
-          energy += Math.max(r, g, b) - Math.min(r, g, b)
-          count++
-        }
-      }
-      return energy / count
-    }
-    const view = await layer.boundingBox()
-    const box = await composer.boundingBox()
-    const outside = { x: view.x + 66, y: view.y + 62 }
-    const inside = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-    const square = ({ x, y }) => ({
-      x: Math.round(x - 34),
-      y: Math.round(y - 34),
-      width: 68,
-      height: 68,
-    })
-    const outsideEnergy = () => colorEnergy(square(outside))
-    const insideEnergy = () => colorEnergy(square(inside))
-    await window.mouse.move(1, 1)
-    const baseline = await outsideEnergy()
-    const insideBaseline = await insideEnergy()
-    expect(baseline).toBeGreaterThan(3)
-    expect(insideBaseline).toBeLessThan(baseline * 0.65)
-    await window.mouse.move(outside.x, outside.y)
-    await expect.poll(outsideEnergy).toBeGreaterThan(baseline * 1.3)
-    await window.mouse.move(inside.x, inside.y)
-    await expect.poll(outsideEnergy).toBeLessThan(baseline * 1.25)
-    await expect.poll(insideEnergy).toBeGreaterThan(insideBaseline * 1.6)
-    await window.mouse.move(1, 1)
-    await expect.poll(insideEnergy).toBeLessThan(insideBaseline * 1.35)
-
-    await window.emulateMedia({ reducedMotion: 'reduce' })
-    const still = await window.screenshot({ clip: square(outside) })
-    await window.mouse.move(outside.x, outside.y)
-    expect((await window.screenshot({ clip: square(outside) })).equals(still)).toBe(true)
-    const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
-    if (await taskDismiss.isVisible()) await taskDismiss.click()
-    const edgeClip = {
-      x: Math.round(box.x - 4),
-      y: Math.round(box.y - 4),
-      width: Math.round(box.width + 8),
-      height: Math.round(box.height + 8),
-    }
-    const idleEdge = await colorEnergy(edgeClip, 9)
+    const samples = window.getByRole('region', { name: '内置样稿' })
+    const stage = samples.locator('[data-ppt-example-stage]')
     const input = window.locator('#ppt-message')
-    await input.fill('透明的输入区仍能清楚阅读和选字。')
-    await input.press('Control+a')
-    expect(await input.evaluate((el) => el.selectionEnd - el.selectionStart)).toBe(
-      (await input.inputValue()).length,
-    )
+    await expect(samples.getByRole('heading', { name: '客户提案' })).toBeVisible()
+    await expect(stage).toHaveAttribute('aria-label', '封面：门店服务试点')
+    await expect(
+      samples.getByRole('group', { name: '切换样稿页面' }).getByRole('button'),
+    ).toHaveCount(2)
+    await samples.getByRole('button', { name: '查看样稿数据页' }).press('Enter')
+    await expect(stage).toBeFocused()
+    await expect(stage).toHaveAttribute('aria-label', '数据页：首次响应时长')
+    await expect(stage.locator('.ppt-chart-node')).toHaveCount(1)
+    await samples.getByRole('button', { name: '查看样稿封面' }).click()
+    await expect(stage).toHaveAttribute('aria-label', '封面：门店服务试点')
+
+    await input.fill('我的实际材料')
+    await window.getByRole('button', { name: '比赛路演', exact: true }).click()
+    await expect(input).toHaveValue('我的实际材料')
+    await expect(samples.getByRole('heading', { name: '比赛路演' })).toBeVisible()
+    await expect(stage).toHaveAttribute('aria-label', '封面：让闲置重新流通')
+    await input.clear()
+    await samples.getByRole('button', { name: '以此开始' }).click()
     await expect(input).toBeFocused()
-    await expect.poll(() => colorEnergy(edgeClip, 9)).toBeGreaterThan(idleEdge * 1.12)
-    await input.press('End')
-    fs.mkdirSync(screenshotDir, { recursive: true })
-    await window.screenshot({
-      path: path.join(screenshotDir, 'studio-home-dust-focus.png'),
-      animations: 'disabled',
-    })
-    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
-    await expect(layer).toHaveCount(0)
+    await expect(input).toHaveValue(/比赛路演/)
+    expect(
+      (await window.evaluate(() => window.launcher.getWorkspace())).presentations,
+    ).toHaveLength(0)
+    const decks = Array.from({ length: 7 }, (_, index) =>
+      createPresentation({ title: `归档作品 ${index + 1}` }),
+    )
+    await window.evaluate(async (items) => {
+      for (const deck of items) await window.launcher.savePresentation(deck)
+    }, decks)
+    await window.reload()
+    await window.locator('.nav-item[data-page="ppt"]').click()
+    await expect(window.locator('.ppt-gallery > .ppt-project-grid time')).toHaveCount(6)
+    const earlier = window.locator('.ppt-gallery-more')
+    await expect(earlier.locator('.ppt-project-open')).toBeHidden()
+    await earlier.locator('summary').click()
+    await earlier.locator('.ppt-project-open').click()
+    await expect(window.locator('#ppt-deck-title')).toHaveValue('归档作品 1')
   } finally {
     if (app) await close(app)
     fs.rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 150 })
@@ -514,6 +455,8 @@ test('PPT start choices preserve existing material and the studio fits both them
     await window.getByRole('button', { name: '工作汇报', exact: true }).click()
     await expect(window.locator('#ppt-message')).toHaveValue(/工作汇报/)
     await window.locator('#ppt-message').fill('')
+    await window.getByRole('button', { name: '客户提案', exact: true }).click()
+    await window.locator('#ppt-message').fill('')
     await window.locator('.ppt-start-heading h2').click()
     await expect(window.locator('#toasts .toast')).toHaveCount(0)
     const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
@@ -535,6 +478,19 @@ test('PPT start choices preserve existing material and the studio fits both them
       await window.evaluate((value) => window.launcher.patchSettings({ theme: value }), theme)
       await expect(window.locator('body')).toHaveAttribute('data-theme', theme)
       await expect(window.locator('.ppt-studio textarea')).toHaveCount(1)
+      await expect
+        .poll(() =>
+          window.locator('.ppt-start').evaluate((start) => {
+            const input = start.querySelector('.ppt-start-main').getBoundingClientRect()
+            const sample = start.querySelector('.ppt-home-showcase').getBoundingClientRect()
+            return sample.x >= input.right
+              ? 'side-by-side'
+              : sample.y >= input.bottom
+                ? 'stacked'
+                : 'overlap'
+          }),
+        )
+        .toBe(width === 1440 ? 'side-by-side' : 'stacked')
       await expect(
         window.getByRole('button', { name: '从空白作品开始', exact: true }),
       ).toBeVisible()
@@ -741,6 +697,7 @@ test('PPT conversation turns pasted notices into previews, edits selected pages 
       .fill('我是机械专业大二学生，想走智能制造方向，先做，项目经历待补充。')
     await window.locator('#ppt-message').press('Control+Enter')
     await expect(window.locator('.ppt-sample-grid article')).toHaveCount(3)
+    await expect(window.getByRole('region', { name: '内置样稿' })).toHaveCount(0)
     await window.getByRole('button', { name: '按此方向生成整套', exact: true }).click()
     await expect(window.locator('[data-ppt-project-title]')).toHaveValue('智能制造职业规划')
     await expect(window.locator('.ppt-thumbnail')).toHaveCount(3)
@@ -1311,30 +1268,16 @@ test('PPT studio leaves consistent space between content and the outer frame', a
             titleLeft: box('.ppt-gallery h2').left - outer.left,
             countRight: outer.right - box('.ppt-gallery .ppt-section-heading > span').right,
             cardLeft: box('.ppt-project').left - outer.left,
-            inputLeft: box('.ppt-composer').left - outer.left,
-            inputRight: outer.right - box('.ppt-composer').right,
+            startLeft: box('.ppt-start').left - outer.left,
+            startRight: outer.right - box('.ppt-start').right,
             cardBottom: outer.bottom - box('.ppt-project').bottom,
           }
         })
         for (const [edge, gap] of Object.entries(gaps))
           expect(gap, `${width}/${theme}/${edge}`).toBeGreaterThanOrEqual(16)
-        expect(Math.abs(gaps.inputLeft - gaps.inputRight)).toBeLessThanOrEqual(1)
+        expect(Math.abs(gaps.startLeft - gaps.startRight)).toBeLessThanOrEqual(1)
         expect(Math.abs(gaps.titleLeft - gaps.countRight)).toBeLessThanOrEqual(1)
-        const scrollTop = await window.locator('#view').evaluate((view) => {
-          view.scrollTop = view.scrollHeight
-          return view.scrollTop
-        })
-        expect(scrollTop).toBeGreaterThan(0)
-        await expect
-          .poll(() =>
-            window.locator('ppt-home-particles canvas').evaluate((canvas) => {
-              return (
-                canvas.getBoundingClientRect().top -
-                canvas.closest('main').getBoundingClientRect().top
-              )
-            }),
-          )
-          .toBeCloseTo(0)
+        await expect(window.locator('.ppt-project-open time')).toHaveText(/修改于/)
         fs.mkdirSync(screenshotDir, { recursive: true })
         await window.locator('.ppt-gallery').screenshot({
           path: path.join(screenshotDir, `spacing-gallery-${width}-${theme}.png`),
