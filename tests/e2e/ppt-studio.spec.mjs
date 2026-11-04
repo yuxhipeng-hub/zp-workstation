@@ -380,7 +380,7 @@ test('PPT keeps AI available while every artwork element can be selected, edited
   }
 })
 
-test('PPT home particles fill the view, react locally and respect reduced motion', async () => {
+test('PPT home dust fills the view, recedes behind text and follows reduced motion', async () => {
   const directory = temporaryDirectory()
   let app
   try {
@@ -406,34 +406,46 @@ test('PPT home particles fill the view, react locally and respect reduced motion
     await expect.poll(async () => (await geometry()).fillsView).toBe(true)
     const { pointerEvents } = await geometry()
     expect(pointerEvents).toBe('none')
-    await expect(window.locator('.ppt-start .ppt-composer')).toHaveCSS(
-      'background-color',
-      'rgba(0, 0, 0, 0)',
-    )
+    const composer = window.locator('.ppt-start .ppt-composer')
+    await expect(composer).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 
-    const alphaAroundCenter = () =>
-      layer.evaluate((canvas) => {
-        const radius = 85 * (canvas.width / canvas.clientWidth)
+    const alphaAround = (point) =>
+      layer.evaluate((canvas, location) => {
+        const bounds = canvas.getBoundingClientRect()
+        const scale = canvas.width / canvas.clientWidth
+        const radius = 45 * scale
         const pixels = canvas
           .getContext('2d')
           .getImageData(
-            canvas.width / 2 - radius,
-            canvas.height / 2 - radius,
+            (location.x - bounds.left) * scale - radius,
+            (location.y - bounds.top) * scale - radius,
             radius * 2,
             radius * 2,
           ).data
         let alpha = 0
         for (let index = 3; index < pixels.length; index += 4) alpha += pixels[index]
         return alpha
-      })
+      }, point)
+    const view = await layer.boundingBox()
+    const box = await composer.boundingBox()
+    const outside = { x: view.x + view.width - 66, y: view.y + 62 }
+    const inside = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    const outsideAlpha = () => alphaAround(outside)
+    const insideAlpha = () => alphaAround(inside)
     await window.mouse.move(1, 1)
-    const baseline = await alphaAroundCenter()
+    const baseline = await outsideAlpha()
     expect(baseline).toBeGreaterThan(0)
-    const bounds = await layer.boundingBox()
-    await window.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
-    await expect.poll(alphaAroundCenter).toBeGreaterThan(baseline * 1.35)
+    expect(await insideAlpha()).toBeLessThan(baseline * 0.3)
+    await window.mouse.move(outside.x, outside.y)
+    await expect.poll(outsideAlpha).toBeGreaterThan(baseline * 1.25)
+    await window.mouse.move(inside.x, inside.y)
+    await expect.poll(outsideAlpha).toBeLessThan(baseline * 1.2)
+    expect(await insideAlpha()).toBeLessThan(baseline * 0.3)
+    const borderOpacity = () =>
+      composer.evaluate((el) => Number(globalThis.getComputedStyle(el, '::before').opacity))
+    await expect.poll(borderOpacity).toBeCloseTo(0.7)
     await window.mouse.move(1, 1)
-    await expect.poll(alphaAroundCenter).toBeLessThan(baseline * 1.3)
+    await expect.poll(borderOpacity).toBeCloseTo(0.48)
 
     await window.emulateMedia({ reducedMotion: 'reduce' })
     expect(
@@ -444,11 +456,26 @@ test('PPT home particles fill the view, react locally and respect reduced motion
         return image === canvas.toDataURL()
       }),
     ).toBe(true)
+    const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
+    if (await taskDismiss.isVisible()) await taskDismiss.click()
+    const input = window.locator('#ppt-message')
+    await input.fill('透明的输入区仍能清楚阅读和选字。')
+    await input.press('Control+a')
+    expect(await input.evaluate((el) => el.selectionEnd - el.selectionStart)).toBe(
+      (await input.inputValue()).length,
+    )
+    await expect.poll(borderOpacity).toBe(1)
+    await input.press('End')
+    fs.mkdirSync(screenshotDir, { recursive: true })
+    await window.screenshot({
+      path: path.join(screenshotDir, 'studio-home-dust-focus.png'),
+      animations: 'disabled',
+    })
     await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
     await expect(layer).toHaveCount(0)
   } finally {
     if (app) await close(app)
-    fs.rmSync(directory, { recursive: true, force: true })
+    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 150 })
   }
 })
 

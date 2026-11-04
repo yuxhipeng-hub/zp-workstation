@@ -803,8 +803,68 @@ ppt-home-particles > canvas {
 }
 
 .ppt-start .ppt-composer {
+  --ppt-composer-cyan: #59c7de;
+  --ppt-composer-violet: #9a86f7;
+  position: relative;
+  border-color: transparent;
   border-radius: var(--radius-lg);
   background: transparent;
+  transition: box-shadow var(--motion-base);
+}
+
+body[data-theme='light'] .ppt-start .ppt-composer {
+  --ppt-composer-cyan: #1785a2;
+  --ppt-composer-violet: #7153c0;
+}
+
+.ppt-start .ppt-composer::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(115deg, var(--ppt-composer-cyan), var(--ppt-composer-violet));
+  mask:
+    linear-gradient(white 0 0) content-box,
+    linear-gradient(white 0 0);
+  mask-composite: exclude;
+  opacity: 0.48;
+  pointer-events: none;
+  transition: opacity var(--motion-base);
+  content: '';
+}
+
+.ppt-start .ppt-composer:hover::before {
+  opacity: 0.7;
+}
+
+.ppt-start .ppt-composer:focus-within {
+  border-color: transparent;
+  outline: none;
+  box-shadow:
+    -2px 0 10px color-mix(in srgb, var(--ppt-composer-cyan) 20%, transparent),
+    2px 0 10px color-mix(in srgb, var(--ppt-composer-violet) 20%, transparent);
+}
+
+.ppt-start .ppt-composer:focus-within::before {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ppt-start .ppt-composer,
+  .ppt-start .ppt-composer::before {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ppt-start .ppt-composer {
+    border-color: ButtonText;
+  }
+
+  .ppt-start .ppt-composer:focus-within {
+    outline: 2px solid Highlight;
+  }
 }
 
 .ppt-start .ppt-composer textarea {

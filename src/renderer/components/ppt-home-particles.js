@@ -1,12 +1,27 @@
-const CELL_SIZE = 43
-const POINTER_RADIUS = 132
+const CELL_SIZE = 23
+const MAX_PARTICLES = 3200
+const POINTER_RADIUS = 116
+
+function distanceFromReadingArea(x, y, area) {
+  const dx = Math.abs(x - area.centerX) - area.halfWidth + area.radius
+  const dy = Math.abs(y - area.centerY) - area.halfHeight + area.radius
+  return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - area.radius
+}
+
+function readingAreaOpacity(distance) {
+  // Fade across the rounded edge. Inside, only a trace of the original particle remains.
+  const blend = Math.max(0, Math.min(1, (distance + 10) / 34))
+  return 0.12 + 0.88 * blend * blend * (3 - 2 * blend)
+}
 
 class PptHomeParticles extends HTMLElement {
   connectedCallback() {
     const view = this.closest('main')
     const canvas = this.querySelector('canvas')
+    const composer = this.parentElement?.querySelector('.ppt-start .ppt-composer')
     const context = canvas?.getContext('2d')
     if (!view || !context) return
+    const cornerRadius = composer ? parseFloat(getComputedStyle(composer).borderTopLeftRadius) : 0
 
     const listeners = new AbortController()
     const { signal } = listeners
@@ -22,36 +37,51 @@ class PptHomeParticles extends HTMLElement {
 
     function draw() {
       context.clearRect(0, 0, width, height)
-      const bounds = pointer && canvas.getBoundingClientRect()
+      const bounds = canvas.getBoundingClientRect()
+      const composerBounds = composer?.getBoundingClientRect()
+      const readingArea = composerBounds && {
+        centerX: composerBounds.left - bounds.left + composerBounds.width / 2,
+        centerY: composerBounds.top - bounds.top + composerBounds.height / 2,
+        halfWidth: composerBounds.width / 2,
+        halfHeight: composerBounds.height / 2,
+        radius: cornerRadius,
+      }
+      const cursor = pointer && { x: pointer.x - bounds.left, y: pointer.y - bounds.top }
+      const react =
+        cursor && (!readingArea || distanceFromReadingArea(cursor.x, cursor.y, readingArea) > 0)
+      const colorPhase = elapsed * 0.16
       for (const particle of particles) {
-        const x = particle.x + Math.sin(elapsed * 0.65 + particle.phase) * 7
-        const y = particle.y + Math.cos(elapsed * 0.48 + particle.phase) * 9
+        const x = particle.x + Math.sin(elapsed * 0.46 + particle.phase) * 4
+        const y = particle.y + Math.cos(elapsed * 0.37 + particle.phase) * 5
         let ripple = 0
         let offsetX = 0
         let offsetY = 0
-        if (bounds) {
-          const dx = x - (pointer.x - bounds.left)
-          const dy = y - (pointer.y - bounds.top)
-          const distance = Math.hypot(dx, dy)
-          ripple = Math.max(0, 1 - distance / POINTER_RADIUS)
-          const push = (ripple * 38) / Math.max(distance, 1)
-          offsetX = dx * push
-          offsetY = dy * push
+        if (react) {
+          const dx = x - cursor.x
+          const dy = y - cursor.y
+          const squaredDistance = dx * dx + dy * dy
+          if (squaredDistance < POINTER_RADIUS * POINTER_RADIUS) {
+            const distance = Math.sqrt(squaredDistance)
+            ripple = 1 - distance / POINTER_RADIUS
+            const push = (ripple * 11) / Math.max(distance, 1)
+            offsetX = dx * push
+            offsetY = dy * push
+          }
         }
-        particle.offsetX += (offsetX - particle.offsetX) * 0.2
-        particle.offsetY += (offsetY - particle.offsetY) * 0.2
-        particle.glow += (ripple - particle.glow) * 0.2
-        const hue = (particle.hue + elapsed * 9) % 360
-        const opacity = particle.opacity + particle.glow * 0.38
-        context.fillStyle = `hsla(${hue}, 76%, ${55 + particle.glow * 13}%, ${opacity})`
+        particle.offsetX += (offsetX - particle.offsetX) * 0.15
+        particle.offsetY += (offsetY - particle.offsetY) * 0.15
+        particle.glow += (ripple - particle.glow) * 0.15
+        const drawX = x + particle.offsetX
+        const drawY = y + particle.offsetY
+        const visibility = readingArea
+          ? readingAreaOpacity(distanceFromReadingArea(drawX, drawY, readingArea))
+          : 1
+        const hue = particle.hue + particle.hueRange * Math.sin(colorPhase + particle.hue / 30)
+        const glow = particle.glow * visibility
+        const opacity = (particle.opacity + glow * 0.26) * visibility
+        context.fillStyle = `hsla(${hue}, 73%, ${55 + glow * 12}%, ${opacity})`
         context.beginPath()
-        context.arc(
-          x + particle.offsetX,
-          y + particle.offsetY,
-          particle.radius + particle.glow * 1.35,
-          0,
-          Math.PI * 2,
-        )
+        context.arc(drawX, drawY, Math.min(1, particle.radius + glow * 0.18), 0, Math.PI * 2)
         context.fill()
       }
     }
@@ -92,20 +122,26 @@ class PptHomeParticles extends HTMLElement {
       canvas.height = Math.round(height * scale)
       context.setTransform(scale, 0, 0, scale, 0, 0)
 
-      const columns = Math.ceil(width / CELL_SIZE)
-      const rows = Math.ceil(height / CELL_SIZE)
-      particles = Array.from({ length: columns * rows }, (_, index) => ({
-        x: ((index % columns) + Math.random()) * (width / columns),
-        y: (Math.floor(index / columns) + Math.random()) * (height / rows),
-        phase: Math.random() * Math.PI * 2,
-        hue: Math.random() * 360,
-        radius: 1 + Math.random() * 1.45,
-        opacity: 0.28 + Math.random() * 0.32,
-        offsetX: 0,
-        offsetY: 0,
-        glow: 0,
-      }))
-      draw()
+      const cellSize = Math.max(CELL_SIZE, Math.sqrt((width * height) / MAX_PARTICLES))
+      const columns = Math.ceil(width / cellSize)
+      const rows = Math.ceil(height / cellSize)
+      particles = Array.from({ length: columns * rows }, (_, index) => {
+        const column = ((index % columns) + Math.random()) / columns
+        const row = (Math.floor(index / columns) + Math.random()) / rows
+        const amber = Math.random() < 0.045
+        return {
+          x: column * width,
+          y: row * height,
+          phase: Math.random() * Math.PI * 2,
+          hue: amber ? 40 : 223 + 33 * Math.sin(column * 4.6 + row * 2.1),
+          hueRange: amber ? 6 : 17,
+          radius: Math.random() < 0.08 ? 0.82 + Math.random() * 0.14 : 0.4 + Math.random() * 0.4,
+          opacity: 0.33 + Math.random() * 0.26,
+          offsetX: 0,
+          offsetY: 0,
+          glow: 0,
+        }
+      })
     }
 
     view.addEventListener(
@@ -119,10 +155,21 @@ class PptHomeParticles extends HTMLElement {
     const clearPointer = () => (pointer = null)
     view.addEventListener('pointerleave', clearPointer, { signal })
     view.addEventListener('pointercancel', clearPointer, { signal })
+    view.addEventListener(
+      'scroll',
+      () => {
+        if (reducedMotion.matches) draw()
+      },
+      { passive: true, signal },
+    )
     document.addEventListener('visibilitychange', syncMotion, { signal })
     reducedMotion.addEventListener('change', syncMotion, { signal })
-    const observer = new ResizeObserver(resize)
+    const observer = new ResizeObserver(() => {
+      resize()
+      if (reducedMotion.matches) draw()
+    })
     observer.observe(view)
+    if (composer) observer.observe(composer)
     resize()
     syncMotion()
 
