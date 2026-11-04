@@ -380,7 +380,7 @@ test('PPT keeps AI available while every artwork element can be selected, edited
   }
 })
 
-test('PPT home dust fills the view, recedes behind text and follows reduced motion', async () => {
+test('PPT home dust reacts inside and outside the composer while the edge flows', async () => {
   const directory = temporaryDirectory()
   let app
   try {
@@ -428,24 +428,32 @@ test('PPT home dust fills the view, recedes behind text and follows reduced moti
       }, point)
     const view = await layer.boundingBox()
     const box = await composer.boundingBox()
-    const outside = { x: view.x + view.width - 66, y: view.y + 62 }
+    const outside = { x: view.x + 66, y: view.y + 62 }
     const inside = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
     const outsideAlpha = () => alphaAround(outside)
     const insideAlpha = () => alphaAround(inside)
     await window.mouse.move(1, 1)
     const baseline = await outsideAlpha()
+    const insideBaseline = await insideAlpha()
     expect(baseline).toBeGreaterThan(0)
-    expect(await insideAlpha()).toBeLessThan(baseline * 0.3)
+    expect(insideBaseline).toBeGreaterThan(baseline * 0.15)
+    expect(insideBaseline).toBeLessThan(baseline * 0.5)
     await window.mouse.move(outside.x, outside.y)
     await expect.poll(outsideAlpha).toBeGreaterThan(baseline * 1.25)
     await window.mouse.move(inside.x, inside.y)
     await expect.poll(outsideAlpha).toBeLessThan(baseline * 1.2)
-    expect(await insideAlpha()).toBeLessThan(baseline * 0.3)
+    await expect.poll(insideAlpha).toBeGreaterThan(insideBaseline * 1.6)
     const borderOpacity = () =>
       composer.evaluate((el) => Number(globalThis.getComputedStyle(el, '::before').opacity))
-    await expect.poll(borderOpacity).toBeCloseTo(0.7)
+    const edgeGradient = () =>
+      composer.evaluate((el) => globalThis.getComputedStyle(el, '::before').backgroundImage)
+    const initialGradient = await edgeGradient()
+    expect(initialGradient).toContain('conic-gradient')
+    await expect.poll(edgeGradient).not.toBe(initialGradient)
+    await expect.poll(borderOpacity).toBe(1)
     await window.mouse.move(1, 1)
-    await expect.poll(borderOpacity).toBeCloseTo(0.48)
+    await expect.poll(borderOpacity).toBeCloseTo(0.85)
+    await expect.poll(insideAlpha).toBeLessThan(insideBaseline * 1.3)
 
     await window.emulateMedia({ reducedMotion: 'reduce' })
     expect(
@@ -456,6 +464,9 @@ test('PPT home dust fills the view, recedes behind text and follows reduced moti
         return image === canvas.toDataURL()
       }),
     ).toBe(true)
+    expect(
+      await composer.evaluate((el) => globalThis.getComputedStyle(el, '::before').animationName),
+    ).toBe('none')
     const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
     if (await taskDismiss.isVisible()) await taskDismiss.click()
     const input = window.locator('#ppt-message')
