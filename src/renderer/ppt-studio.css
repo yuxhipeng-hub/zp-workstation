@@ -22,6 +22,56 @@
   box-shadow: none;
 }
 
+.view[data-page='ppt']:has(> .route-canvas > .ppt-studio.is-home) {
+  grid-row: 3;
+  padding: 0;
+  background: transparent;
+}
+
+.view[data-page='ppt'] > .route-canvas:has(> .ppt-studio.is-home) {
+  display: grid;
+  min-height: 100%;
+  max-width: none;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.ppt-studio.is-home > ppt-home-particles {
+  display: block;
+  position: sticky;
+  inset-block-start: 0;
+  block-size: var(--ppt-particle-height, 0px);
+  margin-block-end: calc(0px - var(--ppt-particle-height, 0px));
+  overflow: clip;
+  pointer-events: none;
+}
+
+ppt-home-particles > canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ppt-home-content {
+  position: relative;
+  z-index: 1;
+  max-width: 1160px;
+  margin-inline: auto;
+  padding: 0 var(--ppt-gutter) 56px;
+}
+
+.ppt-home-content :is(.ppt-design-samples, .ppt-message-user, .ppt-project-open) {
+  background: transparent;
+}
+
+.ppt-home-content .ppt-design-samples {
+  margin-inline: 0;
+  padding-inline: 0;
+  border: 0;
+}
+
 .ppt-design-samples {
   margin: 24px var(--ppt-gutter);
   padding: 24px;
@@ -336,12 +386,6 @@
 .ppt-gallery {
   padding: 28px 0 var(--ppt-gutter);
   border-top: 1px solid var(--line);
-}
-
-.ppt-studio.is-home {
-  max-width: 1160px;
-  margin-inline: auto;
-  padding-inline: var(--ppt-gutter);
 }
 
 .ppt-studio.is-home .ppt-section-heading {
@@ -683,7 +727,7 @@
   grid-template-columns: minmax(0, 1fr);
   max-width: 800px;
   margin: 0 auto;
-  padding: 56px 0 40px;
+  padding: clamp(44px, 9vh, 96px) 0 40px;
 }
 
 .ppt-start-heading {
@@ -692,7 +736,7 @@
 }
 
 .ppt-start-heading h2 {
-  font-size: clamp(24px, 2.4vw, 28px);
+  font-size: clamp(25px, 3.3vw, 42px);
   line-height: 1.4;
   font-weight: 600;
   text-wrap: balance;
@@ -759,8 +803,8 @@
 }
 
 .ppt-start .ppt-composer {
-  border-radius: 10px;
-  background: var(--panel);
+  border-radius: var(--radius-lg);
+  background: transparent;
 }
 
 .ppt-start .ppt-composer textarea {
@@ -986,8 +1030,8 @@
 }
 
 @media (max-width: 600px) {
-  .ppt-studio.is-home {
-    padding-inline: 0;
+  .ppt-home-content {
+    --ppt-gutter: 16px;
   }
   .ppt-composer-footer {
     flex-wrap: wrap;
@@ -1446,12 +1490,6 @@
 .ppt-slide [role='button']:focus-visible {
   outline: 2px solid var(--info);
   outline-offset: 2px;
-}
-.ppt-start .ppt-composer {
-  border-color: var(--ppt-hairline);
-  border-radius: 20px;
-  background: var(--panel);
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--bg) 10%, transparent);
 }
 .ppt-start-heading h2 {
   font-weight: 500;

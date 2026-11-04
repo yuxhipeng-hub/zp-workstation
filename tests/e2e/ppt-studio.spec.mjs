@@ -380,6 +380,78 @@ test('PPT keeps AI available while every artwork element can be selected, edited
   }
 })
 
+test('PPT home particles fill the view, react locally and respect reduced motion', async () => {
+  const directory = temporaryDirectory()
+  let app
+  try {
+    const launched = await launch(directory)
+    app = launched.app
+    const window = launched.window
+    const layer = window.locator('ppt-home-particles canvas')
+    const geometry = () =>
+      layer.evaluate((canvas) => {
+        const view = canvas.closest('main')
+        const { x, y, width, height } = canvas.getBoundingClientRect()
+        const bounds = view.getBoundingClientRect()
+        return {
+          fillsView:
+            x === bounds.x &&
+            y === bounds.y &&
+            width === view.clientWidth &&
+            height === view.clientHeight &&
+            bounds.bottom === view.parentElement.getBoundingClientRect().bottom,
+          pointerEvents: globalThis.getComputedStyle(canvas).pointerEvents,
+        }
+      })
+    await expect.poll(async () => (await geometry()).fillsView).toBe(true)
+    const { pointerEvents } = await geometry()
+    expect(pointerEvents).toBe('none')
+    await expect(window.locator('.ppt-start .ppt-composer')).toHaveCSS(
+      'background-color',
+      'rgba(0, 0, 0, 0)',
+    )
+
+    const alphaAroundCenter = () =>
+      layer.evaluate((canvas) => {
+        const radius = 85 * (canvas.width / canvas.clientWidth)
+        const pixels = canvas
+          .getContext('2d')
+          .getImageData(
+            canvas.width / 2 - radius,
+            canvas.height / 2 - radius,
+            radius * 2,
+            radius * 2,
+          ).data
+        let alpha = 0
+        for (let index = 3; index < pixels.length; index += 4) alpha += pixels[index]
+        return alpha
+      })
+    await window.mouse.move(1, 1)
+    const baseline = await alphaAroundCenter()
+    expect(baseline).toBeGreaterThan(0)
+    const bounds = await layer.boundingBox()
+    await window.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await expect.poll(alphaAroundCenter).toBeGreaterThan(baseline * 1.35)
+    await window.mouse.move(1, 1)
+    await expect.poll(alphaAroundCenter).toBeLessThan(baseline * 1.3)
+
+    await window.emulateMedia({ reducedMotion: 'reduce' })
+    expect(
+      await layer.evaluate(async (canvas) => {
+        const image = canvas.toDataURL()
+        for (let index = 0; index < 5; index += 1)
+          await new Promise((resolve) => globalThis.requestAnimationFrame(resolve))
+        return image === canvas.toDataURL()
+      }),
+    ).toBe(true)
+    await window.getByRole('button', { name: '从空白作品开始', exact: true }).click()
+    await expect(layer).toHaveCount(0)
+  } finally {
+    if (app) await close(app)
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('PPT start choices preserve existing material and the studio fits both themes and narrow windows', async () => {
   const directory = temporaryDirectory()
   let app
@@ -400,6 +472,11 @@ test('PPT start choices preserve existing material and the studio fits both them
     await window.locator('#ppt-message').fill('')
     await window.getByRole('button', { name: '工作汇报', exact: true }).click()
     await expect(window.locator('#ppt-message')).toHaveValue(/工作汇报/)
+    await window.locator('#ppt-message').fill('')
+    await window.locator('.ppt-start-heading h2').click()
+    await expect(window.locator('#toasts .toast')).toHaveCount(0)
+    const taskDismiss = window.getByRole('button', { name: '收起任务', exact: true })
+    if (await taskDismiss.isVisible()) await taskDismiss.click()
 
     fs.mkdirSync(screenshotDir, { recursive: true })
     for (const [width, theme] of [
@@ -1202,6 +1279,21 @@ test('PPT studio leaves consistent space between content and the outer frame', a
           expect(gap, `${width}/${theme}/${edge}`).toBeGreaterThanOrEqual(16)
         expect(Math.abs(gaps.inputLeft - gaps.inputRight)).toBeLessThanOrEqual(1)
         expect(Math.abs(gaps.titleLeft - gaps.countRight)).toBeLessThanOrEqual(1)
+        const scrollTop = await window.locator('#view').evaluate((view) => {
+          view.scrollTop = view.scrollHeight
+          return view.scrollTop
+        })
+        expect(scrollTop).toBeGreaterThan(0)
+        await expect
+          .poll(() =>
+            window.locator('ppt-home-particles canvas').evaluate((canvas) => {
+              return (
+                canvas.getBoundingClientRect().top -
+                canvas.closest('main').getBoundingClientRect().top
+              )
+            }),
+          )
+          .toBeCloseTo(0)
         fs.mkdirSync(screenshotDir, { recursive: true })
         await window.locator('.ppt-gallery').screenshot({
           path: path.join(screenshotDir, `spacing-gallery-${width}-${theme}.png`),

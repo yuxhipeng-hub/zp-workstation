@@ -486,7 +486,12 @@ export function createPptStudioPage({
   function renderPage() {
     if (!draft?.slides[selected]?.canvas) canvasEditor.reset()
     reportDirty()
-    return `<div class="ppt-studio ${draft ? 'has-draft' : 'is-home'}">${presenting && draft ? presentationMarkup() : draft ? editorMarkup() : `${landingMarkup()}${designSamplesMarkup()}${projects().length ? galleryMarkup() : ''}`}</div>`
+    if (draft)
+      return `<div class="ppt-studio has-draft">${presenting ? presentationMarkup() : editorMarkup()}</div>`
+    return `<div class="ppt-studio is-home">
+      <ppt-home-particles aria-hidden="true"><canvas></canvas></ppt-home-particles>
+      <div class="ppt-home-content">${landingMarkup()}${designSamplesMarkup()}${projects().length ? galleryMarkup() : ''}</div>
+    </div>`
   }
   function refreshPreview() {
     if (visualReport && visualSignature !== visualRevision(draft)) {
