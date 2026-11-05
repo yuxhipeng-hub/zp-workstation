@@ -7,6 +7,7 @@ const {
   nativeImage,
   nativeTheme,
   safeStorage,
+  protocol,
   dialog,
 } = require('electron')
 const { APP_ID, APP_NAME } = require('./constants.cjs')
@@ -22,6 +23,13 @@ const { BackupManager } = require('./backup-manager.cjs')
 const { ReminderManager } = require('./reminder-manager.cjs')
 const { createStartupTimer } = require('./startup-timer.cjs')
 const { registerIpc } = require('./ipc.cjs')
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'studio-media',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+])
 
 const startupTimer = createStartupTimer()
 

@@ -16,6 +16,20 @@ export const SYNC_COMMAND = 'npm run sync:vault'
 /** 仓库文档逐份镜像到 vault。 */
 export const MIRROR_NOTES = [
   {
+    source: 'docs/examples/creation-record/README.md',
+    note: '50 规格/创作记录样例.md',
+    title: '创作记录样例',
+    category: '产品',
+    description: '显式关联的外部记录协议样例使用说明',
+  },
+  {
+    source: 'docs/specs/003-creation-studio.md',
+    note: '10 产品/创作工作室规格.md',
+    title: '创作工作室规格',
+    category: '产品',
+    description: '创作项目、作品版本、审片反馈、外部记录协议与执行边界',
+  },
+  {
     source: 'README.md',
     note: '10 产品/项目说明（README）.md',
     title: '项目说明（README）',

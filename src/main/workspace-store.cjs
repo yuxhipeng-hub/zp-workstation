@@ -1,3 +1,4 @@
+const { cleanProjects } = require('./creation-schema.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
@@ -15,6 +16,7 @@ const DEFAULT_WORKSPACE = {
   courses: [],
   assignments: [],
   presentations: [],
+  creationProjects: [],
   knowledge: [],
   experiments: [],
   experimentGroups: [],
@@ -290,11 +292,24 @@ class WorkspaceStore {
         .filter(Boolean)
         .slice(0, PRESENTATION_LIMITS.projects)
         .filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index),
+      creationProjects: cleanProjects(stored.creationProjects),
       knowledge: Array.isArray(stored.knowledge) ? stored.knowledge : [],
       experiments,
       experimentGroups,
       schedule: cleanSchedule(stored.schedule),
     }
+  }
+
+  saveCreationProjects(projects) {
+    const previous = this.data.creationProjects
+    this.data.creationProjects = cleanProjects(projects)
+    try {
+      this.save()
+    } catch (error) {
+      this.data.creationProjects = previous
+      throw error
+    }
+    return this.get()
   }
 
   courseNameFor(item) {

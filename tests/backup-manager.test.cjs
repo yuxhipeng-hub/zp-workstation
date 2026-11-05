@@ -53,6 +53,16 @@ test('creates encrypted archives, includes materials, and restores workspace dat
   const { createPresentation } = require('../src/shared/presentation.mjs')
   const presentation = createPresentation({ title: '完整备份中的 PPT' })
   harness.workspace.savePresentation(presentation)
+  harness.workspace.saveCreationProjects([
+    {
+      id: 'creation-backup',
+      name: '创作备份',
+      artifacts: [{ id: 'video', type: 'video', path: 'Z:\\missing.mp4', label: 'v1' }],
+      reviews: [
+        { id: 'feedback', artifactId: 'video', time: 6.2, problem: '问题', expected: '改善' },
+      ],
+    },
+  ])
   const material = path.join(harness.experimentDir, '算法实验', '报告.pdf')
   fs.mkdirSync(path.dirname(material), { recursive: true })
   fs.writeFileSync(material, 'fixture')
@@ -91,6 +101,8 @@ test('creates encrypted archives, includes materials, and restores workspace dat
   assert.equal(restored.workspace.assignments[0].title, '备份前作业')
   assert.equal(restored.workspace.presentations[0].id, presentation.id)
   assert.equal(restored.workspace.presentations[0].title, '完整备份中的 PPT')
+  assert.equal(restored.workspace.creationProjects[0].reviews[0].time, 6.2)
+  assert.equal(restored.workspace.creationProjects[0].artifacts[0].path, 'Z:\\missing.mp4')
   assert.equal(restored.workspace.experiments[0].filePath, material)
   assert.equal(
     fs.readFileSync(path.join(harness.dshHome, 'skills', 'writer', 'SKILL.md'), 'utf8'),

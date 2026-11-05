@@ -14,6 +14,36 @@ function createStore() {
   }
 }
 
+test('creation projects normalize old workspaces, survive restart and backup, rollback failed save', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  assert.deepEqual(store.normalizeData({ version: 1 }).creationProjects, [])
+  store.saveCreationProjects([
+    {
+      id: 'studio',
+      name: '测试',
+      stage: '简报',
+      brief: '要求',
+      apiKey: 'must-not-persist',
+      artifacts: [{ id: 'v1', type: 'video', path: 'Z:\\missing.mp4', label: 'v1' }],
+    },
+  ])
+  assert.equal(new WorkspaceStore(directory).get().creationProjects[0].brief, '要求')
+  assert.equal(JSON.stringify(store.get()).includes('must-not-persist'), false)
+  const backup = store.createBackup('creation')
+  const before = store.get().creationProjects
+  const originalSave = store.save
+  store.save = () => {
+    throw new Error('disk full')
+  }
+  assert.throws(() => store.saveCreationProjects([]), /disk full/)
+  assert.deepEqual(store.get().creationProjects, before)
+  store.save = originalSave
+  store.saveCreationProjects([])
+  store.restoreBackup(backup.fileName)
+  assert.equal(store.get().creationProjects[0].artifacts[0].path, 'Z:\\missing.mp4')
+})
+
 test('canvas objects, images and locks survive workspace reload and backup restore', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

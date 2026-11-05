@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: studio-media:; media-src 'self' blob: studio-media:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="./icon.svg" />
@@ -66,6 +66,15 @@
 
           <div class="nav-section nav-section-tools">
             <p class="nav-label">工具</p>
+            <button
+              class="nav-item"
+              type="button"
+              data-page="creation"
+              aria-label="创作工作室"
+              title="创作工作室"
+            >
+              <i data-lucide="clapperboard"></i><span>创作工作室</span>
+            </button>
             <button
               class="nav-item"
               type="button"

@@ -1,3 +1,5 @@
+import { createCreationStudioPage } from './pages/creation-studio.js'
+import './creation-studio.css'
 import { createIcons, FileCheck2, FolderOpen, icons, Upload } from 'lucide'
 import { defineMorphIcon } from 'morphicons/element'
 import { createModelSettingsPage } from './pages/model-settings.js'
@@ -238,6 +240,12 @@ function aiProtocolLabel(protocol) {
 }
 
 let modelSettingsPage = null
+let creationStudioPage = null
+function getCreationStudioPage() {
+  if (!creationStudioPage)
+    creationStudioPage = createCreationStudioPage({ state, api, escapeHtml, render, toast })
+  return creationStudioPage
+}
 let pptStudioPage = null
 
 function getPptStudioPage() {
@@ -1429,6 +1437,7 @@ function render(options = {}) {
     experiments: () => getExperimentsPage().renderPage(),
     news: () => getNewsPage().renderPage(),
     ai: () => getModelSettingsPage().renderPage(),
+    creation: () => getCreationStudioPage().renderPage(),
     ppt: () => getPptStudioPage().renderPage(),
     guide: () => getGuidePage().renderPage(),
     logs: () => getLogsPage().renderPage(),
@@ -2356,6 +2365,8 @@ async function persistSettingField(element) {
 }
 
 async function handleAction(action, element) {
+  if (action.startsWith('cs-') && (await getCreationStudioPage().handleAction(action, element)))
+    return
   if (action.startsWith('ppt-') && (await getPptStudioPage().handleAction(action, element))) return
   if (await getModelSettingsPage().handleAction(action, element)) return
   switch (action) {
@@ -3436,6 +3447,10 @@ document.addEventListener('click', async (event) => {
 
   const action = event.target.closest('[data-action]')
   if (action && !action.disabled) {
+    if (action.dataset.action.startsWith('cs-')) {
+      await guard(() => handleAction(action.dataset.action, action), '工作室操作失败')
+      return
+    }
     if (action.closest('summary')) {
       event.preventDefault()
       event.stopPropagation()

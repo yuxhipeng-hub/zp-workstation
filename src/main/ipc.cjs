@@ -1,7 +1,17 @@
+const { registerCreationIpc } = require('./creation-ipc.cjs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
-const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = require('electron')
+const {
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  shell,
+  protocol,
+  net,
+} = require('electron')
 const { THEME_VALUES } = require('./constants.cjs')
 const { collectDiagnostics } = require('./diagnostics.cjs')
 const { resolveDropReferences } = require('./drop-reference.cjs')
@@ -115,6 +125,16 @@ function registerIpc({
     return aihotClient.getStory(publicId, { force: options.force === true })
   })
 
+  registerCreationIpc({
+    ipcMain,
+    workspace,
+    dialog,
+    shell,
+    clipboard,
+    protocol,
+    net,
+    getMainWindow,
+  })
   ipcMain.handle('workspace:get', () => workspace.get())
   registerPresentationIpc({
     ipcMain,
