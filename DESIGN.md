@@ -155,6 +155,23 @@ The first approved sample set is:
 These pages establish the component and spacing rules before the remaining
 features are migrated.
 
+### Approved Compact List Reference
+
+The GitHub discovery page was approved by the user on 2026-11-06 as the reference
+for ranking pages, news lists, and compact filter toolbars. Its reusable rules
+are maintained in [the Chinese design system, section 9](docs/DESIGN_SYSTEM.md#9-榜单与资讯列表已确认的视觉基准).
+
+- Use one outer surface, generous content padding, text view tabs, segmented
+  period controls, and straight row dividers.
+- Compact toolbar controls use 30px height; filter triggers and options use
+  32px height, with 12px labels. Preserve outer padding when reducing controls.
+- Filters open a theme-aware rounded popover with selected checks, comfortable
+  option padding, a subtle scrollbar, and full keyboard support.
+- Avoid duplicate headings and persistent explanatory clutter. Keep the layout,
+  scroll position, and focus stable during switching and background refreshes.
+- This compact density applies to list toolbars; forms and editors retain their
+  own task-appropriate control sizes.
+
 ## Migration Status
 
 All product routes now share the same surface and component rules:
