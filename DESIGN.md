@@ -16,6 +16,10 @@ Secondary reference: Linear for dense lists and navigation clarity.
 4. Motion explains state changes. It should not be a page entrance performance.
 5. The colorful `zp` mark is the only intentionally expressive brand element.
 6. Chinese text must remain comfortable on Windows at 100%, 125%, and 150% scaling.
+7. Remove unnecessary small-print annotations wherever possible: duplicate
+   introductions, obvious instructions, and implementation notes. Keep essential
+   attribution, timestamps, errors, and action feedback readable; do not substitute
+   tiny or low-contrast text for removing clutter. Move optional help into details.
 
 ## Color
 

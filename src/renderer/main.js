@@ -26,6 +26,7 @@ import './styles.css'
 import './design-system.css'
 import './ui-refresh.css'
 import './github-discovery.css'
+import './news.css'
 import './ppt-studio.css'
 
 defineMorphIcon()
@@ -1186,6 +1187,16 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('keydown', (event) => {
   if (state.page === 'github' && getGitHubPage().handleKeydown(event)) return
+  if (
+    state.page === 'news' &&
+    event.target.id === 'newsSearch' &&
+    event.key === 'Enter' &&
+    !event.isComposing
+  ) {
+    event.preventDefault()
+    void guard(() => handleAction('search-news', event.target), '搜索资讯失败')
+    return
+  }
   const input = event.target.closest?.('[data-time-input]')
   if (input) {
     if (event.key === 'ArrowDown') {
@@ -1447,6 +1458,12 @@ function render(options = {}) {
     if (active) item.setAttribute('aria-current', 'page')
     else item.removeAttribute('aria-current')
   })
+
+  if (samePage && state.page === 'news' && getNewsPage().update()) {
+    syncOnboardingOverlay()
+    refreshIcons()
+    return
+  }
 
   const renderers = {
     today: () => getTodayPage().renderPage(),
@@ -1721,7 +1738,7 @@ async function loadAihot({ force = false } = {}) {
   if (state.aihotBusy) return
   state.aihotBusy = true
   state.aihotError = null
-  if (state.page === 'today') render()
+  if (state.page === 'today' || (state.page === 'news' && state.newsTab === 'daily')) render()
   try {
     const [daily, items] = await Promise.all([
       api.getAihotDaily({ force }),
@@ -1735,7 +1752,7 @@ async function loadAihot({ force = false } = {}) {
     state.aihotError = error.message
   } finally {
     state.aihotBusy = false
-    if (state.page === 'today') render()
+    if (state.page === 'today' || (state.page === 'news' && state.newsTab === 'daily')) render()
   }
 }
 
@@ -1754,15 +1771,12 @@ function findNewsItem(id) {
   return null
 }
 
+let newsLoadSequence = 0
 async function loadNews({ reset = false, force = false } = {}) {
-  if (state.newsBusy) return
+  if (state.newsBusy && !reset) return
+  const sequence = ++newsLoadSequence
   state.newsBusy = true
   state.newsError = null
-  if (reset) {
-    state.newsItems = []
-    state.newsCursor = ''
-    state.newsHasMore = false
-  }
   if (state.page === 'news') render()
   try {
     const result = await api.getAihotItems({
@@ -1772,19 +1786,24 @@ async function loadNews({ reset = false, force = false } = {}) {
       category: state.newsCategory,
       q: state.newsQuery,
       limit: 20,
-      cursor: state.newsCursor,
+      cursor: reset ? '' : state.newsCursor,
     })
+    if (sequence !== newsLoadSequence) return
     const data = result?.data
-    const items = data?.items || []
-    state.newsItems = reset ? items : [...state.newsItems, ...items]
-    state.newsCursor = data?.nextCursor || ''
-    state.newsHasMore = data?.hasMore === true && Boolean(state.newsCursor)
+    if (data) {
+      const items = data.items || []
+      state.newsItems = reset ? items : [...state.newsItems, ...items]
+      state.newsCursor = data.nextCursor || ''
+      state.newsHasMore = data.hasMore === true && Boolean(state.newsCursor)
+    }
     state.newsError = result?.error || null
   } catch (error) {
-    state.newsError = error.message
+    if (sequence === newsLoadSequence) state.newsError = error.message
   } finally {
-    state.newsBusy = false
-    if (state.page === 'news') render()
+    if (sequence === newsLoadSequence) {
+      state.newsBusy = false
+      if (state.page === 'news') render()
+    }
   }
 }
 
@@ -1795,19 +1814,13 @@ async function loadNewsHot({ force = false } = {}) {
   if (state.page === 'news') render()
   try {
     const result = await api.getAihotHot({ force })
-    state.newsHot = result?.data || []
+    if (result?.data) state.newsHot = result.data
     state.newsHotError = result?.error || null
   } catch (error) {
     state.newsHotError = error.message
   } finally {
     state.newsHotBusy = false
     if (state.page === 'news') render()
-  }
-  const firstTopic = state.newsHot?.[0]
-  if (firstTopic?.publicId && !state.newsStory) {
-    state.newsExpanded = { kind: 'story', id: firstTopic.publicId }
-    render()
-    await loadNewsStory(firstTopic.publicId)
   }
 }
 
@@ -3083,7 +3096,7 @@ async function handleAction(action, element) {
     case 'refresh-news':
       if (state.newsTab === 'hot') await loadNewsHot({ force: true })
       else if (state.newsTab === 'daily') await loadAihot({ force: true })
-      else await loadNews({ force: true })
+      else await loadNews({ reset: true, force: true })
       break
     case 'load-more-news':
       await loadNews()
@@ -3404,8 +3417,6 @@ document.addEventListener('click', async (event) => {
     render()
     if (state.newsTab === 'hot') {
       if (!state.newsHot) await loadNewsHot()
-      else if (!state.newsStory && state.newsHot.length)
-        await loadNewsStory(state.newsHot[0].publicId)
     } else if (state.newsTab === 'daily') {
       if (!state.aihotDaily) await loadAihot()
     } else if (!state.newsItems.length) {
@@ -3425,6 +3436,7 @@ document.addEventListener('click', async (event) => {
   const newsWindow = event.target.closest('[data-news-window]')
   if (newsWindow) {
     state.newsWindow = newsWindow.dataset.newsWindow
+    state.newsExpanded = { kind: '', id: '' }
     await loadNews({ reset: true })
     return
   }

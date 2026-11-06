@@ -15,13 +15,20 @@ test('mirrors the PPT studio specification so the product direction survives han
   assert.ok(MIRROR_NOTES.some((item) => item.source === 'docs/PPT_ENGINE_EVALUATION.md'))
 })
 
-test('mirrors the GitHub discovery specification and its network acceptance boundary', async () => {
+test('mirrors the GitHub discovery and AI news specifications', async () => {
   const { MIRROR_NOTES } = await loadModule()
   assert.ok(
     MIRROR_NOTES.some(
       (item) =>
         item.source === 'docs/specs/004-github-discovery.md' &&
         item.note === '10 产品/GitHub 发现规格.md',
+    ),
+  )
+  assert.ok(
+    MIRROR_NOTES.some(
+      (item) =>
+        item.source === 'docs/specs/005-ai-news-ui.md' &&
+        item.note === '10 产品/AI 资讯界面规格.md',
     ),
   )
 })

@@ -16,6 +16,13 @@ export const SYNC_COMMAND = 'npm run sync:vault'
 /** 仓库文档逐份镜像到 vault。 */
 export const MIRROR_NOTES = [
   {
+    source: 'docs/specs/005-ai-news-ui.md',
+    note: '10 产品/AI 资讯界面规格.md',
+    title: 'AI 资讯界面规格',
+    category: '产品',
+    description: '紧凑资讯列表、文案精简、内置阅读与稳定更新交互',
+  },
+  {
     source: 'docs/specs/004-github-discovery.md',
     note: '10 产品/GitHub 发现规格.md',
     title: 'GitHub 发现规格',

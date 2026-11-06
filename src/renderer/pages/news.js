@@ -1,5 +1,5 @@
 /**
- * AI 资讯页（学习 → AI 资讯）。
+ * AI 资讯页（资讯 → AI 资讯）。
  *
  * 渲染层拆分阶段二第 4 页。只迁列表、热点、日报和条目详情；筛选、加载、
  * 复制等动作与共享状态仍由 `main.js` 处理。
@@ -56,7 +56,6 @@ export function createNewsPage({ state, escapeHtml, formatTime, findNewsItem }) 
           (entry) => `
           <button class="news-related-row" type="button" data-action="toggle-news-item" data-id="${escapeHtml(entry.id || '')}">
             <span>${escapeHtml(entry.title)}</span>
-            <small>${escapeHtml(newsItemMeta(entry))}</small>
           </button>`,
         )
         .join('')}
@@ -155,7 +154,7 @@ export function createNewsPage({ state, escapeHtml, formatTime, findNewsItem }) 
     const kind = story ? 'story' : 'item'
     const open = newsExpanded(kind, id)
     return `
-    <article class="news-item ${open ? 'is-open' : ''}">
+    <article class="news-item ${open ? 'is-open' : ''} ${story ? 'is-story' : ''}">
       <button class="news-item-head" type="button" data-action="${story ? 'toggle-news-story' : 'toggle-news-item'}" data-id="${escapeHtml(id)}" aria-expanded="${open}">
         ${rank ? `<span class="news-rank">${rank}</span>` : ''}
         <span class="news-item-copy">
@@ -170,13 +169,13 @@ export function createNewsPage({ state, escapeHtml, formatTime, findNewsItem }) 
 
   function renderNewsList() {
     if (state.newsBusy && !state.newsItems.length) {
-      return '<div class="loading-panel compact"><i data-lucide="loader"></i><span>正在读取资讯</span></div>'
+      return empty('正在读取资讯', 'loader')
     }
     if (state.newsError && !state.newsItems.length) {
-      return `<div class="news-note"><i data-lucide="cloud-off"></i><span>${escapeHtml(state.newsError)}</span></div>`
+      return empty(state.newsError, 'cloud-off')
     }
     if (!state.newsItems.length) {
-      return '<div class="news-note"><i data-lucide="search-x"></i><span>没有匹配的资讯，换个关键词或分类试试。</span></div>'
+      return empty('暂无匹配资讯，可调整筛选或关键词。', 'search-x')
     }
     return `
     ${state.newsItems
@@ -193,14 +192,14 @@ export function createNewsPage({ state, escapeHtml, formatTime, findNewsItem }) 
 
   function renderNewsHotList() {
     if (state.newsHotBusy && !state.newsHot) {
-      return '<div class="loading-panel compact"><i data-lucide="loader"></i><span>正在读取热点榜</span></div>'
+      return empty('正在读取热点', 'loader')
     }
     if (state.newsHotError && !state.newsHot) {
-      return `<div class="news-note"><i data-lucide="cloud-off"></i><span>${escapeHtml(state.newsHotError)}</span></div>`
+      return empty(state.newsHotError, 'cloud-off')
     }
     const topics = state.newsHot || []
     if (!topics.length) {
-      return '<div class="news-note"><i data-lucide="flame"></i><span>最近 48 小时还没有形成多来源讨论的事件。</span></div>'
+      return empty('暂无热点事件', 'list-ordered')
     }
     return topics
       .map((topic) =>
@@ -224,8 +223,8 @@ export function createNewsPage({ state, escapeHtml, formatTime, findNewsItem }) 
     const daily = state.aihotDaily
     if (!daily) {
       return state.aihotBusy
-        ? '<div class="loading-panel compact"><i data-lucide="loader"></i><span>正在读取日报</span></div>'
-        : `<div class="news-note"><i data-lucide="cloud-off"></i><span>${escapeHtml(state.aihotError || '暂时没有读到日报。')}</span></div>`
+        ? empty('正在读取日报', 'loader')
+        : empty(state.aihotError || '暂无日报，可稍后刷新。', 'cloud-off')
     }
     return `
     <div class="news-daily-lead">
@@ -247,6 +246,18 @@ export function createNewsPage({ state, escapeHtml, formatTime, findNewsItem }) 
       .join('')}`
   }
 
+  function empty(message, icon) {
+    return `<div class="news-empty"><i data-lucide="${icon}" aria-hidden="true"></i><p>${escapeHtml(message)}</p></div>`
+  }
+
+  function busy() {
+    return state.newsTab === 'selected'
+      ? state.newsBusy
+      : state.newsTab === 'hot'
+        ? state.newsHotBusy
+        : state.aihotBusy
+  }
+
   function renderPage() {
     const tabs = NEWS_TABS.map(
       ([id, label]) =>
@@ -259,20 +270,13 @@ export function createNewsPage({ state, escapeHtml, formatTime, findNewsItem }) 
           <div class="news-chips" role="group" aria-label="资讯分类">
             ${NEWS_CATEGORIES.map(
               ([id, label]) =>
-                `<button class="news-chip ${state.newsCategory === id ? 'active' : ''}" type="button" data-news-category="${id}">${label}</button>`,
+                `<button class="news-chip ${state.newsCategory === id ? 'active' : ''}" type="button" data-news-category="${id}" aria-pressed="${state.newsCategory === id}">${label}</button>`,
             ).join('')}
           </div>
-          <div class="news-filter-row">
-            <div class="news-chips" role="group" aria-label="时间范围">
-              <button class="news-chip ${state.newsWindow === '24h' ? 'active' : ''}" type="button" data-news-window="24h">24 小时</button>
-              <button class="news-chip ${state.newsWindow === '7d' ? 'active' : ''}" type="button" data-news-window="7d">7 天</button>
+            <div class="news-periods" role="group" aria-label="时间范围">
+              <button type="button" data-news-window="24h" aria-pressed="${state.newsWindow === '24h'}">24 小时</button>
+              <button type="button" data-news-window="7d" aria-pressed="${state.newsWindow === '7d'}">7 天</button>
             </div>
-            <div class="news-search">
-              <i data-lucide="search"></i>
-              <input id="newsSearch" type="search" value="${escapeHtml(state.newsQuery)}" placeholder="搜索关键词，回车确认" aria-label="搜索资讯" />
-              <button class="icon-button compact" type="button" data-action="search-news" title="搜索"><i data-lucide="arrow-right"></i></button>
-            </div>
-          </div>
         </div>`
         : ''
     const list =
@@ -281,26 +285,90 @@ export function createNewsPage({ state, escapeHtml, formatTime, findNewsItem }) 
         : state.newsTab === 'daily'
           ? renderNewsDaily()
           : renderNewsList()
-    return `
-    <section class="page-intro action-intro">
-      <div>
-        <h2>AI 资讯</h2>
-        <p>内容来自 AIHOT 的公开接口，摘要、入选理由和事件综述都在应用内阅读。</p>
-      </div>
-      <div class="button-row">
-        <div class="news-tabs" role="tablist" aria-label="资讯视图">${tabs}</div>
-        <button class="button secondary" type="button" data-action="refresh-news">
-          <i data-lucide="refresh-cw"></i><span>刷新</span>
+    const count =
+      state.newsTab === 'selected'
+        ? state.newsItems.length
+        : state.newsTab === 'hot'
+          ? (state.newsHot || []).length
+          : (state.aihotDaily?.sections || []).reduce(
+              (sum, section) => sum + section.items.length,
+              0,
+            )
+    const error =
+      state.newsTab === 'selected'
+        ? state.newsError
+        : state.newsTab === 'hot'
+          ? state.newsHotError
+          : state.aihotError
+    return `<div class="ai-news">
+    <header class="news-header" data-news-slot="header">
+      <div class="news-tabs" role="group" aria-label="资讯视图">${tabs}</div>
+      <div class="news-header-actions">
+        ${state.newsTab === 'selected' ? `<div class="news-search"><input id="newsSearch" type="search" value="${escapeHtml(state.newsQuery)}" placeholder="搜索资讯" aria-label="搜索资讯" /><button type="button" data-action="search-news" aria-label="搜索" title="搜索"><i data-lucide="search" aria-hidden="true"></i></button></div>` : ''}
+        <button class="news-refresh" type="button" data-action="refresh-news" aria-label="刷新资讯" aria-busy="${busy()}" ${busy() ? 'disabled' : ''}>
+          <i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新</span>
         </button>
       </div>
-    </section>
-
+    </header>
     <section class="news-feed">
-      ${toolbar}
-      <div class="news-feed-list">${list}</div>
+      <div data-news-slot="filters">${toolbar}</div>
+      <div class="news-status" data-news-slot="status"><span>${count} 条${state.newsTab === 'daily' && state.aihotDaily?.date ? ` · ${escapeHtml(state.aihotDaily.date)}` : ''}</span><span class="news-source"><button type="button" data-url="https://aihot.news">AIHOT</button>${busy() ? '<span role="status">更新中</span>' : error && count ? `<span role="status" title="${escapeHtml(error)}">更新失败</span>` : ''}</span></div>
+      <div class="news-feed-list" data-news-slot="list" aria-busy="${busy()}">${list}</div>
     </section>
+    </div>
   `
   }
 
-  return { renderPage, isExpanded: newsExpanded }
+  function update() {
+    const root = document.querySelector('#view .ai-news')
+    if (!root) return false
+    const view = document.querySelector('#view'),
+      top = view.scrollTop
+    const active = document.activeElement
+    const button = active?.closest('button, input')
+    const attrs = [
+      'id',
+      'data-news-tab',
+      'data-news-category',
+      'data-news-window',
+      'data-action',
+      'data-id',
+    ]
+    const focus =
+      button && root.contains(button)
+        ? attrs
+            .filter((attr) => button.hasAttribute(attr))
+            .map((attr) => `[${attr}="${CSS.escape(button.getAttribute(attr))}"]`)
+            .join('')
+        : ''
+    const search = root.querySelector('#newsSearch')
+    const draft = search && search.value !== state.newsQuery ? search.value : null
+    const selection = active === search ? [search.selectionStart, search.selectionEnd] : null
+    const list = root.querySelector('.news-feed-list'),
+      height = list.getBoundingClientRect().height
+    const floor = Math.max(320, view.clientHeight + top - (view.scrollHeight - height))
+    const reserved = busy() ? Math.max(floor, height) : floor
+    const template = document.createElement('template')
+    template.innerHTML = renderPage()
+    for (const slot of ['header', 'filters', 'status', 'list']) {
+      const current = root.querySelector(`[data-news-slot="${slot}"]`)
+      const next = template.content.querySelector(`[data-news-slot="${slot}"]`)
+      current.innerHTML = next.innerHTML
+      if (slot === 'list') {
+        current.style.minHeight = `${Math.ceil(reserved)}px`
+        current.setAttribute('aria-busy', String(busy()))
+      }
+    }
+    // Tabs can remove the filter row; reserve against the new toolbar height too.
+    const chromeHeight = view.scrollHeight - list.getBoundingClientRect().height
+    list.style.minHeight = `${Math.ceil(Math.max(reserved, view.clientHeight + top - chromeHeight))}px`
+    const nextSearch = root.querySelector('#newsSearch')
+    if (draft !== null && nextSearch) nextSearch.value = draft
+    if (focus) root.querySelector(focus)?.focus({ preventScroll: true })
+    if (selection && nextSearch) nextSearch.setSelectionRange(...selection)
+    view.scrollTop = top
+    return true
+  }
+
+  return { renderPage, update, isExpanded: newsExpanded }
 }
