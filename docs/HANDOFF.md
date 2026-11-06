@@ -13,16 +13,16 @@
   `v0.7.0` 为 Latest，安装包、blockmap、SHA-256 与 `latest.json` 由
   `Release ZP Workbench` 流水线生成。2026-10-24 的真机应用内升级已验证。
 - 当前任务：`codex/ai-news-polish`，基于 `63d93d7`，主开发 Codex。
-  AI 资讯按已认可的列表规范重做；见 [AI 资讯界面规格](specs/005-ai-news-ui.md)。仅本地开发。
+  AI 资讯按已认可的列表规范重做；见 [AI 资讯界面规格](specs/005-ai-news-ui.md)。已同步 GitHub。
 - GitHub 发现：日周月榜、收藏与离线缓存已完成；主源 GitStock，备用 github-hot-hub。
-  见 [GitHub 发现规格](specs/004-github-discovery.md)。两分支均不推送、不合并、不发布。
+  见 [GitHub 发现规格](specs/004-github-discovery.md)。随当前分支上传，不合并、不发布。
 - 上一轮创作工作室：`codex/creation-studio`，提交 `a01ac04`，主开发 Codex。
   新增「工具 → 创作工作室」，独立项目/版本/审片/发布复盘；协议与使用见 [创作工作室规格](specs/003-creation-studio.md)。
-  仅本地开发，不合并、不推送、不发布。外部状态手动刷新，不启动执行器。媒体只存索引，需独立备份。
+  代码随当前分支上传。外部状态手动刷新，不启动执行器。媒体只存索引，需独立备份。
 - 上一轮 PPT：`codex/ppt-home-workbench`，基于 `39fc5fb`，主开发 Codex。静态点阵首页、
-  左侧输入与三组样稿、最近作品；仅本地开发，视觉待用户验收。粒子版保留在历史分支。
-- GitHub：上一轮 [`codex/ppt-feedback-exports`](https://github.com/yuxhipeng-hub/zp-workstation/tree/codex/ppt-feedback-exports)
-  已于2026-11-03同步，含四格式导出、菜单关闭和AI优先界面；新分支未推送。
+  左侧输入与三组样稿、最近作品已随当前分支上传，视觉待验收。粒子版保留在历史分支。
+- GitHub：[`codex/ai-news-polish`](https://github.com/yuxhipeng-hub/zp-workstation/tree/codex/ai-news-polish)
+  于2026-11-07上传，内容基线 `6ead34e`，含当前 PPT、创作工作室、GitHub 发现、AI 资讯与设计规则。
   手机接续见 [PPT 规格](specs/002-ppt-studio.md)。`main` 仍为发布基线。
 - 接续先核对本页与 Git。本轮新增独立 GitHub 发现页；保留创作工作室、PPT 与全局功能。
 - 产品方向：2026-10-28 用户明确不再局限学习场景，希望用工作站帮助自己开展业务、赚取收入。
@@ -94,7 +94,7 @@
 
 | 日期       | 状态   | 任务                                                             | 验证 / 后续                                                        |
 | ---------- | ------ | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 2026-11-06 | 待验收 | AI 资讯按列表规范重做；全局增加小字注释减法                      | verify226/45；深浅/窄窗口已核对；末轮页面E2E3通过                  |
+| 2026-11-07 | 已同步 | 当前项目上传 GitHub；AI 资讯、设计规则与 Obsidian 同步           | 代码6ead34e；226/45；29份文档同步；视觉待验收                      |
 | 2026-11-06 | 待验收 | GitHub 发现：现成榜单/收藏/离线，UI规则入设计系统                | verify通过226/42；视觉获认可；免VPN长期稳定性待验收                |
 | 2026-11-05 | 待验收 | 创作工作室：项目、目录协议、媒体版本、时间点意见、发布复盘与备份 | verify通过：单测215/E2E38；原生选择器/MP4实测；PPT偶发超时复跑通过 |
 | 2026-11-04 | 待验收 | PPT 首页并排创作与三页样稿，最近作品显示修改时间                 | 单测207、PPT E2E15；深浅主题与窄窗口已核对                         |
