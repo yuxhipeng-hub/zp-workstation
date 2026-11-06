@@ -1,3 +1,5 @@
+import { createGitHubLanguagePicker } from '../components/github-language-picker.js'
+
 const periods = { daily: '日榜', weekly: '周榜', monthly: '月榜' }
 const growthLabels = { daily: '今日新增', weekly: '本周新增', monthly: '本月新增' }
 const number = (value) =>
@@ -36,21 +38,42 @@ export function createGitHubDiscoveryPage({
   const items = () =>
     mode === 'favorites' ? favorites() : results.get(period)?.snapshot?.items || []
   const focusSelector = (attr, value) => `[${attr}="${CSS.escape(value)}"]`
+  const availableLanguages = () =>
+    [
+      ...new Set([
+        ...items()
+          .map((item) => item.language)
+          .filter(Boolean),
+        ...(language ? [language] : []),
+      ]),
+    ].sort()
+  const picker = createGitHubLanguagePicker({
+    values: availableLanguages,
+    selected: () => language,
+    onSelect: (value) => {
+      language = value
+      repaint('#githubLanguage')
+    },
+    escapeHtml: e,
+    refreshIcons,
+  })
 
   function repaint(focus = '') {
     if (state.page !== 'github') return
     const active = document.activeElement
     const restore =
       focus ||
-      (active?.getAttribute('data-gh-row')
-        ? focusSelector('data-gh-row', active.getAttribute('data-gh-row'))
-        : active?.getAttribute('data-gh-favorite')
-          ? focusSelector('data-gh-favorite', active.getAttribute('data-gh-favorite'))
-          : active?.closest('.github-discovery') && active.id
-            ? `#${CSS.escape(active.id)}`
-            : active?.getAttribute('data-action')?.startsWith('gh-')
-              ? `${focusSelector('data-action', active.getAttribute('data-action'))}${active.getAttribute('data-id') ? focusSelector('data-id', active.getAttribute('data-id')) : ''}`
-              : '')
+      (active?.closest('#githubLanguageMenu')
+        ? ''
+        : active?.getAttribute('data-gh-row')
+          ? focusSelector('data-gh-row', active.getAttribute('data-gh-row'))
+          : active?.getAttribute('data-gh-favorite')
+            ? focusSelector('data-gh-favorite', active.getAttribute('data-gh-favorite'))
+            : active?.closest('.github-discovery') && active.id
+              ? `#${CSS.escape(active.id)}`
+              : active?.getAttribute('data-action')?.startsWith('gh-')
+                ? `${focusSelector('data-action', active.getAttribute('data-action'))}${active.getAttribute('data-id') ? focusSelector('data-id', active.getAttribute('data-id')) : ''}`
+                : '')
     const root = document.querySelector('#view .github-discovery')
     if (root) {
       const view = document.querySelector('#view')
@@ -72,6 +95,7 @@ export function createGitHubDiscoveryPage({
           current.style.minHeight = `${Math.ceil(reserved)}px`
         }
       }
+      picker.sync()
       refreshIcons()
       view.scrollTop = top
     } else render()
@@ -135,12 +159,6 @@ export function createGitHubDiscoveryPage({
   function renderPage() {
     const result = results.get(period)
     const all = items()
-    const languages = [
-      ...new Set([
-        ...all.map((item) => item.language).filter(Boolean),
-        ...(language ? [language] : []),
-      ]),
-    ].sort()
     const filtered = all.filter((item) => !language || item.language === language)
     const busy = loading.has(period)
     const error = mode === 'trending' ? errors.get(period) : null
@@ -174,10 +192,9 @@ export function createGitHubDiscoveryPage({
           ? '待更新'
           : ''
     return `<div class="github-discovery">
-      <header class="gh-header" data-gh-slot="header"><h2>GitHub 发现</h2>${mode === 'trending' ? `<button type="button" class="button secondary" data-action="gh-refresh" aria-busy="${busy}" ${busy ? 'disabled' : ''}><i data-lucide="refresh-cw"></i>刷新榜单</button>` : ''}</header>
+      <header class="gh-header" data-gh-slot="header"><div class="gh-modes" role="group" aria-label="项目视图"><button type="button" data-action="gh-mode" data-id="trending" aria-pressed="${mode === 'trending'}">趋势榜</button><button type="button" data-action="gh-mode" data-id="favorites" aria-pressed="${mode === 'favorites'}">我的收藏 <span>${favorites().length}</span></button></div>${mode === 'trending' ? `<button type="button" class="gh-refresh" data-action="gh-refresh" aria-label="刷新榜单" aria-busy="${busy}" ${busy ? 'disabled' : ''}><i data-lucide="refresh-cw"></i><span>刷新</span></button>` : ''}</header>
       <section class="gh-feed" aria-label="GitHub 项目榜单">
         <div class="gh-navigation" data-gh-slot="navigation">
-          <div class="gh-modes" role="group" aria-label="项目视图"><button type="button" data-action="gh-mode" data-id="trending" aria-pressed="${mode === 'trending'}">趋势榜</button><button type="button" data-action="gh-mode" data-id="favorites" aria-pressed="${mode === 'favorites'}">我的收藏 <span>${favorites().length}</span></button></div>
           ${
             mode === 'trending'
               ? `<div class="gh-periods" role="group" aria-label="榜单周期">${Object.entries(
@@ -190,24 +207,28 @@ export function createGitHubDiscoveryPage({
                   .join('')}</div>`
               : ''
           }
-          <label class="gh-language"><span class="gh-sr-only">${mode === 'favorites' ? '收藏语言' : '榜内语言'}</span><select id="githubLanguage" aria-label="${mode === 'favorites' ? '收藏语言' : '榜内语言'}"><option value="">全部语言</option>${languages.map((lang) => `<option value="${e(lang)}" ${lang === language ? 'selected' : ''}>${e(lang)}</option>`).join('')}</select></label>
+          <div class="gh-language">${picker.triggerMarkup(mode === 'favorites' ? '收藏语言' : '榜内语言')}</div>
         </div>
         <div class="gh-snapshot-summary" data-gh-slot="status"><span>${mode === 'favorites' ? '已收藏' : periods[period]} · ${filtered.length} 项</span><span class="gh-source">${mode === 'trending' && result ? `<button type="button" class="text-button" data-url="${e(result.source.url)}">${e(result.source.name)}</button> · <time datetime="${e(result.snapshot.capturedAt)}">${stamp(result.snapshot.capturedAt)}</time>` : ''}</span><span class="gh-state" role="status" title="${e(result?.warning || '')}">${stateLabel}</span></div>
         <div class="gh-list" data-gh-slot="list" aria-busy="${busy && mode === 'trending'}">${content}</div>
       </section>
+      ${picker.menuMarkup()}
     </div>`
   }
 
   async function handleAction(action, element) {
     if (!action.startsWith('gh-')) return false
+    if (picker.handleAction(action, element)) return true
     const id = element.dataset.id || ''
     if (action === 'gh-period' && Object.hasOwn(periods, id)) {
+      picker.close()
       period = id
       expanded = ''
       language = ''
       repaint(`[data-action="gh-period"][data-id="${period}"]`)
       await load()
     } else if (action === 'gh-mode') {
+      picker.close()
       mode = id === 'favorites' ? 'favorites' : 'trending'
       language = ''
       expanded = ''
@@ -240,11 +261,5 @@ export function createGitHubDiscoveryPage({
     return true
   }
 
-  function handleChange(target) {
-    if (target.id !== 'githubLanguage') return false
-    language = target.value
-    repaint('#githubLanguage')
-    return true
-  }
-  return { renderPage, open, handleAction, handleChange }
+  return { renderPage, open, handleAction, handleKeydown: picker.handleKeydown }
 }

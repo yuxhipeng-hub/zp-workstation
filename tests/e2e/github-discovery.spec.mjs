@@ -9,6 +9,14 @@ const { gitstock, archive } = require('../fixtures/github-discovery.cjs')
 const screenshots = path.join(os.tmpdir(), 'zp-github-discovery-qa')
 const action = (w, name) => w.locator(`[data-action="gh-${name}"]`)
 
+async function chooseLanguage(w, value) {
+  await w.getByRole('button', { name: '榜内语言', exact: true }).click()
+  await w
+    .getByRole('listbox', { name: '编程语言', exact: true })
+    .getByRole('option', { name: value || '全部语言', exact: true })
+    .click()
+}
+
 async function launch(dir, mode = 'primary') {
   const env = {
     ...process.env,
@@ -74,7 +82,7 @@ test('GitHub page uses real IPC for periods, language browsing, safe description
     await expect(w.locator('.github-discovery footer, .github-discovery details')).toHaveCount(0)
     const spacing = await w.locator('.github-discovery').evaluate((el) => {
       const outer = el.closest('.route-canvas').getBoundingClientRect()
-      const heading = el.querySelector('.gh-header h2').getBoundingClientRect()
+      const heading = el.querySelector('.gh-modes').getBoundingClientRect()
       return { left: heading.left - outer.left, top: heading.top - outer.top }
     })
     expect(spacing.left).toBeGreaterThanOrEqual(24)
@@ -85,9 +93,9 @@ test('GitHub page uses real IPC for periods, language browsing, safe description
     )
     await expect(w.locator('.gh-source')).toContainText('GitStock')
     const captured = await w.locator('.gh-source time').textContent()
-    await w.getByLabel('榜内语言', { exact: true }).selectOption('Python')
+    await chooseLanguage(w, 'Python')
     await expect(w.locator('.gh-item')).toHaveCount(1)
-    await w.getByLabel('榜内语言', { exact: true }).selectOption('')
+    await chooseLanguage(w, '')
     await expect(w.locator('.gh-description').last()).toContainText('<img src=x')
     await expect(w.locator('.github-discovery img')).toHaveCount(0)
     const first = w.locator('[data-gh-row="example/research-tool"]')
@@ -118,11 +126,11 @@ test('GitHub page uses real IPC for periods, language browsing, safe description
       globalThis.__githubQa.delay = 700
     })
     await action(w, 'refresh').click()
-    await w.getByLabel('榜内语言', { exact: true }).selectOption('Python')
+    await chooseLanguage(w, 'Python')
     await expect(action(w, 'refresh')).toBeEnabled()
-    await expect(w.getByLabel('榜内语言', { exact: true })).toHaveValue('Python')
+    await expect(w.getByLabel('榜内语言', { exact: true })).toContainText('Python')
     await expect(w.getByLabel('榜内语言', { exact: true })).toBeFocused()
-    await w.getByLabel('榜内语言', { exact: true }).selectOption('')
+    await chooseLanguage(w, '')
     await expect(w.locator('.gh-source time')).toHaveText(captured)
     fs.mkdirSync(screenshots, { recursive: true })
     for (const theme of ['dark', 'light']) {
@@ -244,6 +252,80 @@ test('period controls stay in place throughout delayed and failed updates', asyn
       Math.max(...scrolls) - Math.min(...scrolls),
       'the page scroll changes while loading',
     ).toBeLessThanOrEqual(1)
+  } finally {
+    if (app) await app.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('language picker uses a styled floating list with keyboard, dismissal and stable background updates', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-github-picker-'))
+  let app
+  try {
+    const launched = await launch(dir)
+    app = launched.app
+    const w = launched.w
+    await expect(w.locator('.gh-item')).toHaveCount(2)
+    await expect(w.locator('.github-discovery select')).toHaveCount(0)
+    const trigger = w.getByRole('button', { name: '榜内语言', exact: true })
+    const menu = w.getByRole('listbox', { name: '编程语言', exact: true })
+    await trigger.click()
+    await expect(menu).toBeVisible()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await expect(menu.getByRole('option', { name: '全部语言', exact: true })).toBeFocused()
+    await w.keyboard.press('ArrowDown')
+    await expect(menu.getByRole('option', { name: 'Python', exact: true })).toBeFocused()
+    await w.keyboard.press('Enter')
+    await expect(menu).toBeHidden()
+    await expect(trigger).toContainText('Python')
+    await expect(trigger).toBeFocused()
+    await expect(w.locator('.gh-item')).toHaveCount(1)
+    await trigger.press('ArrowDown')
+    await expect(menu).toBeVisible()
+    await w.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+    await expect(trigger).toBeFocused()
+    await app.evaluate(() => {
+      globalThis.__githubQa.delay = 500
+    })
+    await action(w, 'refresh').click()
+    await trigger.click()
+    await expect(menu).toBeVisible()
+    await expect(action(w, 'refresh')).toBeEnabled()
+    await expect(menu).toBeVisible()
+    await expect(menu.getByRole('option', { name: 'Python', exact: true })).toBeFocused()
+    await action(w, 'mode').filter({ hasText: '趋势榜', exact: true }).click()
+    await expect(menu).toBeHidden()
+    await expect(trigger).toContainText('全部语言')
+    fs.mkdirSync(screenshots, { recursive: true })
+    for (const theme of ['dark', 'light']) {
+      await w.evaluate((theme) => window.launcher.patchSettings({ theme }), theme)
+      await expect(w.locator('body')).toHaveAttribute('data-theme', theme)
+      await trigger.click()
+      await expect(menu).toBeVisible()
+      await w.screenshot({
+        path: path.join(screenshots, `menu-${theme}.png`),
+        animations: 'disabled',
+      })
+      await w.keyboard.press('Escape')
+    }
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0]
+      win.setMinimumSize(600, 600)
+      win.setSize(760, 760)
+    })
+    await trigger.click()
+    await expect(menu).toBeVisible()
+    const popupBounds = await menu.boundingBox()
+    const viewport = await w.evaluate(() => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }))
+    expect(popupBounds.x).toBeGreaterThanOrEqual(15)
+    expect(popupBounds.y).toBeGreaterThanOrEqual(15)
+    expect(popupBounds.x + popupBounds.width).toBeLessThanOrEqual(viewport.width - 15)
+    expect(popupBounds.y + popupBounds.height).toBeLessThanOrEqual(viewport.height - 15)
+    await w.screenshot({ path: path.join(screenshots, 'menu-narrow.png'), animations: 'disabled' })
   } finally {
     if (app) await app.close()
     fs.rmSync(dir, { recursive: true, force: true })

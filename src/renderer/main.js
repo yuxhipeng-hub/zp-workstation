@@ -1185,6 +1185,7 @@ document.addEventListener('click', (event) => {
 })
 
 document.addEventListener('keydown', (event) => {
+  if (state.page === 'github' && getGitHubPage().handleKeydown(event)) return
   const input = event.target.closest?.('[data-time-input]')
   if (input) {
     if (event.key === 'ArrowDown') {
@@ -3601,7 +3602,6 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
-  if (state.page === 'github' && getGitHubPage().handleChange(event.target)) return
   if (event.target.id === 'aiProfilePreset') {
     getModelSettingsPage().applyPreset(event.target)
     return
