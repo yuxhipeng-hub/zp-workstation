@@ -1137,6 +1137,15 @@ export function createPreviewLauncherApi() {
     async getAihotDaily() {
       return clone(createPreviewAihotDaily())
     },
+    async getGitHubSnapshot() {
+      throw new Error('浏览器预览不读取真实榜单，请在桌面应用中查看。')
+    },
+    async getGitHubFavorites() {
+      return clone(state.workspace.githubFavorites || [])
+    },
+    async setGitHubFavorite() {
+      throw new Error('请在桌面应用中收藏项目。')
+    },
     async getAihotItems(options = {}) {
       const all = createPreviewAihotItems().data
       const windowMs = options.window === '24h' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000

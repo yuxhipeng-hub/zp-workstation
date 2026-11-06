@@ -16,6 +16,13 @@ export const SYNC_COMMAND = 'npm run sync:vault'
 /** 仓库文档逐份镜像到 vault。 */
 export const MIRROR_NOTES = [
   {
+    source: 'docs/specs/004-github-discovery.md',
+    note: '10 产品/GitHub 发现规格.md',
+    title: 'GitHub 发现规格',
+    category: '产品',
+    description: '开源项目日周月榜、现成数据源、本地收藏、缓存与网络边界',
+  },
+  {
     source: 'docs/examples/creation-record/README.md',
     note: '50 规格/创作记录样例.md',
     title: '创作记录样例',

@@ -14,6 +14,49 @@ function createStore() {
   }
 }
 
+test('GitHub favorites normalize old data and survive reload, snapshot and backup without extra fields', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  assert.deepEqual(store.normalizeData({ version: 1 }).githubFavorites, [])
+  assert.deepEqual(
+    store.normalizeData({ githubFavorites: [{ fullName: '../bad', savedAt: '2026-11-06' }] })
+      .githubFavorites,
+    [],
+  )
+  store.save()
+  store.setGitHubFavorite('example/tool', {
+    fullName: 'example/tool',
+    description: '项目',
+    stars: 100,
+    url: 'file:///bad',
+    apiKey: 'secret',
+  })
+  const favorite = new WorkspaceStore(directory).get().githubFavorites[0]
+  assert.equal(favorite.url, 'https://github.com/example/tool')
+  assert.equal(favorite.apiKey, undefined)
+  assert.equal(store.listBackups().length > 0, true)
+  const file = path.join(directory, 'snapshot.json')
+  store.exportSnapshot(file)
+  const backup = store.createBackup('test')
+  const save = store.save
+  store.save = () => {
+    throw new Error('disk full')
+  }
+  assert.throws(() => store.setGitHubFavorite('example/tool', null), /disk full/)
+  assert.equal(store.get().githubFavorites.length, 1)
+  store.save = save
+  store.setGitHubFavorite('example/tool', null)
+  assert.equal(store.get().githubFavorites.length, 0)
+  store.importSnapshot(file)
+  assert.equal(store.get().githubFavorites.length, 1)
+  store.setGitHubFavorite('example/tool', null)
+  store.restoreBackup(backup.fileName)
+  assert.equal(store.get().githubFavorites[0].description, '项目')
+  store.importWorkspaceData({ version: 1, assignments: [], knowledge: [{ legacy: true }] })
+  assert.deepEqual(store.get().githubFavorites, [])
+  assert.deepEqual(store.get().knowledge, [{ legacy: true, courseId: '' }])
+})
+
 test('creation projects normalize old workspaces, survive restart and backup, rollback failed save', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

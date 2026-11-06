@@ -7,6 +7,7 @@ import { createSettingsPage } from './pages/settings.js'
 import { createBackupPage } from './pages/backup.js'
 import { createExperimentsPage } from './pages/experiments.js'
 import { createNewsPage } from './pages/news.js'
+import { createGitHubDiscoveryPage } from './pages/github-discovery.js'
 import { createAssignmentsPage } from './pages/assignments.js'
 import { createWelcomeOverlay } from './pages/welcome.js'
 import { createGuidePage } from './pages/guide.js'
@@ -24,6 +25,7 @@ import '@fontsource-variable/noto-sans-sc/wght.css'
 import './styles.css'
 import './design-system.css'
 import './ui-refresh.css'
+import './github-discovery.css'
 import './ppt-studio.css'
 
 defineMorphIcon()
@@ -381,6 +383,12 @@ function getAssignmentsPage() {
 }
 
 let newsPage = null
+let githubPage = null
+
+function getGitHubPage() {
+  if (!githubPage) githubPage = createGitHubDiscoveryPage({ state, api, escapeHtml, render, toast })
+  return githubPage
+}
 
 function getNewsPage() {
   if (!newsPage) {
@@ -1436,6 +1444,7 @@ function render(options = {}) {
     assignments: () => getAssignmentsPage().renderPage(),
     experiments: () => getExperimentsPage().renderPage(),
     news: () => getNewsPage().renderPage(),
+    github: () => getGitHubPage().renderPage(),
     ai: () => getModelSettingsPage().renderPage(),
     creation: () => getCreationStudioPage().renderPage(),
     ppt: () => getPptStudioPage().renderPage(),
@@ -2365,6 +2374,7 @@ async function persistSettingField(element) {
 }
 
 async function handleAction(action, element) {
+  if (action.startsWith('gh-') && (await getGitHubPage().handleAction(action, element))) return
   if (action.startsWith('cs-') && (await getCreationStudioPage().handleAction(action, element)))
     return
   if (action.startsWith('ppt-') && (await getPptStudioPage().handleAction(action, element))) return
@@ -3311,6 +3321,10 @@ document.addEventListener('click', async (event) => {
     state.page = nav.dataset.page
     state.highlightAssignmentId = null
     state.highlightScheduleCourseId = null
+    if (state.page === 'github') {
+      await getGitHubPage().open()
+      return
+    }
     if (state.page === 'news') {
       await openNewsPage()
       return
@@ -3324,6 +3338,10 @@ document.addEventListener('click', async (event) => {
   const pageJump = event.target.closest('[data-page-jump]')
   if (pageJump) {
     state.page = pageJump.dataset.pageJump
+    if (state.page === 'github') {
+      await getGitHubPage().open()
+      return
+    }
     if (state.page === 'news') {
       await openNewsPage()
       return
@@ -3447,6 +3465,10 @@ document.addEventListener('click', async (event) => {
 
   const action = event.target.closest('[data-action]')
   if (action && !action.disabled) {
+    if (action.dataset.action.startsWith('gh-')) {
+      await guard(() => handleAction(action.dataset.action, action), 'GitHub 发现操作失败')
+      return
+    }
     if (action.dataset.action.startsWith('cs-')) {
       await guard(() => handleAction(action.dataset.action, action), '工作室操作失败')
       return
@@ -3527,6 +3549,7 @@ document.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('input', (event) => {
+  if (state.page === 'github' && getGitHubPage().handleInput(event.target)) return
   if (state.page === 'ppt' && getPptStudioPage().handleInput(event.target)) return
   if (event.target.id === 'scheduleCourseColor') {
     syncScheduleColorControls(event.target.value)
@@ -3547,6 +3570,10 @@ document.addEventListener('focusin', (event) => {
   if (event.target.id === 'deepseekApiKey' && event.target.readOnly) {
     event.target.readOnly = false
   }
+})
+
+document.addEventListener('submit', (event) => {
+  if (state.page === 'github') getGitHubPage().handleSubmit(event)
 })
 
 document.addEventListener(
@@ -3570,6 +3597,7 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (state.page === 'github' && getGitHubPage().handleChange(event.target)) return
   if (event.target.id === 'aiProfilePreset') {
     getModelSettingsPage().applyPreset(event.target)
     return
@@ -4005,6 +4033,7 @@ async function start() {
     applyTheme(state.settings.theme || 'system')
     render()
     if (state.page === 'news') await openNewsPage()
+    if (state.page === 'github') await getGitHubPage().open()
     completeUiTask(startupTaskId, 'ZP Workbench 已就绪', '本地工作区已加载。')
     requestAnimationFrame(() => {
       void api.reportStartup?.({ firstRenderMs: Math.round(performance.now()) })?.catch(() => {})

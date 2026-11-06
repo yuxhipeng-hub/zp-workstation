@@ -15,6 +15,17 @@ test('mirrors the PPT studio specification so the product direction survives han
   assert.ok(MIRROR_NOTES.some((item) => item.source === 'docs/PPT_ENGINE_EVALUATION.md'))
 })
 
+test('mirrors the GitHub discovery specification and its network acceptance boundary', async () => {
+  const { MIRROR_NOTES } = await loadModule()
+  assert.ok(
+    MIRROR_NOTES.some(
+      (item) =>
+        item.source === 'docs/specs/004-github-discovery.md' &&
+        item.note === '10 产品/GitHub 发现规格.md',
+    ),
+  )
+})
+
 test('rewrites repository document paths into wikilinks', async () => {
   const { rewriteLinks } = await loadModule()
   const targets = new Map([

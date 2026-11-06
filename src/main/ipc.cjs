@@ -1,4 +1,5 @@
 const { registerCreationIpc } = require('./creation-ipc.cjs')
+const { registerGitHubDiscoveryIpc } = require('./github-discovery-ipc.cjs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
@@ -51,6 +52,7 @@ function registerIpc({
   scheduleManager,
   logger,
   aihotClient,
+  githubClient,
   aiService,
   launcherUpdater,
   backupManager,
@@ -125,6 +127,7 @@ function registerIpc({
     return aihotClient.getStory(publicId, { force: options.force === true })
   })
 
+  registerGitHubDiscoveryIpc({ ipcMain, client: githubClient, workspace })
   registerCreationIpc({
     ipcMain,
     workspace,

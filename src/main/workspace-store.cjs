@@ -1,4 +1,5 @@
 const { cleanProjects } = require('./creation-schema.cjs')
+const { cleanFavorites, cleanRepo, repoName } = require('./github-discovery-schema.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
@@ -17,6 +18,7 @@ const DEFAULT_WORKSPACE = {
   assignments: [],
   presentations: [],
   creationProjects: [],
+  githubFavorites: [],
   knowledge: [],
   experiments: [],
   experimentGroups: [],
@@ -293,6 +295,7 @@ class WorkspaceStore {
         .slice(0, PRESENTATION_LIMITS.projects)
         .filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index),
       creationProjects: cleanProjects(stored.creationProjects),
+      githubFavorites: cleanFavorites(stored.githubFavorites),
       knowledge: Array.isArray(stored.knowledge) ? stored.knowledge : [],
       experiments,
       experimentGroups,
@@ -307,6 +310,37 @@ class WorkspaceStore {
       this.save()
     } catch (error) {
       this.data.creationProjects = previous
+      throw error
+    }
+    return this.get()
+  }
+
+  setGitHubFavorite(fullName, input) {
+    if (!repoName(fullName)) throw new Error('项目名称无效。')
+    const previous = this.data.githubFavorites
+    const rest = previous.filter((item) => item.fullName.toLowerCase() !== fullName.toLowerCase())
+    const repo = input ? cleanRepo(input) : null
+    if (input && (!repo || repo.fullName.toLowerCase() !== fullName.toLowerCase()))
+      throw new Error('收藏项目无效。')
+    if (repo && rest.length >= 500) throw new Error('最多收藏 500 个项目。')
+    if (!repo && rest.length === previous.length) return this.get()
+    // Explicit backup before changing user-owned favorites; save remains atomic.
+    this.createBackup('github-favorites')
+    this.data.githubFavorites = repo
+      ? [
+          {
+            ...repo,
+            savedAt:
+              previous.find((item) => item.fullName.toLowerCase() === fullName.toLowerCase())
+                ?.savedAt || new Date().toISOString(),
+          },
+          ...rest,
+        ]
+      : rest
+    try {
+      this.save()
+    } catch (error) {
+      this.data.githubFavorites = previous
       throw error
     }
     return this.get()

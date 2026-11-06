@@ -9,6 +9,7 @@ const {
   safeStorage,
   protocol,
   dialog,
+  net,
 } = require('electron')
 const { APP_ID, APP_NAME } = require('./constants.cjs')
 const { SettingsStore } = require('./settings-store.cjs')
@@ -17,6 +18,7 @@ const { ExperimentLibrary } = require('./experiment-library.cjs')
 const { ScheduleManager } = require('./schedule-manager.cjs')
 const { Logger } = require('./logger.cjs')
 const { AihotClient } = require('./aihot-client.cjs')
+const { GitHubDiscoveryClient } = require('./github-discovery-client.cjs')
 const { AiService } = require('./ai-service.cjs')
 const { LauncherUpdater } = require('./launcher-updater.cjs')
 const { BackupManager } = require('./backup-manager.cjs')
@@ -83,6 +85,7 @@ let experimentLibrary
 let scheduleManager
 let logger
 let aihotClient
+let githubClient
 let aiService
 let launcherUpdater
 let backupManager
@@ -229,6 +232,10 @@ async function bootstrap() {
   scheduleManager = new ScheduleManager({ workspace })
   nativeTheme.themeSource = settings.get().theme || 'system'
   aihotClient = new AihotClient({ userDataDir: userData, logger })
+  githubClient = new GitHubDiscoveryClient({
+    userDataDir: userData,
+    fetchImpl: (url, options) => net.fetch(String(url), options),
+  })
   backupManager = new BackupManager({
     userDataDir: userData,
     appVersion: app.getVersion(),
@@ -264,6 +271,7 @@ async function bootstrap() {
     scheduleManager,
     logger,
     aihotClient,
+    githubClient,
     aiService,
     launcherUpdater,
     backupManager,
