@@ -1,78 +1,46 @@
 .github-discovery {
-  max-width: 1120px;
-  margin-inline: auto;
+  padding: 24px 26px;
+  overflow-anchor: none;
 }
-.github-discovery .sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-.gh-intro {
-  align-items: flex-start;
-}
-.gh-intro > .button {
-  flex-shrink: 0;
-}
-.gh-snapshot-summary {
+.gh-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  padding: 12px 0 16px;
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.8;
+  gap: 20px;
+  min-height: 38px;
+  margin-bottom: 20px;
 }
-.gh-snapshot-summary strong {
-  font-weight: 500;
-  color: var(--text);
-}
-.gh-snapshot-summary p {
-  flex-basis: 100%;
+.gh-header h2 {
   margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
 }
-.gh-search input,
-.gh-language select {
-  min-width: 0;
-  height: 38px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--panel-raised);
-  color: var(--text);
-  padding: 0 10px;
-  font: inherit;
-  font-size: 12px;
-}
-.gh-search input::placeholder {
-  color: var(--text-secondary);
+.gh-header > .button {
+  flex-shrink: 0;
 }
 .gh-feed {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--panel);
   overflow: hidden;
 }
 .gh-navigation {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px 20px;
 }
 .gh-modes,
 .gh-periods {
   display: flex;
   gap: 4px;
 }
+.gh-modes {
+  margin-right: auto;
+}
 .gh-modes button,
 .gh-periods button {
+  min-height: 38px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   padding: 8px 12px;
@@ -94,65 +62,83 @@
   color: var(--text);
 }
 .gh-modes button span {
+  display: inline-block;
+  min-width: 1.5em;
   margin-left: 4px;
   font-variant-numeric: tabular-nums;
 }
-.gh-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 20px 20px 12px;
-}
-.gh-search {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-}
-.gh-search > svg {
-  width: 16px;
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-.gh-search input {
-  width: 100%;
-  min-width: 0;
-}
-.gh-search button {
-  flex-shrink: 0;
-}
 .gh-language {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  white-space: nowrap;
+  min-width: 0;
 }
 .gh-language select {
-  width: 150px;
+  min-width: 0;
+  width: 146px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
 }
-.gh-list-heading {
+.gh-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.gh-snapshot-summary {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   gap: 12px;
-  padding: 10px 20px 16px;
+  min-height: 48px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
   color: var(--text-secondary);
   font-size: 11px;
+  line-height: 22px;
 }
-.gh-list-heading strong {
-  color: var(--text);
-  margin-left: 6px;
+.gh-snapshot-summary > span:first-child {
+  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
-.gh-item {
+.gh-source {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.gh-source .text-button {
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+.gh-state {
+  flex: 0 0 52px;
+  text-align: right;
+  white-space: nowrap;
+}
+.gh-list {
+  min-height: 320px;
+  border-top: 1px solid var(--line);
+  overflow-anchor: none;
+}
+.gh-item + .gh-item {
   border-top: 1px solid var(--line);
 }
 .gh-item-top {
   display: flex;
   align-items: center;
-  padding-right: 12px;
+  padding-right: 16px;
 }
 .gh-item-head {
   display: flex;
@@ -160,13 +146,13 @@
   gap: 16px;
   width: 100%;
   min-width: 0;
-  padding: 20px;
-  text-align: left;
+  padding: 22px 20px;
   border: 0;
   background: transparent;
   color: var(--text);
-  cursor: pointer;
+  text-align: left;
   font: inherit;
+  cursor: pointer;
 }
 .gh-item-head:hover {
   background: var(--panel-hover);
@@ -177,7 +163,7 @@
 .gh-rank {
   width: 24px;
   flex-shrink: 0;
-  padding-top: 1px;
+  padding-top: 2px;
   font-size: 12px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
@@ -192,9 +178,9 @@
 }
 .gh-project-copy > strong {
   display: block;
-  overflow-wrap: anywhere;
   font-size: 14px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .gh-description {
   display: -webkit-box;
@@ -202,23 +188,20 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
+  margin-top: 8px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.7;
-  margin-top: 6px;
 }
 .gh-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
   color: var(--text-secondary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-}
-.gh-meta > span {
-  color: var(--text-tertiary);
 }
 .gh-growth {
   display: flex;
@@ -264,120 +247,58 @@
 .gh-save:hover,
 .gh-save[aria-pressed='true'] {
   border-color: var(--line-strong);
-  color: var(--text);
   background: var(--panel-hover);
+  color: var(--text);
 }
 .gh-save:disabled {
   cursor: wait;
 }
 .gh-detail {
-  padding: 0 70px 24px 60px;
-}
-.gh-detail h3 {
-  font-size: 12px;
-  font-weight: 600;
-  margin: 0 0 8px;
+  padding: 0 60px 24px;
 }
 .gh-detail > p {
+  margin: 0 0 16px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.8;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.gh-detail .gh-detail-note {
-  margin-block: 12px 16px;
-  font-size: 11px;
-}
 .gh-detail .button-row {
   flex-wrap: wrap;
 }
-.gh-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 64px 24px;
-  text-align: center;
-  border-top: 1px solid var(--line);
-}
-.gh-empty > svg {
-  color: var(--text-secondary);
-  width: 26px;
-  height: 26px;
-}
-.gh-empty h3 {
-  font-size: 15px;
-  margin: 0;
-}
-.gh-empty p {
-  max-width: 440px;
-  font-size: 12px;
-  line-height: 1.8;
-  color: var(--text-secondary);
-  margin: 0;
-}
+.gh-empty,
 .gh-loading {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  gap: 12px;
-  padding: 64px 24px;
+  align-items: center;
+  gap: 16px;
+  min-height: 320px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.gh-empty > svg,
+.gh-loading > svg {
+  width: 24px;
+  height: 24px;
+  color: var(--text-secondary);
+}
+.gh-empty h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.gh-empty p {
+  margin: 0;
   color: var(--text-secondary);
   font-size: 12px;
-  border-top: 1px solid var(--line);
-}
-.gh-loading svg {
-  width: 18px;
-  height: 18px;
-}
-.gh-source {
-  padding: 20px 4px 0;
-  color: var(--text-secondary);
-  font-size: 11px;
   line-height: 1.8;
 }
-.gh-source > div {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 16px;
+.gh-loading {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
-.gh-source strong {
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 500;
-}
-.gh-status-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--text-secondary);
-  border-radius: 50%;
-}
-.gh-source p {
-  margin: 8px 0 0;
-}
-.gh-source p > span {
-  display: inline-block;
-  margin-left: 20px;
-}
-.gh-source .gh-source-warning {
-  color: var(--text);
-}
-.gh-source details {
-  margin-top: 10px;
-}
-.gh-source summary {
-  width: fit-content;
-  cursor: pointer;
-}
-.gh-source details p {
-  max-width: 760px;
-}
-.gh-source .text-button {
-  font-size: inherit;
-}
-.github-discovery :is(button, input, select, summary):focus-visible {
+.github-discovery :is(button, select):focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
@@ -385,40 +306,55 @@
   outline-offset: -3px;
 }
 @media (max-width: 900px) {
-  .gh-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .gh-language select {
-    flex: 1;
+  .gh-navigation {
+    gap: 12px 8px;
   }
   .gh-item-head {
     gap: 12px;
-    padding: 18px 12px;
-  }
-  .gh-rank {
-    width: 20px;
   }
   .gh-detail {
-    padding-inline: 44px 24px;
+    padding-inline: 56px 24px;
   }
 }
 @media (max-width: 600px) {
+  .github-discovery {
+    padding: 20px 16px;
+  }
   .gh-navigation {
-    flex-wrap: wrap;
-    padding: 12px;
-    gap: 12px;
+    padding: 16px;
   }
-  .gh-toolbar {
-    padding-inline: 12px;
+  .gh-modes button,
+  .gh-periods button {
+    padding-inline: 10px;
   }
-  .gh-list-heading {
-    padding-inline: 12px;
-    flex-wrap: wrap;
+  .gh-language {
+    width: 100%;
+  }
+  .gh-language select {
+    width: 100%;
+  }
+  .gh-snapshot-summary {
+    gap: 8px;
+    padding-inline: 16px;
+  }
+  .gh-source {
+    text-align: left;
+  }
+  .gh-state {
+    flex-basis: 44px;
+  }
+  .gh-item-top {
+    padding-right: 12px;
+  }
+  .gh-item-head {
+    gap: 10px;
+    padding: 20px 16px;
+  }
+  .gh-rank {
+    width: 18px;
   }
   .gh-growth {
-    min-width: 65px;
+    min-width: 66px;
   }
   .gh-growth strong {
     font-size: 14px;
@@ -426,11 +362,7 @@
   .gh-chevron {
     display: none;
   }
-  .gh-item-top {
-    padding-right: 6px;
-  }
-  .gh-source p > span {
-    display: block;
-    margin-left: 0;
+  .gh-detail {
+    padding-inline: 44px 20px;
   }
 }

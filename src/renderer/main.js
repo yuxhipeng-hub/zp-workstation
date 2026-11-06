@@ -386,7 +386,16 @@ let newsPage = null
 let githubPage = null
 
 function getGitHubPage() {
-  if (!githubPage) githubPage = createGitHubDiscoveryPage({ state, api, escapeHtml, render, toast })
+  if (!githubPage)
+    githubPage = createGitHubDiscoveryPage({
+      state,
+      api,
+      escapeHtml,
+      render,
+      refreshIcons,
+      toast,
+      preview: Boolean(previewModule),
+    })
   return githubPage
 }
 
@@ -3549,7 +3558,6 @@ document.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('input', (event) => {
-  if (state.page === 'github' && getGitHubPage().handleInput(event.target)) return
   if (state.page === 'ppt' && getPptStudioPage().handleInput(event.target)) return
   if (event.target.id === 'scheduleCourseColor') {
     syncScheduleColorControls(event.target.value)
@@ -3570,10 +3578,6 @@ document.addEventListener('focusin', (event) => {
   if (event.target.id === 'deepseekApiKey' && event.target.readOnly) {
     event.target.readOnly = false
   }
-})
-
-document.addEventListener('submit', (event) => {
-  if (state.page === 'github') getGitHubPage().handleSubmit(event)
 })
 
 document.addEventListener(

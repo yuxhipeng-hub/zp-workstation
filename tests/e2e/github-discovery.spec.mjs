@@ -1,4 +1,4 @@
-/* global window */
+/* global window, document, requestAnimationFrame */
 import { test, expect, _electron as electron } from '@playwright/test'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -59,7 +59,7 @@ async function launch(dir, mode = 'primary') {
   return { app, w }
 }
 
-test('GitHub page uses real IPC for periods, filtering, safe descriptions and persistent favorites', async () => {
+test('GitHub page uses real IPC for periods, language browsing, safe descriptions and persistent favorites', async () => {
   test.setTimeout(90_000)
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-github-e2e-'))
   let app
@@ -70,6 +70,15 @@ test('GitHub page uses real IPC for periods, filtering, safe descriptions and pe
     await expect(w.locator('.gh-item')).toHaveCount(2)
     await expect(w.locator('.nav-item[data-page="github"] svg')).toHaveCount(1)
     await expect(w.locator('.gh-snapshot-summary')).toBeVisible()
+    await expect(w.locator('.github-discovery input[type="search"]')).toHaveCount(0)
+    await expect(w.locator('.github-discovery footer, .github-discovery details')).toHaveCount(0)
+    const spacing = await w.locator('.github-discovery').evaluate((el) => {
+      const outer = el.closest('.route-canvas').getBoundingClientRect()
+      const heading = el.querySelector('.gh-header h2').getBoundingClientRect()
+      return { left: heading.left - outer.left, top: heading.top - outer.top }
+    })
+    expect(spacing.left).toBeGreaterThanOrEqual(24)
+    expect(spacing.top).toBeGreaterThanOrEqual(20)
     await expect(action(w, 'period').filter({ hasText: '周榜' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -79,16 +88,8 @@ test('GitHub page uses real IPC for periods, filtering, safe descriptions and pe
     await w.getByLabel('榜内语言', { exact: true }).selectOption('Python')
     await expect(w.locator('.gh-item')).toHaveCount(1)
     await w.getByLabel('榜内语言', { exact: true }).selectOption('')
-    await w.getByLabel('搜索当前榜单').fill('design-kit')
-    await w.getByLabel('搜索当前榜单').press('Enter')
-    await expect(w.locator('.gh-item')).toHaveCount(1)
-    await expect(w.locator('.gh-description')).toContainText('<img src=x')
+    await expect(w.locator('.gh-description').last()).toContainText('<img src=x')
     await expect(w.locator('.github-discovery img')).toHaveCount(0)
-    await w.getByLabel('搜索当前榜单').fill('no matching project')
-    await w.getByLabel('搜索当前榜单').press('Enter')
-    await expect(w.getByText('没有匹配的项目', { exact: true })).toBeVisible()
-    await action(w, 'clear').click()
-    await expect(w.locator('.gh-item')).toHaveCount(2)
     const first = w.locator('[data-gh-row="example/research-tool"]')
     await first.focus()
     await w.keyboard.press('Enter')
@@ -109,20 +110,19 @@ test('GitHub page uses real IPC for periods, filtering, safe descriptions and pe
         'true',
       )
       await expect(w.locator('.gh-item')).toHaveCount(2)
-      await expect(action(w, 'refresh')).toHaveText('刷新榜单')
+      await expect(action(w, 'refresh')).toBeEnabled()
     }
     await action(w, 'period').filter({ hasText: '周榜' }).click()
-    // A background response must retain an unfinished query and its keyboard focus.
+    // Background updates preserve the current language and keyboard focus.
     await app.evaluate(() => {
       globalThis.__githubQa.delay = 700
     })
     await action(w, 'refresh').click()
-    await w.getByLabel('搜索当前榜单').fill('unfinished query')
-    await expect(action(w, 'refresh')).toHaveText('刷新榜单')
-    await expect(w.getByLabel('搜索当前榜单')).toHaveValue('unfinished query')
-    await expect(w.getByLabel('搜索当前榜单')).toBeFocused()
-    await w.getByLabel('搜索当前榜单').fill('')
-    await w.getByLabel('搜索当前榜单').press('Enter')
+    await w.getByLabel('榜内语言', { exact: true }).selectOption('Python')
+    await expect(action(w, 'refresh')).toBeEnabled()
+    await expect(w.getByLabel('榜内语言', { exact: true })).toHaveValue('Python')
+    await expect(w.getByLabel('榜内语言', { exact: true })).toBeFocused()
+    await w.getByLabel('榜内语言', { exact: true }).selectOption('')
     await expect(w.locator('.gh-source time')).toHaveText(captured)
     fs.mkdirSync(screenshots, { recursive: true })
     for (const theme of ['dark', 'light']) {
@@ -146,7 +146,7 @@ test('GitHub page uses real IPC for periods, filtering, safe descriptions and pe
     w = launched.w
     await expect(w.locator('.gh-item')).toHaveCount(2)
     await action(w, 'refresh').click()
-    await expect(w.locator('.gh-source')).toContainText('正在显示上次保存')
+    await expect(w.locator('.gh-state')).toHaveText('待更新')
     await expect(w.locator('.gh-source time')).toHaveText(captured)
     await action(w, 'mode').filter({ hasText: '我的收藏' }).click()
     await expect(w.locator('.gh-item')).toHaveCount(1)
@@ -179,6 +179,71 @@ test('GitHub page identifies the archive fallback and keeps first-load offline e
     await expect(w.locator('.gh-item').first()).toContainText('example/backup')
     await expect(w.locator('.gh-item').first()).toContainText('+510')
     await expect(w.locator('.gh-source time')).toBeVisible()
+  } finally {
+    if (app) await app.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('period controls stay in place throughout delayed and failed updates', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-github-stable-'))
+  let app
+  try {
+    const launched = await launch(dir, 'offline')
+    app = launched.app
+    const w = launched.w
+    await expect(w.getByText('暂时连接不上榜单', { exact: true })).toBeVisible()
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0]
+      win.setMinimumSize(600, 600)
+      win.setSize(1000, 720)
+      globalThis.__githubQa.delay = 180
+    })
+    // Complete an update after resizing so responsive-window motion is outside this check.
+    await action(w, 'refresh').click()
+    await expect(action(w, 'refresh')).toBeEnabled()
+    await w.evaluate(() => {
+      const view = document.querySelector('#view')
+      view.scrollTop = 32
+      window.__githubFrames = []
+      window.__githubSampling = true
+      const sample = () => {
+        const bar = document.querySelector('.gh-periods')
+        window.__githubFrames.push({ top: bar.getBoundingClientRect().top, scroll: view.scrollTop })
+        if (window.__githubSampling) requestAnimationFrame(sample)
+      }
+      requestAnimationFrame(sample)
+    })
+    for (const [label, mode] of [
+      ['日榜', 'primary'],
+      ['月榜', 'offline'],
+      ['周榜', 'primary'],
+    ]) {
+      await app.evaluate((_electron, mode) => {
+        globalThis.__githubQa.mode = mode
+      }, mode)
+      await action(w, 'period').filter({ hasText: label }).click()
+      await expect(action(w, 'refresh')).toBeEnabled()
+    }
+    const frames = await w.evaluate(() => {
+      window.__githubSampling = false
+      return window.__githubFrames
+    })
+    expect(frames.length).toBeGreaterThan(5)
+    const tops = frames.map((frame) => frame.top)
+    const scrolls = frames.map((frame) => frame.scroll)
+    await test.info().attach('period-motion.json', {
+      body: Buffer.from(JSON.stringify(frames)),
+      contentType: 'application/json',
+    })
+    expect(
+      Math.max(...tops) - Math.min(...tops),
+      'the period selector moves while loading',
+    ).toBeLessThanOrEqual(1)
+    expect(
+      Math.max(...scrolls) - Math.min(...scrolls),
+      'the page scroll changes while loading',
+    ).toBeLessThanOrEqual(1)
   } finally {
     if (app) await app.close()
     fs.rmSync(dir, { recursive: true, force: true })
