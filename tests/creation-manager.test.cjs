@@ -17,6 +17,53 @@ async function setup(t) {
   fs.writeFileSync(file, 'version one')
   return { dir, store, manager, p, file }
 }
+
+test('project canvas keeps child videos independent and rejects orphaning or nested groups', async (t) => {
+  const { manager, dir, p } = await setup(t)
+  const group = (
+    await manager.command({ action: 'create', kind: 'project', name: '系列', stage: '选题' })
+  ).creationProjects[0]
+  const child = (
+    await manager.command({
+      action: 'create',
+      kind: 'video',
+      parentId: group.id,
+      name: '第一支',
+      stage: '简报',
+    })
+  ).creationProjects[0]
+  assert.equal(child.parentId, group.id)
+  assert.equal(group.kind, 'project')
+  assert.equal(manager.project(p.id).kind, 'video')
+  await assert.rejects(
+    manager.command({ action: 'create', parentId: 123, name: '无效', stage: '选题' }),
+    /编号/,
+  )
+  await assert.rejects(manager.command({ action: 'delete', projectId: group.id }), /视频/)
+  await assert.rejects(
+    manager.command({ action: 'create', parentId: child.id, name: '嵌套', stage: '选题' }),
+    /上级/,
+  )
+  await assert.rejects(
+    manager.command({
+      action: 'create',
+      kind: 'project',
+      parentId: group.id,
+      name: '嵌套',
+      stage: '选题',
+    }),
+    /上级/,
+  )
+  await assert.rejects(
+    manager.command({ action: 'create', parentId: 'missing', name: '孤立', stage: '选题' }),
+    /不存在/,
+  )
+  const restored = new WorkspaceStore(path.join(dir, 'user'))
+  assert.equal(restored.get().creationProjects.find((x) => x.id === child.id).parentId, group.id)
+  await manager.command({ action: 'delete', projectId: child.id })
+  await manager.command({ action: 'delete', projectId: group.id })
+  assert.equal(manager.project(p.id).name, '隔离测试')
+})
 test('external refresh is idempotent, transactional and preserves immutable versions', async (t) => {
   const { dir, manager, p, file, store } = await setup(t)
   await manager.connect(p.id, dir)

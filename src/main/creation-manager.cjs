@@ -360,6 +360,19 @@ class CreationManager {
         ? S.cleanProject({ id: randomUUID(), createdAt: now() })
         : this.project(projectId)
     if (action === 'create' || action === 'edit') {
+      if (action === 'create') {
+        if (input.parentId !== undefined && typeof input.parentId !== 'string')
+          throw new Error('上级项目编号无效。')
+        if (input.kind !== undefined && !['project', 'video'].includes(input.kind))
+          throw new Error('项目类型无效。')
+        p.kind = input.kind === 'project' ? 'project' : 'video'
+        if (input.parentId) {
+          const parent = this.project(input.parentId)
+          if (p.kind === 'project' || parent.parentId || parent.archived)
+            throw new Error('请选择进行中的顶层项目作为上级。')
+          p.parentId = parent.id
+        }
+      }
       if (!S.text(input.name, 120) || !S.STAGES.includes(input.stage))
         throw new Error('名称或制作阶段无效。')
       p.name = S.text(input.name, 120)
@@ -367,11 +380,13 @@ class CreationManager {
       p.brief = S.text(input.brief, 8000)
       p.stage = input.stage
     } else if (action === 'archive') p.archived = input.archived === true
-    else if (action === 'delete')
+    else if (action === 'delete') {
+      if (this.workspace.get().creationProjects.some((x) => x.parentId === p.id))
+        throw new Error('请先移除项目下的视频记录，再移除项目。')
       return this.workspace.saveCreationProjects(
         this.workspace.get().creationProjects.filter((x) => x.id !== p.id),
       )
-    else if (action === 'select' || action === 'approve') {
+    } else if (action === 'select' || action === 'approve') {
       const a = p.artifacts.find((x) => x.id === input.artifactId)
       if (!a) throw new Error('产物不存在。')
       if (action === 'select') p.selectedArtifactId = a.id

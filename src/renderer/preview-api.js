@@ -1,3 +1,4 @@
+import { createCreationPreview } from './creation-preview.js'
 const listeners = new Map()
 import { createPresentation, cleanPresentation } from '../shared/presentation.mjs'
 
@@ -1130,6 +1131,7 @@ export function createPreviewLauncherApi() {
     `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
   return {
+    ...createCreationPreview(state.workspace, clone, createId),
     on: subscribe,
     async bootstrap() {
       return clone(state)

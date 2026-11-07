@@ -1,5 +1,6 @@
 /* global window, document */
-import { test, expect, _electron as electron } from '@playwright/test'
+import { test, expect } from '@playwright/test'
+import { launchHiddenElectron } from './hidden-electron.mjs'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -16,7 +17,7 @@ test('video workflow edits real records and exports playable FFmpeg film without
   delete env.ELECTRON_RUN_AS_NODE
   let app
   try {
-    app = await electron.launch({ args: ['.'], env })
+    app = await launchHiddenElectron(dir, env)
     const w = await app.firstWindow()
     const welcome = w.getByRole('button', { name: '进入工作站' })
     if (
@@ -29,13 +30,19 @@ test('video workflow edits real records and exports playable FFmpeg film without
     await w.locator('[data-page="creation"]').click()
     await w.locator('[data-action="cs-new"]').first().click()
     await w.getByLabel('项目名称', { exact: true }).fill('视频流程隔离验收')
+    await w.getByText('目标与阶段', { exact: true }).click()
     await w.getByLabel('一句话目标').fill('展示一个可重复制作流程')
     await w.locator('[data-action="cs-save-project"]').click()
-    await w.locator('[data-action="cs-tab"][data-id="video"]').click()
+    await w.locator('[data-action="cs-new-video"]').first().click()
+    await w.getByLabel('视频名称', { exact: true }).fill('视频流程隔离验收')
+    await w.locator('[data-action="cs-save-project"]').click()
+    await w.locator('[data-action="cs-open-work"]').click()
     await w.locator('[data-action="cs-v-enable"]').click()
     await expect(w.getByRole('heading', { name: '视频制作', exact: true })).toBeVisible()
     await w.getByLabel('一句话创意', { exact: true }).fill('纸球滚向画面右侧，角色跟随')
     await w.locator('[data-action="cs-v-save-brief"]').click()
+    await expect(w.locator('.cc-workpage')).toHaveCount(0)
+    await w.locator('[data-action="cs-open-work"]').click()
     await w.locator('[data-action="cs-v-step"][data-id="story"]').click()
     await w.getByLabel('故事草稿').fill('球从桌面左侧滚到右侧，角色看到后依次转头。')
     await w.locator('[data-action="cs-v-confirm-story"]').click()
@@ -116,7 +123,9 @@ test('video workflow edits real records and exports playable FFmpeg film without
     await w.getByLabel('片段字幕').fill('受控后期实测')
     await w.locator('[data-action="cs-v-save-edit"]').click()
     await w.locator('[data-action="cs-v-render"]').click()
-    await expect(w.getByText(/待人工验收 ·/)).toBeVisible({ timeout: 30000 })
+    await expect(
+      w.locator('.cv-workspace details > summary').filter({ hasText: /待人工验收 ·/ }),
+    ).toBeVisible({ timeout: 30000 })
     await w.locator('[data-action="cs-v-step"][data-id="generate"]').click()
     await w.getByText('供应商配置与预算', { exact: true }).click()
     await expect(w.getByLabel('火山方舟 API Key（仅安全存储）')).toHaveValue('')

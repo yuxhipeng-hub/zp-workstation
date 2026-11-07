@@ -1,5 +1,6 @@
 /* global window, document */
-import { test, expect, _electron as electron } from '@playwright/test'
+import { test, expect } from '@playwright/test'
+import { launchHiddenElectron } from './hidden-electron.mjs'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -15,7 +16,7 @@ async function launch(dir) {
     ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
   }
   delete env.ELECTRON_RUN_AS_NODE
-  const app = await electron.launch({ args: ['.'], env })
+  const app = await launchHiddenElectron(dir, env)
   const window = await app.firstWindow()
   const welcome = window.getByRole('button', { name: '进入工作站' })
   if (
@@ -40,12 +41,20 @@ test('creation studio persists real IPC imports, versions, timed feedback, appro
     let launched = await launch(dir)
     app = launched.app
     let w = launched.window
-    await expect(w.getByText('从第一份创作开始')).toBeVisible()
+    await expect(w.getByText('让创意从这里展开')).toBeVisible()
     await action(w, 'new').first().click()
     await w.getByLabel('项目名称', { exact: true }).fill('审片隔离项目')
+    await w.getByText('目标与阶段', { exact: true }).click()
     await w.getByLabel('一句话目标').fill('核对每一次改动')
-    await w.getByLabel('制作简报').fill('8秒短片，保持字幕')
+    await w.getByLabel('创作要求').fill('8秒短片，保持字幕')
     await action(w, 'save-project').click()
+    await expect(w.locator('.cc-project-trigger strong')).toHaveText('审片隔离项目')
+    const groupId = (await w.evaluate(() => window.launcher.getWorkspace())).creationProjects[0].id
+    await action(w, 'new-video').first().click()
+    await w.getByLabel('视频名称', { exact: true }).fill('审片隔离项目')
+    await action(w, 'save-project').click()
+    await action(w, 'open-work').click()
+    await action(w, 'tab').filter({ hasText: '总览' }).click()
     await expect(w.locator('.cs-project-heading h2')).toHaveText('审片隔离项目')
     await expect(w.getByRole('heading', { name: '尚未导入产物', exact: true })).toBeVisible()
     await sharp({ create: { width: 640, height: 360, channels: 3, background: '#555' } })
@@ -158,17 +167,18 @@ test('creation studio persists real IPC imports, versions, timed feedback, appro
     await action(w, 'new').first().click()
     await w.getByLabel('项目名称', { exact: true }).fill('第二个项目')
     await action(w, 'save-project').click()
-    await expect(w.locator('.cs-project-heading h2')).toHaveText('第二个项目')
-    await action(w, 'project').filter({ hasText: '审片隔离项目' }).click()
-    await action(w, 'edit').click()
-    await expect(w.getByLabel('项目名称', { exact: true })).toHaveValue('审片隔离项目')
+    await expect(w.locator('.cc-project-trigger strong').first()).toHaveText('第二个项目')
+    await w.locator('.cc-video-object [data-action="cs-edit"]').click()
+    await expect(w.getByLabel('视频名称', { exact: true })).toHaveValue('审片隔离项目')
     await action(w, 'cancel-edit').click()
     await close(app)
     app = null
     launched = await launch(dir)
     app = launched.app
     w = launched.window
-    await action(w, 'project').filter({ hasText: '审片隔离项目' }).click()
+    await w.locator(`[data-action="cs-toggle"][data-id="${groupId}"]`).click()
+    await action(w, 'open-work').click()
+    await action(w, 'tab').filter({ hasText: '总览' }).click()
     await expect(w.locator('.cs-project-heading h2')).toHaveText('审片隔离项目')
     await expect(w.locator('[data-cs-latest]')).toHaveText('状态待确认')
     await action(w, 'tab').filter({ hasText: '修改意见' }).click()
@@ -198,6 +208,11 @@ test('real local MP4 streams, seeks both versions and binds feedback to the orig
     await action(w, 'new').first().click()
     await w.getByLabel('项目名称', { exact: true }).fill('MP4审片')
     await action(w, 'save-project').click()
+    await action(w, 'new-video').first().click()
+    await w.getByLabel('视频名称', { exact: true }).fill('MP4审片')
+    await action(w, 'save-project').click()
+    await action(w, 'open-work').click()
+    await action(w, 'tab').filter({ hasText: '总览' }).click()
     await expect(w.locator('.cs-project-heading h2')).toHaveText('MP4审片')
     const projectId = (await w.evaluate(() => window.launcher.getWorkspace())).creationProjects[0]
       .id

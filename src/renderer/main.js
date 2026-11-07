@@ -1,6 +1,5 @@
 import { createCreationStudioPage } from './pages/creation-studio.js'
-import './creation-studio.css'
-import './creation-video.css'
+import { updateCreationDom } from './components/creation-dom.js'
 import { createIcons, FileCheck2, FolderOpen, icons, Upload } from 'lucide'
 import { defineMorphIcon } from 'morphicons/element'
 import { createModelSettingsPage } from './pages/model-settings.js'
@@ -29,6 +28,9 @@ import './ui-refresh.css'
 import './github-discovery.css'
 import './news.css'
 import './ppt-studio.css'
+import './creation-studio.css'
+import './creation-video.css'
+import './creation-tree.css'
 
 defineMorphIcon()
 
@@ -1484,10 +1486,12 @@ function render(options = {}) {
   }
   view.dataset.page = state.page
   const content = (renderers[state.page] || (() => getTodayPage().renderPage()))()
-  view.innerHTML =
-    state.page === 'today'
-      ? content
-      : `<div class="workbench-canvas route-canvas" data-route-canvas>${content}</div>`
+  if (state.page === 'creation') updateCreationDom(view, content)
+  else
+    view.innerHTML =
+      state.page === 'today'
+        ? content
+        : `<div class="workbench-canvas route-canvas" data-route-canvas>${content}</div>`
   for (const { key, open } of disclosureSnapshots) {
     const details = view.querySelector(`details[data-disclosure-id="${CSS.escape(key)}"]`)
     if (details) details.open = open
@@ -3615,6 +3619,7 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (state.page === 'creation' && getCreationStudioPage().handleChange(event.target)) return
   if (event.target.id === 'aiProfilePreset') {
     getModelSettingsPage().applyPreset(event.target)
     return

@@ -118,6 +118,8 @@ function cleanProject(x = {}) {
   return {
     id: id(x.id),
     name: text(x.name, 120),
+    kind: x.kind === 'project' ? 'project' : 'video',
+    parentId: x.kind === 'project' ? '' : text(x.parentId, 100),
     goal: text(x.goal),
     brief: text(x.brief, 8000),
     stage: STAGES.includes(x.stage) ? x.stage : '选题',
@@ -142,10 +144,15 @@ function cleanProject(x = {}) {
   }
 }
 function cleanProjects(v) {
-  return list(v, cleanProject)
+  const projects = list(v, cleanProject)
     .filter((x) => x.name)
     .slice(0, 100)
     .filter((x, i, a) => a.findIndex((y) => y.id === x.id) === i)
+  const roots = new Set(projects.filter((x) => !x.parentId).map((x) => x.id))
+  return projects.map((x) => ({
+    ...x,
+    parentId: roots.has(x.parentId) && x.parentId !== x.id ? x.parentId : '',
+  }))
 }
 module.exports = {
   STAGES,

@@ -2793,7 +2793,7 @@ input::placeholder {
   min-height: 92px;
   padding: 10px 11px;
   line-height: 1.6;
-  resize: vertical;
+  resize: none;
 }
 
 .field input:focus,

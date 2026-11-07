@@ -14,6 +14,35 @@ function createStore() {
   }
 }
 
+test('canvas hierarchy preserves legacy media and repairs invalid parent links across snapshots', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const records = [
+    { id: 'old', name: '旧视频', artifacts: [{ id: 'a', path: 'Z:\\old.mp4', type: 'video' }] },
+    { id: 'group', name: '系列', kind: 'project' },
+    { id: 'child', name: '短片', parentId: 'group' },
+    { id: 'nested', name: '嵌套', parentId: 'child' },
+    { id: 'orphan', name: '孤立', parentId: 'missing' },
+    { id: 'cycle-a', name: '循环A', parentId: 'cycle-b' },
+    { id: 'cycle-b', name: '循环B', parentId: 'cycle-a' },
+  ]
+  const clean = store.normalizeData({ creationProjects: records }).creationProjects
+  assert.equal(clean[0].kind, 'video')
+  assert.equal(clean[0].artifacts[0].path, 'Z:\\old.mp4')
+  assert.equal(clean[2].parentId, 'group')
+  for (const x of clean.slice(3)) assert.equal(x.parentId, '')
+  store.saveCreationProjects(clean)
+  const snapshot = path.join(directory, 'canvas.json')
+  store.exportSnapshot(snapshot)
+  const backup = store.createBackup('canvas')
+  store.saveCreationProjects([])
+  store.importSnapshot(snapshot)
+  assert.deepEqual(new WorkspaceStore(directory).get().creationProjects, clean)
+  store.saveCreationProjects([])
+  store.restoreBackup(backup.fileName)
+  assert.deepEqual(new WorkspaceStore(directory).get().creationProjects, clean)
+})
+
 test('GitHub favorites normalize old data and survive reload, snapshot and backup without extra fields', (t) => {
   const { directory, store } = createStore()
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

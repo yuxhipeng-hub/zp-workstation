@@ -1,164 +1,346 @@
 .creation-studio {
   color: var(--text);
   min-width: 0;
+  padding: 24px 26px;
+  font-size: 12px;
+  --cs-divider: color-mix(in srgb, var(--line) 65%, transparent);
 }
 .cs-toolbar,
 .cs-project-heading,
 .cs-actions,
 .cs-version-bar,
-.cs-tabs {
+.cs-tabs,
+.cs-collection-tabs,
+.cs-section-heading,
+.cs-project-state {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 12px;
 }
 .cs-toolbar,
-.cs-project-heading {
+.cs-project-heading,
+.cs-section-heading {
   justify-content: space-between;
-  margin-bottom: 24px;
 }
-.cs-toolbar h2 {
-  font-size: 22px;
-  font-weight: 500;
-  margin: 8px 0;
+.cs-toolbar {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--cs-divider);
 }
-.cs-eyebrow {
-  font: 11px var(--font-mono, monospace);
-  letter-spacing: 0.12em;
-  color: var(--text-secondary);
-}
-.creation-studio h2,
-.creation-studio h3,
-.creation-studio h4,
-.creation-studio p {
-  overflow-wrap: anywhere;
-}
-.cs-shell {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-}
-.cs-projects {
-  display: grid;
+.cs-actions,
+.cs-version-bar {
+  flex-wrap: wrap;
   gap: 8px;
 }
-.cs-projects > button {
-  display: flex;
-  gap: 10px;
-  text-align: left;
-  align-items: center;
-  padding: 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+.creation-studio .button {
+  min-height: 32px;
+  height: auto;
+  padding: 6px 12px;
+  gap: 6px;
+  font-size: 12px;
+  box-shadow: none;
+}
+.creation-studio .button.primary {
   background: transparent;
   color: var(--text);
-  min-width: 0;
+  border: 0;
+  font-weight: 600;
 }
-.cs-projects > button:hover {
+.creation-studio .button.primary:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.creation-studio .button.secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--line);
+}
+.creation-studio .button.secondary:hover:not(:disabled) {
   background: var(--panel-hover);
-}
-.cs-projects > button[aria-current='true'] {
-  background: var(--panel);
+  color: var(--text);
   border-color: var(--line-strong);
 }
-.cs-projects strong {
-  display: block;
+.creation-studio .button:hover {
+  transform: none;
+  box-shadow: none;
+}
+.creation-studio .button:active {
+  transform: scale(0.98);
+}
+.creation-studio .cs-section-heading .button {
+  border-color: transparent;
+  padding-inline: 6px;
+}
+.creation-studio .button svg {
+  width: 14px;
+  height: 14px;
+}
+.creation-studio button {
+  cursor: pointer;
+  white-space: normal;
+  max-width: 100%;
+}
+.creation-studio button:disabled {
+  cursor: default;
+}
+.cs-collection-tabs {
+  gap: 20px;
+  align-self: stretch;
+}
+.cs-collection-tabs > button,
+.cs-tabs > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  transition: color var(--motion-fast);
+}
+.cs-collection-tabs > button[aria-current='page'],
+.cs-tabs > button[aria-current='page'] {
+  border-bottom-color: var(--ink);
+  color: var(--text);
+  font-weight: 600;
+}
+.cs-collection-tabs > button:hover,
+.cs-tabs > button:hover {
+  color: var(--text);
+}
+.cs-collection-tabs span,
+.cs-tabs span {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.creation-studio :is(h2, h3, h4, p) {
   overflow-wrap: anywhere;
+}
+.creation-studio p {
+  line-height: 1.7;
+}
+.cs-section-heading {
+  gap: 8px;
+  margin-bottom: 16px;
+  min-height: 28px;
+}
+.cs-section-heading h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+.cs-section-heading > span {
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 .cs-thumbnail {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 48px;
+  width: 32px;
+  height: 40px;
   flex-shrink: 0;
-  border-radius: 6px;
-  background: var(--panel-raised);
-  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-hover);
   overflow: hidden;
+  color: var(--text-secondary);
+}
+.cs-thumbnail svg {
+  width: 16px;
+  height: 16px;
 }
 .cs-thumbnail img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.cs-detail,
 .cs-work > *,
 .cs-comparison > * {
   min-width: 0;
 }
+.cs-project-heading {
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.cs-project-title {
+  min-width: 0;
+  flex: 1;
+}
+.cs-project-state {
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.cs-project-state > span:first-child {
+  background: var(--panel-raised);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
 .cs-project-heading h2 {
-  margin: 6px 0;
-  font-size: 24px;
+  margin: 10px 0 8px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.45;
 }
 .cs-project-heading p {
   margin: 6px 0;
-}
-.cs-tabs {
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 20px;
-  gap: 20px;
-}
-.cs-tabs button {
-  padding: 10px 0;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
   color: var(--text-secondary);
 }
-.cs-tabs button[aria-current='page'] {
-  border-bottom-color: var(--ink);
-  color: var(--text);
+.cs-project-heading .cs-hint {
+  font-size: 11px;
 }
-.cs-work {
-  display: grid;
-  grid-template-columns: minmax(0, 1.75fr) minmax(240px, 1fr);
-  gap: 20px;
-  align-items: start;
-}
-.cs-panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-  padding: 20px;
-  margin-bottom: 16px;
-}
-.cs-panel h3 {
-  font-size: 15px;
-  margin: 0 0 14px;
-}
-.cs-panel p {
-  line-height: 1.65;
-}
-.cs-panel hr {
-  border: 0;
-  border-top: 1px solid var(--line);
-  margin: 24px 0;
-}
-.cs-panel details {
-  border-top: 1px solid var(--line);
-  padding: 14px 0;
+.cs-more {
+  position: relative;
 }
 .creation-studio summary {
   cursor: pointer;
-  line-height: 1.8;
+  line-height: 1.7;
+}
+.cs-more > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  min-height: 32px;
+  box-sizing: border-box;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+.cs-more > summary::-webkit-details-marker {
+  display: none;
+}
+.cs-more > summary:hover {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+.cs-more summary svg {
+  width: 12px;
+  height: 12px;
+}
+.cs-more-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 188px;
+  max-width: calc(100vw - 64px);
+  display: grid;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+}
+.creation-studio .cs-more-menu .button {
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
+}
+.creation-studio .cs-more-menu .button:hover {
+  background: var(--panel-hover);
+}
+.creation-studio .cs-more-menu [data-action='cs-delete'] {
+  color: var(--danger);
+}
+.cs-tabs {
+  gap: 24px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--cs-divider);
+  margin-bottom: 24px;
+}
+.cs-tabs > button {
+  padding-bottom: 12px;
+}
+.cs-work {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(230px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.cs-context {
+  border-left: 1px solid var(--cs-divider);
+  padding-left: 24px;
+}
+.cs-context-section {
+  padding: 0 0 20px;
+}
+.cs-context-section + .cs-context-section {
+  border-top: 1px solid var(--cs-divider);
+  padding-top: 20px;
+}
+.cs-context-section .cs-section-heading {
+  margin-bottom: 12px;
+}
+.cs-context-section > summary {
+  font-weight: 500;
+}
+.cs-context-section > summary span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-left: 6px;
+}
+.cs-context-section details {
+  margin-top: 16px;
+}
+.cs-context p {
+  color: var(--text-secondary);
+}
+.cs-directory {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.cs-panel {
+  padding: 0 0 24px;
+  margin-bottom: 24px;
+  border: 0;
+  border-bottom: 1px solid var(--cs-divider);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.cs-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+.cs-panel h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.cs-panel hr {
+  border: 0;
+  border-top: 1px solid var(--cs-divider);
+  margin: 24px 0;
+}
+.cs-panel details {
+  padding: 14px 0;
 }
 .creation-studio label {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   font-size: 12px;
+  line-height: 1.6;
   color: var(--text-secondary);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   min-width: 0;
 }
-.creation-studio input,
-.creation-studio select,
-.creation-studio textarea {
+.creation-studio :is(input, select, textarea) {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 9px 10px;
+  padding: 10px 12px;
+  min-height: 40px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--panel-raised);
@@ -166,12 +348,8 @@
   font: inherit;
 }
 .creation-studio textarea {
-  resize: vertical;
-}
-.creation-studio button {
-  cursor: pointer;
-  white-space: normal;
-  min-height: 38px;
+  resize: none;
+  line-height: 1.7;
 }
 .creation-studio :is(button, input, select, textarea, summary):focus-visible {
   outline: 2px solid var(--focus);
@@ -179,41 +357,56 @@
 }
 .cs-preview {
   margin: 0 0 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
   overflow: hidden;
-  background: var(--panel);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 .cs-preview figcaption {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  padding: 12px 16px;
+  padding: 0 0 12px;
   font-size: 12px;
+}
+.cs-preview figcaption strong {
+  font-weight: 500;
 }
 .cs-preview figcaption span {
   color: var(--text-secondary);
+  font-size: 11px;
 }
 .cs-media {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  min-height: 250px;
+  min-height: 240px;
+  aspect-ratio: 16/10;
   background: var(--bg-elevated);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 .cs-media img,
 .cs-media video {
   width: 100%;
   max-height: 520px;
+  height: 100%;
   object-fit: contain;
+}
+.cs-media audio {
+  max-width: 100%;
 }
 .cs-media p {
   padding: 20px;
   color: var(--text-secondary);
   text-align: center;
+}
+.cs-media:has(pre) {
+  aspect-ratio: auto;
+  align-items: stretch;
 }
 .creation-studio pre {
   white-space: pre-wrap;
@@ -227,21 +420,24 @@
   box-sizing: border-box;
 }
 .cs-meta {
-  padding: 10px 16px;
+  padding: 10px 0;
   font-size: 11px;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
-  border-top: 1px solid var(--line);
 }
 .cs-summary {
   display: grid;
-  gap: 0;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--cs-divider);
 }
 .cs-summary > div {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--line);
+  padding: 20px 0;
   display: grid;
   gap: 8px;
+}
+.cs-summary > .cs-next {
+  grid-column: 1 / -1;
+  border-bottom: 1px solid var(--cs-divider);
 }
 .cs-summary span,
 .cs-hint,
@@ -250,17 +446,23 @@
   font-size: 12px;
 }
 .cs-summary strong {
-  font-size: 14px;
+  font-size: 22px;
   font-weight: 500;
   overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.cs-next strong {
+  font-size: 13px;
+}
+.cs-summary strong small {
+  display: inline;
+  font-size: 11px;
+  margin-left: 6px;
 }
 .creation-studio small {
   display: block;
   line-height: 1.7;
   overflow-wrap: anywhere;
-}
-.cs-goal {
-  font-size: 16px;
 }
 .cs-prose {
   white-space: pre-wrap;
@@ -269,42 +471,58 @@
   display: grid;
   justify-items: center;
   align-content: center;
-  min-height: 340px;
+  min-height: 300px;
+  aspect-ratio: 16/10;
   text-align: center;
-  padding: 28px;
-  border: 1px dashed var(--line-strong);
+  padding: 32px 24px;
+  box-sizing: border-box;
+  border: 0;
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--bg-elevated);
 }
 .cs-empty svg {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   color: var(--text-secondary);
+  stroke-width: 1.5;
+  margin-bottom: 8px;
+}
+.cs-empty h3 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 12px 0 0;
 }
 .cs-empty p {
-  max-width: 380px;
+  max-width: 340px;
   line-height: 1.7;
   color: var(--text-secondary);
+  margin: 10px 0 24px;
+}
+.cs-welcome {
+  aspect-ratio: auto;
+  min-height: 420px;
+  background: transparent;
 }
 .cs-comparison.is-comparing {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
 }
 .cs-version-bar {
   align-items: end;
+  margin-bottom: 8px;
 }
 .cs-version-bar label {
   flex: 1;
-  min-width: 180px;
+  min-width: min(180px, 100%);
 }
 .cs-version-bar button {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .cs-review,
 .cs-run {
-  padding: 18px 0;
-  border-top: 1px solid var(--line);
+  padding: 20px 0;
+  border-top: 1px solid var(--cs-divider);
 }
 .cs-review > small {
   margin: 8px 0;
@@ -322,51 +540,822 @@
   min-width: 85px;
 }
 .cs-editor {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--cs-divider);
+}
+.cs-project-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  column-gap: 16px;
   max-width: 760px;
 }
+.cs-form-wide {
+  grid-column: 1 / -1;
+}
 .cs-error {
-  padding: 12px;
+  padding: 12px 16px;
   border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
   background: var(--panel-raised);
 }
 .cs-run progress {
   width: 100%;
   accent-color: var(--ink);
 }
-@media (max-width: 1200px) {
-  .cs-shell {
-    grid-template-columns: 180px minmax(0, 1fr);
-    gap: 16px;
-  }
+@media (max-width: 1280px) {
   .cs-work {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cs-context {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px;
+    padding: 24px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--cs-divider);
+  }
+  .cs-context-section + .cs-context-section {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .cs-context > details {
+    border-top: 1px solid var(--cs-divider);
+    padding-top: 16px;
   }
 }
 @media (max-width: 820px) {
-  .cs-shell {
-    grid-template-columns: 1fr;
+  .creation-studio {
+    padding: 20px 16px;
   }
-  .cs-projects {
-    display: flex;
-    overflow-x: auto;
-    max-width: 100%;
-    padding-bottom: 8px;
+  .cs-collection-tabs {
+    gap: 16px;
   }
-  .cs-projects > button {
-    min-width: 180px;
-    max-width: 240px;
-    flex-shrink: 0;
+  .cs-project-heading {
+    flex-direction: column;
+    gap: 12px;
   }
-  .cs-comparison.is-comparing {
-    grid-template-columns: 1fr;
+  .cs-project-heading h2 {
+    font-size: 20px;
   }
   .cs-tabs {
-    gap: 14px;
+    gap: 16px;
+    margin-bottom: 20px;
   }
-  .cs-toolbar h2 {
-    font-size: 19px;
+  .cs-comparison.is-comparing,
+  .cs-context {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .cs-panel {
-    padding: 16px;
+  .cs-context-section + .cs-context-section {
+    border-top: 1px solid var(--cs-divider);
+    padding-top: 16px;
+  }
+  .cs-empty {
+    min-height: 260px;
+    aspect-ratio: auto;
+  }
+  .cs-welcome {
+    min-height: 360px;
+  }
+  .cs-media {
+    min-height: 200px;
+  }
+  .cs-project-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .creation-studio *,
+  .creation-studio *::before,
+  .creation-studio *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+/* Creation is a workspace surface: objects live directly on the app background. */
+#view[data-page='creation'] {
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.cc-studio {
+  padding: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+.cc-toolbar {
+  flex: none;
+  padding: 18px 28px 12px;
+  border: 0;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: transparent;
+}
+.cc-title {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+.cc-title h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.4px;
+}
+.cc-title > span,
+.cc-eyebrow {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.cc-toolbar .button.secondary {
+  border-color: transparent;
+}
+.cc-studio .cc-toolbar > .button,
+.cc-studio .cc-toolbar > .button:hover,
+.cc-studio .cc-toolbar > .button:focus-visible {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.cc-toolbar .cs-collection-tabs {
+  gap: 18px;
+}
+.cc-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  cursor: grab;
+  background: transparent;
+  scrollbar-width: thin;
+}
+.cc-viewport.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+.cc-plane {
+  min-width: 880px;
+  min-height: 100%;
+  padding: 52px 38px 96px;
+  box-sizing: border-box;
+}
+.cc-projects {
+  display: grid;
+  gap: 62px;
+  align-content: start;
+}
+.cc-project {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+.cc-root {
+  padding-top: 24px;
+  min-width: 0;
+}
+.cc-project-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+}
+.cc-project-trigger > strong {
+  font-size: 16px;
+  font-weight: 550;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.cc-project-trigger > svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+.cc-project-symbol {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--panel-hover);
+}
+.cc-project-symbol svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.5;
+}
+.cc-root-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 8px 0 8px 38px;
+}
+.cc-node-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 8px;
+}
+.cc-root > .cc-node-tools {
+  margin-left: 34px;
+}
+.cc-studio .cc-node-tools .button {
+  border: 0;
+  border-radius: 3px;
+  padding: 3px 4px;
+  min-height: 28px;
+  font-size: 11px;
+}
+.cc-videos {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 40px;
+  min-width: 0;
+}
+.cc-videos::before {
+  content: '';
+  position: absolute;
+  left: -25px;
+  top: 36px;
+  bottom: 100px;
+  width: 1px;
+  background: var(--cs-divider);
+}
+.cc-video {
+  position: relative;
+  display: grid;
+  grid-template-columns: 164px minmax(350px, 1fr);
+  gap: 22px 30px;
+  min-width: 0;
+  align-items: start;
+}
+.cc-video::before,
+.cc-empty-branch::before {
+  content: '';
+  position: absolute;
+  top: 36px;
+  left: -25px;
+  width: 25px;
+  height: 22px;
+  border-top: 1px solid var(--cs-divider);
+  border-left: 1px solid var(--cs-divider);
+  border-top-left-radius: 20px;
+}
+.cc-video-object {
+  min-width: 0;
+}
+.cc-video-trigger {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+  color: var(--text);
+  font: inherit;
+}
+.cc-video-trigger strong {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.cc-video-trigger[aria-expanded='true'] strong {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-color: var(--line-strong);
+}
+.cc-cover {
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16/10;
+  border-radius: 4px;
+  background: var(--panel-hover);
+}
+.cc-cover > svg {
+  width: 22px;
+  height: 22px;
+  opacity: 0.5;
+}
+.cc-cover > span {
+  position: absolute;
+  bottom: 8px;
+  left: 9px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.cc-video-object > small {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.cc-roles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px 14px;
+  padding-top: 5px;
+  max-width: 560px;
+}
+.cc-stage {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 3px 4px;
+  align-content: start;
+  border: 0;
+  padding: 3px 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--text);
+  font: inherit;
+}
+.cc-stage-index {
+  color: var(--text-secondary);
+  font: 10px/1.7 var(--font-mono);
+}
+.cc-stage strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.cc-stage small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.cc-stage-status {
+  grid-column: 2;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.cc-stage:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.cc-empty-branch {
+  position: relative;
+  padding: 22px 0;
+  color: var(--text-secondary);
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.cc-empty-branch p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+.cc-empty-branch span {
+  font-size: 12px;
+}
+.cc-welcome {
+  padding: 100px 0;
+  max-width: 560px;
+}
+.cc-workpage {
+  grid-column: 2;
+  width: min(100%, 520px);
+  max-height: min(480px, 64dvh);
+  overflow: auto;
+  overscroll-behavior: auto;
+  scrollbar-width: thin;
+  container-type: inline-size;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 14px;
+  margin-top: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: auto;
+}
+.cc-workpage .cs-project-heading h2 {
+  font-size: 15px;
+  margin: 0;
+}
+.cc-workpage .cs-project-heading {
+  position: sticky;
+  top: -14px;
+  z-index: 2;
+  background: var(--panel);
+  padding: 8px 0;
+  margin-bottom: 12px;
+  flex-direction: row;
+  gap: 10px;
+}
+.cc-workpage .cs-tabs {
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.cc-workpage .cs-more {
+  margin-left: auto;
+}
+.cc-canvas-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px;
+  gap: 16px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.cc-canvas-tools > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cc-studio .cc-canvas-tools .button {
+  border-color: transparent;
+  min-height: 28px;
+  padding: 3px 8px;
+}
+.cc-canvas-tools output {
+  min-width: 38px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.cc-studio .cc-composer {
+  grid-column: 1/-1;
+  width: min(100%, 320px);
+  max-width: 320px;
+  max-height: min(312px, 60dvh);
+  overflow: auto;
+  overscroll-behavior: auto;
+  scrollbar-width: thin;
+  box-sizing: border-box;
+  padding: 12px;
+  margin: 0 0 12px;
+  background: var(--panel);
+  border: 0;
+  border-radius: 8px;
+  cursor: auto;
+}
+.cc-composer > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.cc-studio .cc-composer header .button {
+  border: 0;
+  width: 24px;
+  min-height: 24px;
+  padding: 2px;
+  font-size: 11px;
+}
+.cc-studio .cc-composer .cs-project-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.cc-studio .cc-composer label {
+  margin: 0;
+  gap: 4px;
+}
+.cc-studio .cc-composer :is(input, textarea, select),
+.cc-workpage :is(input, textarea, select) {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 0;
+  min-height: 32px;
+}
+.cc-studio .cc-composer .cc-title-field input {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 4px 0;
+  height: 32px;
+  letter-spacing: 0;
+}
+.cc-studio .cc-composer textarea {
+  field-sizing: content;
+  min-height: 32px;
+  height: auto;
+  max-height: 112px;
+  padding: 6px 0;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 20px;
+}
+.cc-extra > summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 6px 0;
+}
+.cc-extra[open] {
+  display: grid;
+  gap: 16px;
+}
+.cc-extra-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 102px;
+  gap: 8px;
+}
+.cc-stage-picker {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.cc-stage-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 32px;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cc-stage-trigger svg {
+  width: 14px;
+  height: 14px;
+}
+#view[data-page='creation'] .cc-stage-trigger:focus-visible {
+  outline: none;
+  border-bottom-color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cc-studio .cc-composer .cc-extra-fields :is(input, select) {
+  padding: 4px 0;
+  font-size: 12px;
+}
+.cc-group-menu {
+  display: grid;
+  justify-items: start;
+  margin: 12px 0 0 34px;
+}
+.cc-studio .cc-workpage .cs-work {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.cc-workpage [data-cs-form='publication'] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.cc-workpage [data-cs-form='publication'] > :is(h3, button, p, label:has(textarea)) {
+  grid-column: 1/-1;
+}
+.cc-workpage [data-cs-form='publication'] label {
+  margin: 0;
+}
+@media (max-width: 1000px) {
+  .cc-toolbar {
+    padding: 14px 20px 10px;
+    gap: 12px;
+  }
+  .cc-title > span {
+    display: none;
+  }
+  .cc-plane {
+    padding: 38px 24px 80px;
+  }
+}
+@media (max-width: 600px) {
+  .cc-toolbar .cs-collection-tabs {
+    order: 3;
+    width: 100%;
+  }
+  .cc-canvas-tools {
+    padding: 6px 12px;
+  }
+  .cc-canvas-tools > span {
+    display: none;
+  }
+  .cc-title h2 {
+    font-size: 15px;
+  }
+}
+#app:has(#view[data-page='creation']) {
+  --sidebar-width: 72px;
+  --topbar-height: 58px;
+}
+#app:has(#view[data-page='creation']) .brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+#app:has(#view[data-page='creation'])
+  :is(.brand-copy, .nav-label, .nav-item span:not(.nav-dot), .mini-status > div, .rail-footnote) {
+  display: none;
+}
+#app:has(#view[data-page='creation']) .nav {
+  padding-inline: 10px;
+}
+#app:has(#view[data-page='creation']) .nav-item {
+  justify-content: center;
+  padding: 0;
+}
+#app:has(#view[data-page='creation']) .nav-item.active {
+  background: var(--panel-hover);
+  color: var(--text);
+  box-shadow: none;
+}
+#app:has(#view[data-page='creation']) .nav-item.active::before {
+  display: none;
+}
+#app:has(#view[data-page='creation']) .topbar {
+  background: transparent;
+  border: 0;
+  padding-inline: 28px;
+}
+#app:has(#view[data-page='creation']) .topbar::after {
+  display: none;
+}
+#app:has(#view[data-page='creation']) :is(.route-marker, .eyebrow, .page-summary, .local-time) {
+  display: none;
+}
+#app:has(#view[data-page='creation']) .topbar h1 {
+  font-size: 17px;
+  font-weight: 550;
+}
+#app:has(#view[data-page='creation']) .topbar-actions {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.cc-title h2 {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+}
+.cc-plane {
+  min-width: 780px;
+}
+.cc-project {
+  grid-template-columns: 160px minmax(0, 1fr);
+  column-gap: 38px;
+}
+.cc-video {
+  grid-template-columns: 150px minmax(330px, 1fr);
+  column-gap: 26px;
+}
+.cc-studio .cs-empty {
+  background: transparent;
+  aspect-ratio: auto;
+  min-height: 200px;
+}
+.cc-studio .cc-welcome {
+  min-height: 380px;
+}
+/* The canvas stays still; only the newly disclosed local region receives motion. */
+#view[data-page='creation'] > .cc-studio {
+  animation: none;
+}
+.cc-studio [hidden] {
+  display: none !important;
+}
+.cc-stage[aria-pressed='true'] strong {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.cc-stage {
+  transition: color 90ms ease-out;
+}
+
+#view[data-page='creation'] .cc-composer label:has(:is(input, textarea, select):focus-visible),
+#view[data-page='creation'] .cc-composer :is(input, textarea, select):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+#view[data-page='creation'] .cc-composer :is(input, textarea, select):focus {
+  border-bottom-color: var(--line-strong);
+}
+/* Expanded controls stay in compact, bounded panels beside their canvas objects. */
+.cc-studio .cc-roles {
+  box-sizing: border-box;
+  width: min(100%, 420px);
+  padding: 12px;
+  gap: 14px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.cc-studio :is(.cc-composer, .cc-workpage) .button {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.cc-studio :is(.cc-composer, .cc-workpage) .cs-actions {
+  gap: 4px;
+}
+.cc-composer .cs-project-form > .cs-actions {
+  position: sticky;
+  bottom: -12px;
+  padding: 4px 0 0;
+  justify-content: flex-end;
+  background: var(--panel);
+}
+.cc-workpage .cs-project-heading > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+.cc-workpage .cs-project-heading > .cs-actions {
+  max-width: 62%;
+  justify-content: flex-end;
+}
+.cc-workpage .cs-project-heading .cc-eyebrow {
+  display: none;
+}
+.cc-workpage .cs-project-heading .cs-hint {
+  margin: 4px 0 0;
+  font-size: 10px;
+}
+.cc-workpage .cs-panel {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+.cc-workpage .cs-panel h3 {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.cc-workpage :is(label, .cs-section-heading) {
+  margin-bottom: 10px;
+}
+.cc-workpage .cs-context {
+  padding: 12px 0 0;
+}
+.cc-workpage .cs-context-section {
+  padding-bottom: 12px;
+}
+.cc-workpage .cs-summary {
+  gap: 12px;
+  padding-block: 12px;
+}
+.cc-workpage .cs-summary strong {
+  font-size: 16px;
+}
+.cc-workpage .cs-next strong {
+  font-size: 12px;
+}
+.cc-workpage .cs-comparison.is-comparing {
+  gap: 10px;
+}
+.cc-workpage .cs-media {
+  min-height: 120px;
+  max-height: 190px;
+  aspect-ratio: 16/9;
+}
+.cc-workpage .cs-media :is(img, video) {
+  max-height: 190px;
+}
+.cc-workpage pre {
+  max-height: 160px;
+  overflow: auto;
+}
+.cc-studio :is(.cc-extra, .cc-workpage details)[open]:not(.cs-more) {
+  padding: 10px;
+  border: 0;
+  border-radius: 6px;
+}
+.cc-studio .cc-composer details.cc-extra[open] {
+  padding: 4px 0 0;
+  gap: 6px;
+}
+@container (max-width: 420px) {
+  .cv-form,
+  .cv-field-grid,
+  [data-cs-form='publication'] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .cs-project-heading {
+    flex-direction: column !important;
+    align-items: stretch;
+  }
+  .cs-project-heading > .cs-actions {
+    max-width: 100% !important;
+    justify-content: flex-start !important;
   }
 }

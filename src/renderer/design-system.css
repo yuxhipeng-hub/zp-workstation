@@ -6,6 +6,10 @@
  * surfaces, focus states, density, and motion across every page.
  */
 
+textarea {
+  resize: none;
+}
+
 :root {
   --bg: #09090b;
   --bg-elevated: #0d0d0f;

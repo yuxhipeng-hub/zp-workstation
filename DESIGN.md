@@ -138,7 +138,7 @@ cards and separators:
 Rules:
 
 - A page should normally use one `workbench-canvas`, not a collection of cards.
-- Every non-Today route uses a single `route-canvas`; inner modules are grouped
+- Routes other than Today and Creation use one `route-canvas`; inner modules are grouped
   with dividers and spacing instead of separate floating cards.
 - Internal sections use separators and spacing, not their own outer borders.
 - Separators inside a canvas use reduced-contrast lines; they should support the
@@ -196,3 +196,35 @@ All product routes now share the same surface and component rules:
 - Icon-only controls have accessible labels.
 - Loading, dragging, saving, and failure states remain explicit.
 - Interactions must not depend on hover alone.
+
+## Creation project canvas
+
+The background is the canvas. Reuse the application's existing dot surface as the single
+background owner. Keep the
+app header, toolbar, viewport, and tree transparent; never redraw a local dot layer.
+Use a vertical outline: project → video → numbered stage, with real shots beneath
+the storyboard stage. Align names, owners, and recorded states
+across the outline width, without duplicate column captions or hierarchy instructions.
+Use an anchored, vertical theme popup for project actions, with no layout displacement.
+Center the outline, growing up to 1440px;
+opening, closing, and switching branches must preserve the viewport without auto-scrolling.
+Keep action icons beside the object's name. Place editors directly below their source row;
+repeated activation collapses them while preserving drafts. Keep zoom/reset fixed at the
+window's lower right corner without a footer strip or panning instructions.
+Do not use a grid of seven cards. Branch disclosures are independent
+from the active editor. Do not enclose this route in a large card or add a permanent
+inspector. Editors sit directly below their own row in compact, borderless panels with one solid fill: requirements up to 320px wide,
+step workspaces up to 520px wide, with bounded height and internal scrolling.
+Requirement editors stay below 260px by default and 312px with their two-column settings
+expanded. Textareas have no manual resize grip.
+The requirement field starts at one line, grows with wrapping/newlines to 112px,
+and shrinks when content is removed; restored drafts use the same sizing.
+Use transparent primary text/icon actions and transparent scrollbar tracks. Stage choices
+use the same theme popup as project actions. Label manual stage tags and registered
+artifact-version counts explicitly, separately from agent execution state.
+Plus actions open a compact editor; saving collapses it, and the
+object's requirements action reopens it. Disclosures reveal branches without running tasks;
+shot leaves open their own editor and preserve separate drafts. Reveal detailed controls progressively. Existing media,
+review, version, and publication tools live in a collapsible video workspace.
+See `docs/specs/003-creation-studio.md` for hierarchy compatibility and interaction rules.
+Position popups while hidden, then reveal them synchronously at their anchor; never animate a move from a default position.

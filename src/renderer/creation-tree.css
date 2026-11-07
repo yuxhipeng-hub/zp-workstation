@@ -1,0 +1,442 @@
+/* Project ownership is a tree; numbered rows express the production order. */
+.cc-outline .cc-canvas-tools {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 4;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.cc-outline .cc-viewport {
+  overflow-anchor: none;
+  scrollbar-gutter: stable both-edges;
+}
+.cc-outline .cc-plane {
+  width: min(100%, 1488px);
+  min-width: 0;
+  margin-inline: auto;
+  padding: 28px 24px 64px;
+}
+.cc-outline .cc-projects {
+  display: grid;
+  width: 100%;
+  max-width: none;
+  gap: 24px;
+}
+.cc-outline .cc-project,
+.cc-outline .cc-video {
+  display: block;
+  min-width: 0;
+}
+.cc-outline .cc-root {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 0;
+  min-height: 36px;
+}
+.cc-outline .cc-project-trigger {
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 120px;
+  gap: 7px;
+  padding: 4px 0;
+}
+.cc-outline .cc-project-trigger > strong {
+  font-size: 15px;
+  font-weight: 550;
+}
+.cc-outline .cc-project-trigger > svg {
+  margin: 0;
+  width: 15px;
+  height: 15px;
+}
+.cc-outline .cc-project-trigger > svg:first-child {
+  width: 12px;
+  height: 12px;
+}
+.cc-outline .cc-root-meta {
+  margin: 0 0 0 auto;
+  white-space: nowrap;
+}
+.cc-outline .cc-root > .cc-node-tools {
+  margin: 0;
+}
+.cc-outline .cc-node-tools {
+  gap: 4px;
+  flex: none;
+}
+.cc-outline .cc-node-tools .button {
+  width: 26px;
+  min-height: 26px;
+  padding: 4px;
+}
+.cc-outline :is(.cc-group-menu, .cc-stage-options) {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 208px;
+  max-width: calc(100vw - 32px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--panel-raised);
+  color: var(--text);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 22%);
+  visibility: hidden;
+  animation: none;
+  transition: none;
+}
+.cc-outline :is(.cc-group-menu, .cc-stage-options)::backdrop {
+  background: transparent;
+}
+.cc-outline :is(.cc-group-menu, .cc-stage-options) > .button {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 32px;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 12px;
+  color: var(--text);
+}
+.cc-outline :is(.cc-group-menu, .cc-stage-options) > .button:hover,
+.cc-outline :is(.cc-group-menu, .cc-stage-options) > .button:focus-visible {
+  background: var(--panel-hover);
+}
+.cc-outline :is(.cc-group-menu, .cc-stage-options) > .button:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cc-outline :is(.cc-group-menu, .cc-stage-options) > .button svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+}
+.cc-outline .cc-group-menu > [data-action='cs-delete'] {
+  margin-top: 4px;
+  color: var(--danger);
+}
+.cc-stage-options > .button > span {
+  flex: 1;
+  text-align: left;
+}
+.cc-stage-options > [aria-selected='false'] .cc-option-check {
+  visibility: hidden;
+}
+.cc-outline .cc-stage-options > .button[aria-selected='true'] {
+  background: var(--panel-hover);
+}
+.cc-outline .cc-videos {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0 12px;
+  padding-left: 20px;
+  border-left: 1px solid var(--cs-divider);
+}
+.cc-outline .cc-videos::before {
+  display: none;
+}
+.cc-outline .cc-video::before {
+  top: 18px;
+  left: -20px;
+  width: 14px;
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--cs-divider);
+  border-radius: 0;
+}
+.cc-outline .cc-video-object {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-height: 36px;
+}
+.cc-outline .cc-video-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 140px;
+  padding: 4px 0;
+}
+.cc-outline .cc-video-trigger > svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-secondary);
+  flex: none;
+}
+.cc-outline .cc-video-trigger > strong {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.cc-outline .cc-cover {
+  display: grid;
+  flex: none;
+  width: 30px;
+  height: 20px;
+  aspect-ratio: auto;
+  border-radius: 3px;
+}
+.cc-outline .cc-cover svg {
+  width: 14px;
+  height: 14px;
+}
+.cc-outline .cc-video-object > small {
+  margin: 0 0 0 auto;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cc-outline .cc-roles {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 12px);
+  max-width: none;
+  padding: 0 0 0 18px;
+  margin: 4px 0 10px 12px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--cs-divider);
+  border-radius: 0;
+}
+.cc-outline .cc-stage-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 110px 128px;
+  align-items: center;
+  gap: 8px;
+}
+.cc-outline .cc-stage-node,
+.cc-outline .cc-shot-node {
+  position: relative;
+  min-width: 0;
+}
+.cc-outline .cc-stage-node::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 17px;
+  width: 12px;
+  border-top: 1px solid var(--cs-divider);
+}
+.cc-outline .cc-stage-row {
+  min-height: 34px;
+}
+.cc-outline .cc-stage-index {
+  color: var(--text-secondary);
+  font: 10px/1.6 var(--font-mono);
+  text-align: center;
+}
+.cc-outline .cc-stage-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 4px;
+}
+.cc-outline .cc-stage {
+  display: flex;
+  align-items: center;
+  width: auto;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 6px;
+  flex: 0 1 auto;
+  border-radius: 4px;
+}
+.cc-outline .cc-stage strong {
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+.cc-outline .cc-stage:hover,
+.cc-outline .cc-stage[aria-expanded='true'] {
+  background: var(--panel-hover);
+}
+.cc-outline .cc-stage[aria-expanded='true'] strong {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.cc-outline .cc-stage-title > .button {
+  flex: none;
+  border: 0;
+  padding: 3px;
+  min-height: 26px;
+}
+.cc-outline .cc-stage-title > .button svg {
+  width: 13px;
+  height: 13px;
+}
+.cc-outline .cc-stage-owner,
+.cc-outline .cc-stage-status {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  grid-column: auto;
+  overflow-wrap: anywhere;
+}
+.cc-outline .cc-shot-list {
+  margin: 2px 0 8px 30px;
+  padding-left: 16px;
+  border-left: 1px solid var(--cs-divider);
+}
+.cc-outline .cc-shot-node::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 16px;
+  width: 10px;
+  border-top: 1px solid var(--cs-divider);
+}
+.cc-outline .cc-shot-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+.cc-outline .cc-shot-trigger {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  padding: 4px 6px;
+  border-radius: 4px;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+}
+.cc-outline .cc-shot-trigger:hover,
+.cc-outline .cc-shot-trigger[aria-expanded='true'] {
+  background: var(--panel-hover);
+}
+.cc-outline .cc-shot-row > span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cc-outline .cc-shot-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.cc-outline .cc-workpage {
+  width: min(calc(100% - 30px), 520px);
+  margin: 6px 0 12px 30px;
+}
+.cc-outline .cc-video > .cc-workpage {
+  width: min(calc(100% - 22px), 520px);
+  margin-left: 22px;
+}
+.cc-outline .cc-video > .cc-composer {
+  width: min(calc(100% - 22px), 320px);
+  margin-left: 22px;
+}
+.cc-outline .cc-project > .cc-composer {
+  margin: 8px 0 12px 20px;
+  width: min(calc(100% - 20px), 320px);
+}
+.cc-outline .cc-empty-branch {
+  padding: 8px 0;
+  gap: 8px;
+}
+.cc-outline .cc-empty-branch::before {
+  display: none;
+}
+@media (max-width: 760px) {
+  .cc-outline .cc-plane {
+    padding: 18px 16px 48px;
+  }
+  .cc-outline .cc-root {
+    gap: 4px 8px;
+  }
+  .cc-outline .cc-root > .cc-node-tools {
+    margin-left: 20px;
+  }
+  .cc-outline .cc-video-object {
+    gap: 4px 8px;
+  }
+  .cc-outline .cc-video-object > small {
+    display: none;
+  }
+  .cc-outline .cc-stage-row {
+    grid-template-columns: 20px minmax(0, 1fr) 90px 100px;
+    gap: 5px;
+  }
+}
+@media (max-width: 520px) {
+  .cc-outline .cc-plane {
+    padding: 12px 8px 36px;
+  }
+  .cc-outline .cc-videos {
+    margin-left: 6px;
+    padding-left: 12px;
+  }
+  .cc-outline .cc-video::before {
+    left: -12px;
+    width: 8px;
+  }
+  .cc-outline .cc-root > .cc-node-tools {
+    margin-left: 0;
+  }
+  .cc-outline .cc-video-object > .cc-node-tools {
+    margin-left: 18px;
+  }
+  .cc-outline .cc-roles {
+    margin-left: 6px;
+    padding-left: 12px;
+  }
+  .cc-outline .cc-stage-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: 2px 4px;
+    padding-block: 3px;
+  }
+  .cc-outline .cc-stage-title {
+    grid-column: 2/4;
+  }
+  .cc-outline .cc-stage-owner {
+    grid-column: 2;
+    padding-left: 6px;
+  }
+  .cc-outline .cc-stage-status {
+    grid-column: 3;
+  }
+  .cc-outline .cc-stage-node::before {
+    left: -12px;
+    width: 8px;
+  }
+  .cc-outline .cc-shot-list {
+    margin-left: 16px;
+    padding-left: 10px;
+  }
+  .cc-outline .cc-shot-node::before {
+    left: -10px;
+    width: 6px;
+  }
+  .cc-outline .cc-workpage,
+  .cc-outline .cc-video > .cc-workpage,
+  .cc-outline .cc-video > .cc-composer,
+  .cc-outline .cc-project > .cc-composer {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+@media (pointer: coarse) {
+  .cc-outline :is(.cc-project-trigger, .cc-video-trigger, .cc-stage, .cc-shot-trigger) {
+    min-height: 44px;
+  }
+}

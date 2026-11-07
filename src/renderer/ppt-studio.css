@@ -262,7 +262,7 @@
   margin: 8px 0;
 }
 .ppt-object-text textarea {
-  resize: vertical;
+  resize: none;
   line-height: 1.65;
 }
 .ppt-object-geometry {
@@ -476,7 +476,7 @@
 }
 
 .ppt-field textarea {
-  resize: vertical;
+  resize: none;
   min-height: 86px;
 }
 
@@ -979,7 +979,7 @@
   min-width: 0;
   min-height: 130px;
   max-height: 340px;
-  resize: vertical;
+  resize: none;
   padding: 12px 16px;
   border: 0;
   border-radius: 0;

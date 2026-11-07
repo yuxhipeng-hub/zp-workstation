@@ -3,7 +3,8 @@ const stages = [
   ['story', '故事定稿'],
   ['shots', '分镜设计'],
   ['design', '设定与首尾帧'],
-  ['generate', '审核与视频生成'],
+  ['audit', '独立审核'],
+  ['generate', '视频生成'],
   ['edit', '后期与交付'],
 ]
 const briefLabels = {
@@ -65,7 +66,16 @@ const status = {
   review: '待人工验收',
   'not-created': '控制台已确认未创建',
 }
-export function createCreationVideo({ api, state, escapeHtml: e, render, toast, preview }) {
+export function createCreationVideo({
+  api,
+  state,
+  escapeHtml: e,
+  render,
+  toast,
+  preview,
+  onState = (_project, _data) => {},
+}) {
+  let lastError = false
   let step = 'brief',
     shotId = '',
     info = null,
@@ -75,6 +85,15 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
     busy = false,
     timer
   const drafts = new Map()
+  const steps = new Map()
+  let events
+  const getStep = (p) => steps.get(p.id) || 'brief'
+  function setStep(p, id) {
+    if (!stages.some(([key]) => key === id)) return
+    step = id
+    steps.set(p.id, id)
+    submission = null
+  }
   const b = (op, label, extra = '', primary = false) =>
     `<button type="button" class="button ${primary ? 'primary' : 'secondary'}" data-action="cs-v-${op}" ${extra} ${busy ? 'disabled' : ''}>${label}</button>`
   const f = (key, label, value = '', type = 'text') =>
@@ -107,6 +126,12 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
   function selected(p) {
     return p.video.content.shots.find((s) => s.id === shotId) || p.video.content.shots[0]
   }
+  function selectShot(p, id) {
+    if (!p.video?.content.shots.some((s) => s.id === id)) return false
+    shotId = id
+    setStep(p, 'shots')
+    return true
+  }
   const draftKey = (p, form) =>
     p.id +
     ':form:' +
@@ -114,12 +139,13 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
     (['shot', 'frames', 'prompt'].includes(form) ? ':' + selected(p)?.id : '')
   function shotNav(p) {
     const s = selected(p)
-    return `<div class="cv-shot-nav">${p.video.content.shots.map((x, i) => b('shot', `${String(i + 1).padStart(2, '0')} · ${e(x.purpose || x.story.slice(0, 18) || '新镜头')}`, `data-id="${e(x.id)}" aria-current="${s?.id === x.id ? 'true' : 'false'}"`)).join('')}${b('add-shot', '新增镜头')}</div>`
+    return `<div class="cv-shot-nav">${p.video.content.shots.map((x, i) => b('shot', `${String(i + 1).padStart(2, '0')} · ${e(x.purpose || (x.story || '').slice(0, 18) || '新镜头')}`, `data-id="${e(x.id)}" aria-current="${s?.id === x.id ? 'true' : 'false'}"`)).join('')}${b('add-shot', '新增镜头')}</div>`
   }
-  function renderPage(p) {
+  function renderPage(p, { focused = false, shotOnly = false } = {}) {
     clearTimeout(timer)
+    step = getStep(p)
     if (!p.video)
-      return `<section class="cs-panel"><h3>从创意到成片</h3><p>启用视频制作流程，保存故事、分镜、首尾帧与审核，连接 Codex 导演和火山方舟生成，再完成剪辑审片。</p>${b('enable', '启用视频制作流程', '', true)}<p>原有导入、版本、意见和人工验收继续可用。</p></section>`
+      return `<section class="cv-start" data-cs-key="start:${p.id}:${step}"><i data-lucide="clapperboard" aria-hidden="true"></i><h3>${focused ? stages.find(([id]) => id === step)?.[1] : '从创意到成片'}</h3><p>${focused ? { brief: '整理这支视频的创意与制作要求。', story: '编写故事草稿，并与 Codex 导演讨论。', shots: '按镜头细分故事、画面与动作。', design: '整理设定，绑定每个镜头的首尾帧。', audit: '独立检查分镜、设定、首尾帧与提示词。', generate: '检查模型配置与预算，再确认提交当前镜头。', edit: '编排视频片段、声音与字幕，导出成片。' }[step] : '确定故事与分镜，打磨每个镜头，再完成后期交付。'}</p>${focused ? '' : `<ol>${stages.map(([, label], i) => `<li><span>${String(i + 1).padStart(2, '0')}</span>${label}</li>`).join('')}</ol>`}${b('enable', '启用视频制作流程', '', true)}</section>`
     if (snapshot?.projectId !== p.id) snapshot = null
     const v = p.video,
       c = v.content,
@@ -127,13 +153,20 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
       d = draft(p.id + ':' + step, {})
     const ledger = snapshot?.ledger || { settled: 0, reserved: 0, remaining: v.budget }
     let body = ''
-    if (step === 'brief')
+    if (step === 'brief') {
+      const value = (k) => d[k] ?? c.brief[k]
+      const group = (title, html) =>
+        `<fieldset class="cv-form-group"><legend>${title}</legend><div class="cv-field-grid">${html}</div></fieldset>`
       body = form(
         'brief',
-        Object.entries(briefLabels)
-          .map(([k, l]) => area(k, l, d[k] ?? c.brief[k]))
-          .join('') + b('save-brief', '保存创意简报', '', true),
+        group(
+          '内容与受众',
+          `<div class="cv-field-wide">${area('idea', briefLabels.idea, value('idea'))}</div>${f('audience', briefLabels.audience, value('audience'))}${f('platform', briefLabels.platform, value('platform'))}`,
+        ) +
+          `<div class="cv-field-grid cv-field-wide">${f('duration', briefLabels.duration, value('duration'), 'number')}${f('ratio', briefLabels.ratio, value('ratio'))}</div><details class="cv-advanced"><summary>画面与声音</summary><div class="cv-field-grid">${f('style', briefLabels.style, value('style'))}${f('music', briefLabels.music, value('music'))}${f('dialogue', briefLabels.dialogue, value('dialogue'))}${f('subtitles', briefLabels.subtitles, value('subtitles'))}</div></details><details class="cv-advanced"><summary>参考与约束</summary><div class="cv-field-grid"><div class="cv-field-wide">${area('references', briefLabels.references, value('references'))}</div>${area('mustKeep', briefLabels.mustKeep, value('mustKeep'))}${area('forbidden', briefLabels.forbidden, value('forbidden'))}</div></details>` +
+          b('save-brief', '保存创意简报', '', true),
       )
+    }
     if (step === 'story')
       body =
         form(
@@ -144,20 +177,23 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
         `<p>确认状态：<span data-v-story-state>${snapshot?.storyConfirmed ? '用户已确认' : '内容待确认'}</span></p>`
     if (step === 'shots')
       body =
-        shotNav(p) +
+        (shotOnly ? '' : shotNav(p)) +
         (s
           ? form(
               'shot',
-              `<p>镜头 ID：${e(s.id)}</p>${f('start', '成片起点（秒）', d.start ?? s.start, 'number')}${f('duration', '目标成片时长（秒）', d.duration ?? s.duration, 'number')}${f('generationDuration', '申请生成时长（秒）', d.generationDuration ?? s.generationDuration, 'number')}${Object.entries(
+              `${f('purpose', '叙事目的', d.purpose ?? s.purpose)}${f('duration', '目标成片时长（秒）', d.duration ?? s.duration, 'number')}<div class="cv-field-wide">${area('story', '故事内容', d.story ?? s.story)}</div><details class="cv-advanced"><summary>画面、动作与衔接</summary><div class="cv-field-grid">${Object.entries(
                 shotLabels,
               )
+                .filter(([k]) => !['story', 'purpose'].includes(k))
                 .map(([k, l]) => area(k, l, d[k] ?? s[k]))
                 .join(
                   '',
-                )}${sketch(s)}${f('subjectX', '构图主体横向位置（0–100）', s.subjectX, 'number')}${f('subjectY', '构图主体纵向位置（0–100）', s.subjectY, 'number')}${f('subjectScale', '构图主体大小（5–70）', s.subjectScale, 'number')}${f('backgroundColor', '构图背景色', s.backgroundColor, 'color')}${f('subjectColor', '构图主体色', s.subjectColor, 'color')}${f('accentColor', '构图前景色', s.accentColor, 'color')}<p>色块仅辅助检查构图与灰度层次，不代表实际生成图片。</p><div class="cs-actions">${b('save-shot', '保存分镜', '', true)}${b('move-up', '向前移动')}${b('move-down', '向后移动')}${b('split-shot', '拆分镜头')}</div>`,
+                )}</div></details><details class="cv-advanced"><summary>时序与构图草案</summary><div class="cv-field-grid">${f('start', '成片起点（秒）', d.start ?? s.start, 'number')}${f('generationDuration', '申请生成时长（秒）', d.generationDuration ?? s.generationDuration, 'number')}${sketch(s)}${f('subjectX', '构图主体横向位置（0–100）', s.subjectX, 'number')}${f('subjectY', '构图主体纵向位置（0–100）', s.subjectY, 'number')}${f('subjectScale', '构图主体大小（5–70）', s.subjectScale, 'number')}${f('backgroundColor', '构图背景色', s.backgroundColor, 'color')}${f('subjectColor', '构图主体色', s.subjectColor, 'color')}${f('accentColor', '构图前景色', s.accentColor, 'color')}</div><p>色块用于检查构图与灰度层次。</p><small>镜头 ID：${e(s.id)}</small></details><div class="cs-actions">${b('save-shot', '保存分镜', '', true)}${b('move-up', '向前移动')}${b('move-down', '向后移动')}${b('split-shot', '拆分镜头')}</div>`,
             )
           : '<p>添加第一个镜头，先确定叙事目的，再填写动作与衔接。</p>') +
-        `<details><summary>全片分镜总览</summary><ol>${c.shots.map((x) => `<li><strong>${e(x.purpose || '待填目的')}</strong> · ${x.start}–${x.start + x.duration} 秒<p>${e(x.story)}</p><p>${e(x.positions)} · ${e(x.palette)}</p></li>`).join('')}</ol></details>`
+        (shotOnly
+          ? ''
+          : `<details><summary>全片分镜总览</summary><ol>${c.shots.map((x) => `<li><strong>${e(x.purpose || '待填目的')}</strong> · ${x.start}–${x.start + x.duration} 秒<p>${e(x.story)}</p><p>${e(x.positions)} · ${e(x.palette)}</p></li>`).join('')}</ol></details>`)
     if (step === 'design') {
       const images = [
         ['', '尚未绑定'],
@@ -233,7 +269,7 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
               )}</div><p>检查人数、道具、位置左右、衣着表情、动作空间、风向光线和手机可读性；运镜需结合预期视角变化判断。</p>`
           : '')
     }
-    if (step === 'generate') {
+    if (step === 'audit') {
       const audit = snapshot?.audits?.find((a) => a.shotId === s?.id)
       body =
         shotNav(p) +
@@ -243,10 +279,17 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
               Object.entries(promptLabels)
                 .map(([k, l]) => area(k, l, d[k] ?? s.prompt[k]))
                 .join('') +
-                `<p>逐秒描述表达意图，模型不保证精确执行。</p><div class="cs-actions">${b('save-prompt', '保存提示词', '', true)}${b('review', '独立审核')}${b('prepare', '检查本次提交')}</div>`,
+                `<p>逐秒描述表达意图，模型不保证精确执行。</p><div class="cs-actions">${b('save-prompt', '保存提示词', '', true)}${b('review', '独立审核')}</div>`,
             ) +
             `<section class="cs-panel"><h4>${status[audit?.status] || '待审核'}</h4><p>${e(audit?.audit?.summary || '独立上下文检查当前分镜、设定、首尾帧与提示词。')}</p>${audit?.audit?.checks?.map((x) => `<p><strong>${e(x.check)} · ${e(status[x.result] || x.result)}</strong> ${e(x.issue)} ${e(x.location)} ${e(x.severity)}<br>${e(x.suggestion)}</p>`).join('') || ''}</section>`
-          : '')
+          : '<p>添加分镜后，在这里审核本镜头的设定、首尾帧与提示词。</p>')
+    }
+    if (step === 'generate') {
+      body =
+        shotNav(p) +
+        (s
+          ? `<section class="cs-panel"><h4>当前镜头 · ${e(s.purpose || s.id)}</h4><p>使用已保存的提示词和具体首尾帧版本，检查通过后确认提交。</p><div class="cs-actions">${b('prepare', '检查本次提交', '', true)}${b('step', '前往独立审核', 'data-id="audit"')}</div></section>`
+          : '<p>先在分镜设计中添加镜头。</p>')
       if (submission)
         body += `<section class="cs-panel cv-submit"><h4>本次将发送到火山方舟</h4><p>镜头 ${e(submission.shotId)} · ${e(submission.model)} · ${submission.duration}秒 · ${e(submission.resolution)} · ${e(submission.ratio)}</p>${submission.images.map((x) => `<p>${e(x.label)}<small>${e(x.path)}<br>SHA-256 ${e(x.digest)}</small></p>`).join('')}<pre>${e(submission.request.prompt)}</pre><p>估算 ¥${submission.estimate} · 保守预留 ¥${submission.reserve}；最终账单可能高于预留。生图和 Codex 费用另计。</p>${b('submit', '确认并提交本镜头', '', true)}${b('dismiss-submit', '关闭预览')}</section>`
       body += `<details class="cs-panel"><summary>供应商配置与预算</summary>${form(
@@ -382,7 +425,7 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
         .join('')}`
     }
     const sessions = v.sessions.slice(-6)
-    return `<section class="cv-workspace"><div class="cv-heading"><div><h3>视频制作</h3><p data-v-status>${snapshot ? `${snapshot.progress.generated} / ${snapshot.progress.shots} 镜头有当前版本视频` : '正在核对制作状态'}</p></div><div class="cs-actions">${b('refresh', '刷新制作状态')}${b('stop', '中断本地任务')}</div></div><nav class="cv-stages" aria-label="视频制作阶段">${stages.map(([id, label]) => b('step', label, `data-id="${id}" aria-current="${step === id ? 'step' : 'false'}"`)).join('')}</nav><div class="cv-body">${body}</div><details class="cs-panel" ${step === 'story' ? 'open' : ''}><summary>与 Codex 导演讨论</summary><div class="cs-actions">${b('connect', '连接 Codex')}${
+    return `<section class="cv-workspace" data-cs-key="video:${p.id}:${step}"><div class="cv-heading"><div><h3>${focused ? stages.find(([id]) => id === step)?.[1] : '视频制作'}</h3><p data-v-status>${snapshot ? `${snapshot.progress.generated} / ${snapshot.progress.shots} 镜头有当前版本视频` : '正在核对制作状态'}</p></div><div class="cs-actions">${b('refresh', '刷新制作状态')}${b('stop', '中断本地任务')}</div></div><nav class="cv-stages" aria-label="视频制作阶段" ${focused ? 'hidden' : ''}>${stages.map(([id, label], i) => b('step', `<span class="cv-step-number" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span><span>${label}</span>`, `data-id="${id}" aria-current="${step === id ? 'step' : 'false'}"`)).join('')}</nav><div class="cv-body">${body}</div><details class="cs-panel" ${focused && !['brief', 'story', 'shots'].includes(step) ? 'hidden' : ''}><summary>与 Codex 导演讨论</summary><div class="cs-actions">${b('connect', '连接 Codex')}${
       info
         ? select(
             'codexModel',
@@ -403,7 +446,7 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
       })
       .join(
         '',
-      )}</details><details><summary>版本与制作文件</summary><p>${e(snapshot?.directory || '正在读取项目目录')}</p><p>内容版本 ${e(v.revision)} · 历史 ${v.history.length} 个</p>${v.history
+      )}</details><details ${focused ? 'hidden' : ''}><summary>版本与制作文件</summary><p>${e(snapshot?.directory || '正在读取项目目录')}</p><p>内容版本 ${e(v.revision)} · 历史 ${v.history.length} 个</p>${v.history
       .slice(-10)
       .reverse()
       .map((h) => `<p>${e(h.at)} · ${e(h.id)}<small>${e(h.digest)}</small></p>`)
@@ -413,14 +456,21 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
     if (!p?.video) return
     const root = document.querySelector('.cv-workspace')
     if (!root) return
-    root.addEventListener('click', (event) => {
-      const target = event.target
-      if (target.matches('.cv-frames img')) {
-        const dialog = root.querySelector('.cv-lightbox')
-        dialog.querySelector('img').src = target.src
-        dialog.showModal()
-      }
-    })
+    events?.abort()
+    events = new AbortController()
+    const signal = events.signal
+    root.addEventListener(
+      'click',
+      (event) => {
+        const target = event.target
+        if (target.matches('.cv-frames img')) {
+          const dialog = root.querySelector('.cv-lightbox')
+          dialog.querySelector('img').src = target.src
+          dialog.showModal()
+        }
+      },
+      { signal },
+    )
     for (const form of root.querySelectorAll('[data-v-form]'))
       for (const [key, val] of Object.entries(draft(draftKey(p, form.dataset.vForm), {}))) {
         const field = form.querySelector(`[data-v="${CSS.escape(key)}"]`)
@@ -429,23 +479,28 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
             option.selected = String(val).split(',').includes(option.value)
         } else if (field) field.value = val
       }
-    root.addEventListener('input', (ev) => {
-      if (ev.target.dataset.v && ev.target.dataset.v !== 'key') {
-        const section = ev.target.closest('[data-v-form]')
-        if (section) {
-          const form = section.dataset.vForm
-          const data = get(form)
-          delete data.key
-          drafts.set(draftKey(p, form), data)
+    root.addEventListener(
+      'input',
+      (ev) => {
+        if (ev.target.dataset.v && ev.target.dataset.v !== 'key') {
+          const section = ev.target.closest('[data-v-form]')
+          if (section) {
+            const form = section.dataset.vForm
+            const data = get(form)
+            delete data.key
+            drafts.set(draftKey(p, form), data)
+          }
         }
-      }
-    })
+      },
+      { signal },
+    )
     const update = async () => {
       if (!root.isConnected) return
       try {
         const data = await api.creationVideoState(p.id)
         if (!root.isConnected) return
         snapshot = { ...data, projectId: p.id }
+        onState(p, data)
         const storyState = root.querySelector('[data-v-story-state]')
         if (storyState) storyState.textContent = data.storyConfirmed ? '用户已确认' : '内容待确认'
         const designState = root.querySelector('[data-v-design-state]')
@@ -512,9 +567,9 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
     }
     const s = p.video && selected(p)
     if (op === 'step') {
-      step = element.dataset.id
-      submission = null
+      setStep(p, element.dataset.id)
       render()
+      document.querySelector(`.cv-stages [data-id="${step}"]`)?.focus()
       return true
     }
     if (op === 'shot') {
@@ -529,6 +584,7 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
       return true
     }
     busy = true
+    lastError = false
     const command = (data) => api.creationVideoCommand({ projectId: p.id, ...data })
     const save = (content) => command({ action: 'save-content', content })
     let result
@@ -733,6 +789,7 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
       }
       if (p.video) snapshot = { ...(await api.creationVideoState(p.id)), projectId: p.id }
     } catch (err) {
+      lastError = true
       toast(err.message, 'error')
     } finally {
       busy = false
@@ -741,5 +798,5 @@ export function createCreationVideo({ api, state, escapeHtml: e, render, toast, 
     }
     return true
   }
-  return { renderPage, hydrate, handle }
+  return { renderPage, hydrate, handle, getStep, setStep, selectShot, hasError: () => lastError }
 }
