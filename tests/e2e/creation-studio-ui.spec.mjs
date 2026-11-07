@@ -19,6 +19,157 @@ async function expectCompact(panel, maxWidth, maxHeight) {
   expect(box.height).toBeLessThanOrEqual(maxHeight)
   await expect(panel).toHaveCSS('border-top-width', '0px')
 }
+async function expectExpanded(panel) {
+  const box = await panel.boundingBox()
+  const parentWidth = await panel.evaluate(
+    (node) => node.parentElement.getBoundingClientRect().width,
+  )
+  expect(box.width).toBeGreaterThanOrEqual(parentWidth - 31)
+  expect(box.width).toBeLessThanOrEqual(parentWidth + 1)
+  await expect(panel).toHaveCSS('max-height', 'none')
+  await expect(panel).toHaveCSS('border-top-width', '0px')
+}
+test('empty project guidance stays centered in the visible canvas', async ({ page }) => {
+  await page.goto(url)
+  const welcome = page.getByRole('button', { name: '进入工作站' })
+  if (await welcome.isVisible()) await welcome.click()
+  const dismiss = page.getByRole('button', { name: '稍后', exact: true })
+  if (await dismiss.isVisible()) await dismiss.click()
+  await page.locator('[data-action="cs-group-menu"]').click()
+  await page.locator('[data-action="cs-archive"]').click()
+  const empty = page.locator('.cc-welcome')
+  await expect(empty.getByRole('heading')).toHaveText('让创意从这里展开')
+  for (const size of [
+    { width: 1703, height: 871 },
+    { width: 760, height: 650 },
+  ]) {
+    await page.setViewportSize(size)
+    for (const theme of ['dark', 'light']) {
+      await page.evaluate((value) => {
+        document.body.dataset.theme = value
+      }, theme)
+      const canvas = await page.locator('.cc-viewport').boundingBox()
+      const box = await empty.boundingBox()
+      expect(Math.abs(box.x + box.width / 2 - canvas.x - canvas.width / 2)).toBeLessThan(2)
+      expect(Math.abs(box.y + box.height / 2 - canvas.y - canvas.height / 2)).toBeLessThan(2)
+      expect(box.x).toBeGreaterThanOrEqual(canvas.x)
+      expect(box.y).toBeGreaterThanOrEqual(canvas.y)
+      expect(box.x + box.width).toBeLessThanOrEqual(canvas.x + canvas.width)
+      expect(box.y + box.height).toBeLessThanOrEqual(canvas.y + canvas.height)
+    }
+  }
+  await empty.getByRole('button', { name: '创建项目', exact: true }).click()
+  await expect(empty).toHaveCount(0)
+  await expect(page.locator('.cc-composer')).toBeVisible()
+  await page.getByLabel('项目名称', { exact: true }).fill('居中检查后创建的项目')
+  await page.locator('[data-action="cs-save-project"]').click()
+  await expect(page.locator('.cc-project-trigger')).toContainText('居中检查后创建的项目')
+})
+test('video details use the available canvas width and scroll with the page', async ({ page }) => {
+  await page.setViewportSize({ width: 1703, height: 871 })
+  await page.goto(url)
+  const welcome = page.getByRole('button', { name: '进入工作站' })
+  if (await welcome.isVisible()) await welcome.click()
+  const dismiss = page.getByRole('button', { name: '稍后', exact: true })
+  if (await dismiss.isVisible()) await dismiss.click()
+  await page.locator('.cc-project-trigger').click()
+  const video = page.locator('.cc-video').first()
+  await video.getByRole('button', { name: '制作工具', exact: true }).click()
+  await page.locator('[data-action="cs-v-enable"]').click()
+  await page.locator('[data-action="cs-v-step"][data-id="edit"]').click()
+  const panel = page.locator('.cc-workpage')
+  await expect(panel.locator('[data-v-form="export"]')).toHaveCSS('row-gap', '10px')
+  await expect(panel.getByLabel('输出宽度', { exact: true }).locator('..')).toHaveCSS(
+    'margin-bottom',
+    '0px',
+  )
+  for (const size of [
+    { width: 1703, height: 871 },
+    { width: 974, height: 871 },
+    { width: 600, height: 650 },
+  ]) {
+    await page.setViewportSize(size)
+    const parent = await video.boundingBox()
+    const box = await panel.boundingBox()
+    expect(box.width).toBeGreaterThan(parent.width * 0.9)
+    expect(box.x + box.width).toBeLessThanOrEqual(parent.x + parent.width + 1)
+    await expect(panel).toHaveCSS('max-height', 'none')
+    expect(await panel.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true)
+    const width = await panel.getByLabel('输出宽度', { exact: true }).boundingBox()
+    const height = await panel.getByLabel('输出高度', { exact: true }).boundingBox()
+    const editorWidth = (await page.locator('.cv-detail-editor').boundingBox()).width
+    if (editorWidth >= 421) expect(Math.abs(width.y - height.y)).toBeLessThan(2)
+    else expect(height.y).toBeGreaterThan(width.y)
+  }
+  await page.setViewportSize({ width: 1703, height: 871 })
+  await panel.locator('[data-action="cs-tab"][data-id="overview"]').click()
+  await expect(panel.locator('.cs-work')).toHaveCSS('grid-template-columns', /\d+.* \d+/)
+  await page.screenshot({
+    path: path.join(screenshots, 'creation-wide-detail.png'),
+    fullPage: true,
+  })
+})
+test('story editing is compact and shows real shot details and media alongside it', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1703, height: 871 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto(url)
+  const welcome = page.getByRole('button', { name: '进入工作站' })
+  if (await welcome.isVisible()) await welcome.click()
+  const dismiss = page.getByRole('button', { name: '稍后', exact: true })
+  if (await dismiss.isVisible()) await dismiss.click()
+  await page.locator('.cc-project-trigger').click()
+  const video = page.locator('.cc-video').first()
+  await video.locator('.cc-video-trigger').click()
+  await video.locator('.cc-stage[data-id="shots"]').click()
+  await page.locator('[data-action="cs-v-enable"]').click()
+  await page.locator('[data-action="cs-v-add-shot"]').click()
+  await page.getByLabel('叙事目的', { exact: true }).fill('清晨的第一杯水')
+  await page.getByLabel('故事内容', { exact: true }).fill('光线落在杯沿，手拿起杯子。')
+  await page.locator('[data-action="cs-v-save-shot"]').click()
+  await video.locator('.cc-stage[data-id="story"]').click()
+  const story = page.getByLabel('故事草稿', { exact: true })
+  await expect(story).toBeVisible()
+  await expect(page.getByText('与 Codex 导演讨论', { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('创作意图或修改要求', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '发送给导演', exact: true })).toHaveCount(0)
+  await expect(page.locator('[data-action="cs-v-connect"]')).toHaveCount(0)
+  expect((await story.boundingBox()).height).toBeLessThanOrEqual(36)
+  expect((await story.boundingBox()).width).toBeLessThanOrEqual(520)
+  expect(await story.evaluate((node) => node.scrollHeight <= node.clientHeight)).toBe(true)
+  const context = page.getByRole('complementary', { name: '制作内容' })
+  await expect(context.getByText('光线落在杯沿，手拿起杯子。', { exact: true })).toBeVisible()
+  await expect(context.locator('.cs-preview img')).toBeVisible()
+  const editor = await page.locator('.cv-detail-editor').boundingBox()
+  expect((await context.boundingBox()).x).toBeGreaterThanOrEqual(editor.x + editor.width)
+  await story.fill('一段较长的故事。\n'.repeat(30))
+  expect((await story.boundingBox()).height).toBeGreaterThan(36)
+  expect((await story.boundingBox()).height).toBeLessThanOrEqual(180)
+  await story.fill('杯沿映着晨光。')
+  expect((await story.boundingBox()).height).toBeLessThanOrEqual(36)
+  await video.locator('.cc-stage[data-id="audit"]').click()
+  await page.getByText('审核模型与记录', { exact: true }).click()
+  await expect(page.getByRole('button', { name: '连接审核模型', exact: true })).toBeVisible()
+  await video.locator('.cc-stage[data-id="story"]').click()
+  await expect(story).toHaveValue('杯沿映着晨光。')
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate((value) => {
+      document.body.dataset.theme = value
+    }, theme)
+    await page.screenshot({
+      path: path.join(screenshots, `creation-story-content-${theme}.png`),
+      fullPage: true,
+    })
+  }
+  await page.setViewportSize({ width: 600, height: 700 })
+  const narrowEditor = await page.locator('.cv-detail-editor').boundingBox()
+  expect((await context.boundingBox()).y).toBeGreaterThanOrEqual(
+    narrowEditor.y + narrowEditor.height,
+  )
+  await context.getByRole('button', { name: '查看镜头 01 · 清晨的第一杯水', exact: true }).click()
+  await expect(page.getByLabel('叙事目的', { exact: true })).toHaveValue('清晨的第一杯水')
+})
 test('quiet save actions, themed stage choices and transparent scrollbar tracks remain functional', async ({
   page,
 }) => {
@@ -110,7 +261,7 @@ test('quiet save actions, themed stage choices and transparent scrollbar tracks 
   await page.locator('[data-action="cs-v-enable"]').click()
   await page.setViewportSize({ width: 974, height: 650 })
   const panel = page.locator('.cc-workpage')
-  expect(await panel.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true)
+  expect(await panel.evaluate((node) => node.scrollHeight <= node.clientHeight + 1)).toBe(true)
   for (const node of [panel, page.locator('.cc-viewport')]) {
     expect(await node.evaluate((el) => getComputedStyle(el).scrollbarColor)).toContain(
       'rgba(0, 0, 0, 0)',
@@ -361,7 +512,7 @@ test('project popup is positioned before it becomes visible and expanded surface
   await expectCompact(page.locator('.cc-composer'), 420, 380)
   await video.locator('.cc-video-object [data-action="cs-edit"]').click()
   await video.locator('.cc-stage[data-id="audit"]').click()
-  await expectCompact(page.locator('.cc-workpage'), 520, 480)
+  await expectExpanded(page.locator('.cc-workpage'))
 })
 
 test('outline omits duplicate captions and project actions use an anchored accessible popup', async ({
@@ -505,7 +656,7 @@ test('actions stay beside their object, panels toggle directly below, and view c
   })
 })
 
-test('mouse wheel scrolls compact panels and continues into the canvas at their boundaries', async ({
+test('work details scroll with the canvas while compact requirement editors retain scroll chaining', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1400, height: 700 })
@@ -534,17 +685,14 @@ test('mouse wheel scrolls compact panels and continues into the canvas at their 
   })
   await page.locator('[data-action="cs-v-enable"]').click()
   await video.locator('.cc-stage[data-id="design"]').click()
-  expect(await workpage.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true)
+  expect(await workpage.evaluate((node) => node.scrollHeight <= node.clientHeight + 1)).toBe(true)
   await workpage.hover({ position: { x: 20, y: 80 } })
-  const innerBefore = await viewport.evaluate((node) => node.scrollTop)
+  const detailsBefore = await viewport.evaluate((node) => node.scrollTop)
   await page.mouse.wheel(0, 140)
-  await expect.poll(() => workpage.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
-  expect(await viewport.evaluate((node) => node.scrollTop)).toBe(innerBefore)
-  await workpage.evaluate((node) => {
-    node.scrollTop = node.scrollHeight
-  })
-  await page.mouse.wheel(0, 140)
-  await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBeGreaterThan(innerBefore)
+  await expect
+    .poll(() => viewport.evaluate((node) => node.scrollTop))
+    .toBeGreaterThan(detailsBefore)
+  expect(await workpage.evaluate((node) => node.scrollTop)).toBe(0)
 
   await viewport.evaluate((node) => {
     node.scrollTop = 0
@@ -697,7 +845,7 @@ test('canvas expands projects and videos, isolates drafts, collapses saved requi
   await expect(page.locator('.cc-composer')).toHaveCount(0)
   await page.locator('[data-action="cs-open-work"]').first().click()
   await page.locator('[data-action="cs-v-enable"]').click()
-  await expectCompact(page.locator('.cc-workpage'), 520, 480)
+  await expectExpanded(page.locator('.cc-workpage'))
   await expect(page.locator('.cc-workpage .cs-project-heading h2')).toBeInViewport()
   await expect(page.getByRole('group', { name: '内容与受众' })).toBeVisible()
   await expect(page.getByLabel('一句话创意', { exact: true })).toHaveCSS(
@@ -802,7 +950,7 @@ test('stage disclosures stay independent and preserve canvas media during rapid 
   const stage = (id) => page.locator(`.cc-stage[data-id="${id}"]`)
   await stage('story').click()
   await expect(page.locator('.cc-workpage')).toHaveAttribute('data-cs-step', 'story')
-  await expectCompact(page.locator('.cc-workpage'), 520, 480)
+  await expectExpanded(page.locator('.cc-workpage'))
   await expect(page.getByRole('heading', { name: '故事定稿', exact: true })).toBeVisible()
   expect(
     await page.evaluate(() =>
@@ -898,6 +1046,9 @@ test('outline keeps video branches independent and opens real shot leaves with i
   const leaves = first.locator('.cc-shot-trigger')
   await leaves.first().click()
   await expect(page.locator('.cc-shot-node').first().locator('.cc-workpage')).toBeVisible()
+  await expect(page.locator('.cc-shot-node').first().locator('.cv-content-shots > li')).toHaveCount(
+    1,
+  )
   await expect(page.getByLabel('叙事目的', { exact: true })).toHaveValue('第一个镜头')
   await expect(page.locator('.cv-shot-nav')).toHaveCount(0)
   await expect(page.getByText('全片分镜总览', { exact: true })).toHaveCount(0)

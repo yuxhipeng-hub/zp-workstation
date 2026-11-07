@@ -28,6 +28,23 @@
   max-width: none;
   gap: 24px;
 }
+.cc-outline .cc-viewport:has(.cc-welcome) {
+  display: flex;
+}
+.cc-outline .cc-plane:has(> .cc-welcome) {
+  min-height: 0;
+  margin: auto;
+  padding: 24px;
+}
+.cc-outline .cc-plane:has(> .cc-welcome) > .cc-projects {
+  display: none;
+}
+.cc-outline .cc-welcome {
+  width: 100%;
+  min-height: 0;
+  margin: auto;
+  padding: 32px 24px;
+}
 .cc-outline .cc-project,
 .cc-outline .cc-video {
   display: block;
@@ -335,12 +352,58 @@
   color: var(--text-secondary);
 }
 .cc-outline .cc-workpage {
-  width: min(calc(100% - 30px), 520px);
-  margin: 6px 0 12px 30px;
+  width: calc(100% - 30px);
+  max-height: none;
+  overflow: visible;
+  margin: 8px 0 16px 30px;
+  padding: 16px;
+  font-size: 13px;
+}
+.cc-outline .cc-workpage .cs-project-heading {
+  position: static;
+  padding: 0;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+.cc-outline .cc-workpage .cs-project-heading h2 {
+  font-size: 16px;
+}
+.cc-outline .cc-workpage .cs-tabs {
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.cc-outline .cc-workpage .cs-project-heading .cs-hint {
+  font-size: 12px;
+}
+.cc-outline .cc-workpage .cs-media {
+  min-height: 200px;
+  max-height: 420px;
+}
+.cc-outline .cc-workpage .cs-media :is(img, video) {
+  max-height: 420px;
+}
+.cc-outline .cc-workpage pre {
+  max-height: 400px;
 }
 .cc-outline .cc-video > .cc-workpage {
-  width: min(calc(100% - 22px), 520px);
+  width: calc(100% - 22px);
   margin-left: 22px;
+}
+@container (min-width: 840px) {
+  .cc-outline .cc-workpage .cs-work {
+    grid-template-columns: minmax(0, 1.7fr) minmax(240px, 1fr);
+    gap: 24px;
+  }
+  .cc-workpage .cs-context {
+    border-left: 1px solid var(--cs-divider);
+    padding-left: 24px;
+  }
+}
+@container (max-width: 839px) {
+  .cc-workpage .cs-context {
+    border-left: 0;
+    padding-left: 0;
+  }
 }
 .cc-outline .cc-video > .cc-composer {
   width: min(calc(100% - 22px), 320px);
@@ -358,6 +421,9 @@
   display: none;
 }
 @media (max-width: 760px) {
+  .cc-outline .cc-workpage {
+    padding: 14px;
+  }
   .cc-outline .cc-plane {
     padding: 18px 16px 48px;
   }
