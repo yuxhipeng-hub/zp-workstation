@@ -1,0 +1,164 @@
+.cv-workspace {
+  min-width: 0;
+}
+.cv-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.cv-stages,
+.cv-shot-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.cv-stages button[aria-current='step'],
+.cv-shot-nav button[aria-current='true'] {
+  background: var(--panel-active);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.cv-body {
+  display: grid;
+  gap: 16px;
+}
+.cv-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+  margin: 16px 0;
+}
+.cv-form label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.cv-form input,
+.cv-form select,
+.cv-form textarea {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--text);
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font: inherit;
+}
+.cv-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.cv-form input:focus-visible,
+.cv-form select:focus-visible,
+.cv-form textarea:focus-visible,
+.cv-workspace button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.cv-form > .cs-actions,
+.cv-form > p,
+.cv-form > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+.cv-session,
+.cv-job {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cv-workspace pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 400px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.cv-workspace small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  margin: 8px 0;
+}
+.cv-workspace summary {
+  cursor: pointer;
+  padding: 12px 0;
+}
+.cv-frames img {
+  cursor: zoom-in;
+}
+.cv-frames.is-overlay {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.cv-frames.is-overlay .cs-preview {
+  grid-area: 1/1;
+}
+.cv-frames.is-overlay .cs-preview:last-child .cs-media {
+  opacity: 0.5;
+}
+.cv-frames.is-overlay .cs-preview:last-child figcaption,
+.cv-frames.is-overlay .cs-preview:last-child .cs-meta {
+  visibility: hidden;
+}
+.cv-frames.is-difference .cs-preview:last-child .cs-media {
+  opacity: 1;
+  mix-blend-mode: difference;
+}
+.cv-lightbox {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  max-width: 95vw;
+  max-height: 95vh;
+}
+.cv-lightbox::backdrop {
+  background: rgb(0 0 0 / 0.75);
+}
+.cv-lightbox img {
+  display: block;
+  max-width: 85vw;
+  max-height: 80vh;
+  object-fit: contain;
+}
+.cv-edits {
+  display: grid;
+  gap: 16px;
+}
+.cv-sketch {
+  position: relative;
+  aspect-ratio: 16/9;
+  width: min(100%, 360px);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  grid-column: 1 / -1;
+}
+.cv-sketch .cv-ground {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 25%;
+}
+.cv-sketch span {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: white;
+  display: grid;
+  place-items: center;
+  border: 1px solid white;
+  font-size: 12px;
+}
+@media (max-width: 1000px) {
+  .cv-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

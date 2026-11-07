@@ -16,6 +16,20 @@ export const SYNC_COMMAND = 'npm run sync:vault'
 /** 仓库文档逐份镜像到 vault。 */
 export const MIRROR_NOTES = [
   {
+    source: 'docs/specs/006-creation-video-pipeline.md',
+    note: '10 产品/视频制作流程规格.md',
+    title: '视频制作流程规格',
+    category: '产品',
+    description: 'Codex 导演、镜头审核、火山方舟预算与受控后期',
+  },
+  {
+    source: 'docs/CREATION_VIDEO_GUIDE.md',
+    note: '20 使用/视频制作使用说明.md',
+    title: '视频制作使用说明',
+    category: '使用',
+    description: '连接与配置、首个项目、费用授权、恢复与验证边界',
+  },
+  {
     source: 'docs/specs/005-ai-news-ui.md',
     note: '10 产品/AI 资讯界面规格.md',
     title: 'AI 资讯界面规格',

@@ -91,7 +91,10 @@ function registerCreationIpc({
       title: '导入作品（保留原文件）',
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: '作品与资料', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'md', 'txt'] },
+        {
+          name: '作品与资料',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'mp3', 'wav', 'm4a', 'md', 'txt'],
+        },
       ],
     })
     return result.canceled

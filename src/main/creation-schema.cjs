@@ -26,7 +26,7 @@ function artifact(x) {
   return {
     id: id(x.id),
     family: text(x.family, 100) || '作品',
-    type: ['image', 'video', 'text', 'interactive'].includes(x.type) ? x.type : 'text',
+    type: ['image', 'video', 'audio', 'text', 'interactive'].includes(x.type) ? x.type : 'text',
     label: text(x.label, 100),
     path: text(x.path, 2048),
     url: text(x.url, 2048),
@@ -129,6 +129,7 @@ function cleanProject(x = {}) {
     updatedAt: date(x.updatedAt),
     archived: x.archived === true,
     selectedArtifactId: text(x.selectedArtifactId, 100),
+    video: require('./video-schema.cjs').cleanVideo(x.video),
     tasks: list(x.tasks, task),
     runs: list(x.runs, run),
     artifacts: list(x.artifacts, artifact),

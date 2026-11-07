@@ -1,5 +1,6 @@
 import { createCreationStudioPage } from './pages/creation-studio.js'
 import './creation-studio.css'
+import './creation-video.css'
 import { createIcons, FileCheck2, FolderOpen, icons, Upload } from 'lucide'
 import { defineMorphIcon } from 'morphicons/element'
 import { createModelSettingsPage } from './pages/model-settings.js'

@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 const allowedEvents = new Set([
+  'creation:video-changed',
   'log:entry',
   'logs:cleared',
   'settings:changed',
@@ -28,6 +29,16 @@ contextBridge.exposeInMainWorld('launcher', {
   testAiProfile: (id) => ipcRenderer.invoke('ai:profile-test', id),
   generateAssignmentPlan: (id) => ipcRenderer.invoke('ai:assignment-plan', id),
   creationConfirmRemoval: (id) => ipcRenderer.invoke('creation:confirm-removal', id),
+  creationVideoCommand: (input) => ipcRenderer.invoke('creation:video-command', input),
+  creationVideoState: (id) => ipcRenderer.invoke('creation:video-state', id),
+  creationVideoConnect: (id) => ipcRenderer.invoke('creation:video-connect', id),
+  creationVideoStart: (id, input) => ipcRenderer.invoke('creation:video-start', id, input),
+  creationVideoKey: (key) => ipcRenderer.invoke('creation:video-key', key),
+  creationVideoCheck: (id) => ipcRenderer.invoke('creation:video-check', id),
+  creationVideoTools: (id) => ipcRenderer.invoke('creation:video-tools', id),
+  creationVideoPrepare: (id, shotId) => ipcRenderer.invoke('creation:video-prepare', id, shotId),
+  creationVideoSubmit: (id, token) => ipcRenderer.invoke('creation:video-submit', id, token),
+  creationVideoRender: (id) => ipcRenderer.invoke('creation:video-render', id),
   creationCommand: (input) => ipcRenderer.invoke('creation:command', input),
   creationDetails: (id) => ipcRenderer.invoke('creation:details', id),
   creationDocument: (id, name) => ipcRenderer.invoke('creation:document', id, name),

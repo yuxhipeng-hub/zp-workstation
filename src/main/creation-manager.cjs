@@ -9,6 +9,9 @@ const TYPES = {
   '.jpeg': 'image',
   '.webp': 'image',
   '.mp4': 'video',
+  '.mp3': 'audio',
+  '.wav': 'audio',
+  '.m4a': 'audio',
   '.md': 'text',
   '.txt': 'text',
 }
@@ -46,19 +49,23 @@ async function inspect(file) {
   } finally {
     await handle.close()
   }
-  const invalid =
-    ext === '.mp4'
-      ? header.toString('ascii', 4, 8) !== 'ftyp'
-      : ext === '.png'
-        ? header.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
-        : ['.jpg', '.jpeg'].includes(ext)
-          ? header[0] !== 255 || header[1] !== 216 || header[2] !== 255
-          : ext === '.webp'
+  const invalid = ['.mp4', '.m4a'].includes(ext)
+    ? header.toString('ascii', 4, 8) !== 'ftyp'
+    : ext === '.png'
+      ? header.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
+      : ['.jpg', '.jpeg'].includes(ext)
+        ? header[0] !== 255 || header[1] !== 216 || header[2] !== 255
+        : ext === '.webp'
+          ? header.toString('ascii', 0, 4) !== 'RIFF' || header.toString('ascii', 8, 12) !== 'WEBP'
+          : ext === '.wav'
             ? header.toString('ascii', 0, 4) !== 'RIFF' ||
-              header.toString('ascii', 8, 12) !== 'WEBP'
-            : TYPES[ext] === 'text'
-              ? header.includes(0)
-              : true
+              header.toString('ascii', 8, 12) !== 'WAVE'
+            : ext === '.mp3'
+              ? header.toString('ascii', 0, 3) !== 'ID3' &&
+                !(header[0] === 255 && (header[1] & 224) === 224)
+              : TYPES[ext] === 'text'
+                ? header.includes(0)
+                : true
   if (invalid) throw new Error('文件内容与允许的类型不符。')
   const hash = createHash('sha256')
   for await (const chunk of createReadStream(file)) hash.update(chunk)
@@ -196,7 +203,7 @@ class CreationManager {
     if (!Array.isArray(files) || files.length > 20) throw new Error('一次最多导入 20 个文件。')
     for (const file of files) {
       const type = TYPES[path.extname(file).toLowerCase()]
-      if (!type) throw new Error('仅支持 PNG/JPG/WebP/MP4/Markdown/TXT。')
+      if (!type) throw new Error('仅支持 PNG/JPG/WebP/MP4/MP3/WAV/M4A/Markdown/TXT。')
       const info = await inspect(file)
       if (p.artifacts.some((a) => a.path === file && a.digest === info.digest)) continue
       p.artifacts.push(
@@ -279,7 +286,10 @@ class CreationManager {
     const runs = data.runs.map((r) => S.run({ ...r, id: ref(r.id), taskId: ref(r.taskId) }))
     const artifacts = []
     for (const a of data.artifacts) {
-      if (!['image', 'video', 'text', 'interactive'].includes(a.type) || !S.text(a.label, 100))
+      if (
+        !['image', 'video', 'audio', 'text', 'interactive'].includes(a.type) ||
+        !S.text(a.label, 100)
+      )
         throw new Error(`产物 ${a.id} 类型或版本标签无效。`)
       const file = a.type === 'interactive' ? '' : await within(p.directory, a.path)
       if (

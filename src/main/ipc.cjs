@@ -12,6 +12,7 @@ const {
   shell,
   protocol,
   net,
+  safeStorage,
 } = require('electron')
 const { THEME_VALUES } = require('./constants.cjs')
 const { collectDiagnostics } = require('./diagnostics.cjs')
@@ -128,7 +129,7 @@ function registerIpc({
   })
 
   registerGitHubDiscoveryIpc({ ipcMain, client: githubClient, workspace })
-  registerCreationIpc({
+  const creation = registerCreationIpc({
     ipcMain,
     workspace,
     dialog,
@@ -137,6 +138,16 @@ function registerIpc({
     protocol,
     net,
     getMainWindow,
+  })
+  require('./video-ipc.cjs').registerVideoIpc({
+    ipcMain,
+    workspace,
+    creation,
+    dialog,
+    getMainWindow,
+    safeStorage,
+    send,
+    app,
   })
   ipcMain.handle('workspace:get', () => workspace.get())
   registerPresentationIpc({

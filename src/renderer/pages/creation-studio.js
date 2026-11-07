@@ -1,3 +1,4 @@
+import { createCreationVideo } from './creation-video.js'
 const stages = ['选题', '简报', '视觉打样', '开发', '成片', '验收', '发布', '复盘']
 const statuses = {
   pending: '待处理',
@@ -17,6 +18,7 @@ const statuses = {
 
 export function createCreationStudioPage({ state, api, escapeHtml: e, render, toast }) {
   const drafts = new Map()
+  const videoPage = createCreationVideo({ state, api, escapeHtml: e, render, toast, preview })
   let statusTimer
   let selected = '',
     tab = 'overview',
@@ -152,6 +154,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
         ? `<div class="cs-empty"><i data-lucide="clapperboard"></i><h3>${archived ? '暂无归档项目' : '从第一份创作开始'}</h3><p>集中查看进度、作品版本与修改意见。正式工作区不会自动加入演示内容。</p>${button('new', '创建项目', '', true)}</div>`
         : `<header class="cs-project-heading"><div><span class="cs-eyebrow">${p.stage} · ${p.archived ? '已归档' : '本地保存'}</span><h2>${e(p.name)}</h2><p>${e(p.goal || '尚未填写目标')}</p><p class="cs-hint">最新状态：<span data-cs-latest>正在读取记录</span></p></div><div class="cs-actions">${button('import', '导入产物', '', true)}${button('edit', '编辑项目')}<details><summary>更多</summary>${button('archive', p.archived ? '重新打开项目' : '归档项目')}${button('delete', '移除工作室记录')}</details></div></header><nav class="cs-tabs" aria-label="项目详情">${[
             ['overview', '总览'],
+            ['video', '视频制作'],
             ['works', '作品与版本'],
             ['reviews', '修改意见'],
             ['publications', '发布复盘'],
@@ -162,7 +165,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
             )
             .join(
               '',
-            )}</nav>${{ overview: () => overview(p, a), works: () => works(p, a), reviews: () => reviews(p, a), publications: () => publications(p) }[tab]()}`
+            )}</nav>${{ overview: () => overview(p, a), video: () => videoPage.renderPage(p), works: () => works(p, a), reviews: () => reviews(p, a), publications: () => publications(p) }[tab]()}`
     }</main></div></div>`
   }
   async function hydrate(gen) {
@@ -177,6 +180,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
         }
     }
     if (!p) return
+    if (tab === 'video') await videoPage.hydrate(p)
     root.addEventListener('input', (event) => {
       const form = event.target.closest('[data-cs-form]')
       if (form) drafts.set(selected + ':' + form.dataset.csForm, values(form.dataset.csForm))
@@ -290,6 +294,8 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
             target.innerHTML = `<p>${e(data.message || '文件不可用')}</p>`
           else if (a.type === 'image')
             target.innerHTML = `<img src="${e(data.url)}" alt="${e(a.family + ' · ' + a.label)}">`
+          else if (a.type === 'audio')
+            target.innerHTML = `<audio controls preload="metadata" src="${e(data.url)}" aria-label="${e(a.label)} 音频"></audio>`
           else if (a.type === 'video') {
             target.innerHTML = `<video controls preload="metadata" src="${e(data.url)}" aria-label="${e(a.label)} 视频"></video>`
             const video = target.querySelector('video')
@@ -332,6 +338,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
   }
   async function handleAction(action, element) {
     if (!action.startsWith('cs-')) return false
+    if (action.startsWith('cs-v-')) return videoPage.handle(action.slice(3), project(), element)
     if (busy) return true
     const op = action.slice(3),
       p = project(),

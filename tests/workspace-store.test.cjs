@@ -68,10 +68,21 @@ test('creation projects normalize old workspaces, survive restart and backup, ro
       stage: '简报',
       brief: '要求',
       apiKey: 'must-not-persist',
+      video: {
+        schemaVersion: 1,
+        revision: 'revision-1',
+        content: { story: '视频故事' },
+        jobs: [{ id: 'j', status: 'unknown', taskId: 'provider-task', reserve: 8 }],
+        apiKey: 'must-not-persist',
+      },
       artifacts: [{ id: 'v1', type: 'video', path: 'Z:\\missing.mp4', label: 'v1' }],
     },
   ])
   assert.equal(new WorkspaceStore(directory).get().creationProjects[0].brief, '要求')
+  assert.equal(
+    new WorkspaceStore(directory).get().creationProjects[0].video.jobs[0].taskId,
+    'provider-task',
+  )
   assert.equal(JSON.stringify(store.get()).includes('must-not-persist'), false)
   const backup = store.createBackup('creation')
   const before = store.get().creationProjects
@@ -85,6 +96,7 @@ test('creation projects normalize old workspaces, survive restart and backup, ro
   store.saveCreationProjects([])
   store.restoreBackup(backup.fileName)
   assert.equal(store.get().creationProjects[0].artifacts[0].path, 'Z:\\missing.mp4')
+  assert.equal(store.get().creationProjects[0].video.jobs[0].reserve, 8)
 })
 
 test('canvas objects, images and locks survive workspace reload and backup restore', (t) => {
