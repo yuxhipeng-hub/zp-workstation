@@ -1836,7 +1836,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .ppt-editor .ppt-editor-bar {
-    position: static;
+    position: relative;
     gap: 16px;
   }
   .ppt-canvas-area {
