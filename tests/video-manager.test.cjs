@@ -307,9 +307,13 @@ test('model capability rejects unsupported tail frames, durations and audio befo
   })
   await assert.rejects(x.manager.prepare(x.id, 'shot-1'), /300/)
 })
-test('export performs real FFmpeg decode, sampling, subtitles and preserves source versions', async (t) => {
+test('export through an aliased media root performs real FFmpeg decode and preserves source versions', async (t) => {
   const x = await setup(t),
     file = path.join(x.dir, 'clip.mp4')
+  await fs.mkdir(x.manager.root, { recursive: true })
+  const alias = path.join(x.dir, 'media-alias')
+  await fs.symlink(x.manager.root, alias, 'junction')
+  x.manager.root = alias
   await fs.writeFile(file, video)
   await x.creation.importFiles(x.id, [file], '片段', '镜头')
   const soundtrack = path.join(x.dir, 'music.wav')

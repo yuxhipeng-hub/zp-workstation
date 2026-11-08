@@ -960,7 +960,7 @@ class VideoManager {
     const runId = randomUUID(),
       dir = path.join(await this.directory(id), runId)
     await fs.mkdir(dir)
-    await within(this.root, path.relative(this.root, dir))
+    await within(this.root, path.join(id, runId))
     this.change(id, (v) =>
       v.exports.push({
         id: runId,
