@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 // Keep acceptance tests off the user's desktop, including ready-to-show.
-export function launchHiddenElectron(directory, env) {
+export async function launchHiddenElectron(directory, env) {
   const root = process.cwd()
   const entry = path.join(directory, 'hidden-electron.cjs')
   fs.writeFileSync(
@@ -31,5 +31,17 @@ app.getAppPath = () => ${JSON.stringify(root)}
 require(${JSON.stringify(path.join(root, 'src/main/index.cjs'))})
 `,
   )
-  return electron.launch({ args: [entry], env })
+  const app = await electron.launch({ args: [entry], env })
+  try {
+    const page = await app.firstWindow()
+    await app.evaluate(({ BrowserWindow }) => {
+      // Windows can clamp the initial bounds to the CI desktop's work area.
+      BrowserWindow.getAllWindows()[0].setContentSize(1280, 820)
+    })
+    await page.waitForFunction(() => globalThis.innerWidth >= 1280 && globalThis.innerHeight >= 800)
+    return app
+  } catch (error) {
+    await app.close()
+    throw error
+  }
 }
