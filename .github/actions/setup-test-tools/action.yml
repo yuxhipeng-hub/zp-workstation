@@ -1,0 +1,25 @@
+name: Set up native test tools
+description: Install the real video and document tools used by Windows acceptance tests
+runs:
+  using: composite
+  steps:
+    - name: Install FFmpeg, LibreOffice and Poppler
+      shell: pwsh
+      run: |
+        choco install ffmpeg libreoffice-fresh poppler --yes --no-progress --limit-output
+        if ($LASTEXITCODE -notin @(0, 1641, 3010)) {
+          throw "Native test tool installation failed: $LASTEXITCODE"
+        }
+        $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        $env:Path = "$machinePath;$userPath;$env:Path"
+        $env:Path -split ';' | Where-Object { $_ } | ForEach-Object { $_ >> $env:GITHUB_PATH }
+        foreach ($tool in @('ffmpeg', 'ffprobe', 'pdftoppm')) {
+          if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+            throw "Required test tool is missing: $tool"
+          }
+        }
+        if (-not (Test-Path -LiteralPath "$env:ProgramFiles\LibreOffice\program\soffice.com")) {
+          throw 'LibreOffice is missing'
+        }
+        exit 0

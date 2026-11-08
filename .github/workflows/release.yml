@@ -75,6 +75,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set up native test tools
+        uses: ./.github/actions/setup-test-tools
+
       - name: Align package version
         shell: pwsh
         run: npm version "${{ steps.release.outputs.version }}" --no-git-tag-version --allow-same-version
