@@ -34,6 +34,17 @@ test('video IPC keeps credentials encrypted, validates scope, requires native co
   const id = (await creation.command({ action: 'create', name: 'IPC', stage: '简报' }))
     .creationProjects[0].id
   await call('video-command', { projectId: id, action: 'enable' })
+  await call('video-command', {
+    projectId: id,
+    action: 'save-content',
+    content: { shots: [{ id: 'ipc-shot' }] },
+  })
+  await assert.rejects(
+    call('video-command', { projectId: id, action: 'delete-shot', shotId: {} }),
+    /镜头/,
+  )
+  await call('video-command', { projectId: id, action: 'delete-shot', shotId: 'ipc-shot' })
+  assert.deepEqual(creation.project(id).video.content.shots, [])
   await call('video-key', 'credential-never-export')
   assert.equal(JSON.stringify(workspace.get()).includes('credential'), false)
   assert.equal(

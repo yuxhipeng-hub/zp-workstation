@@ -159,6 +159,22 @@ test('video workflow edits real records and exports playable FFmpeg film without
         fullPage: true,
       })
     }
+    await w.locator('[data-action="cs-v-step"][data-id="shots"]').click()
+    await w.locator('[data-action="cs-v-add-shot"]').click()
+    await w.getByLabel('叙事目的', { exact: true }).fill('待删除镜头')
+    await w.locator('[data-action="cs-v-save-shot"]').click()
+    await w.locator('[data-action="cs-v-delete-shot"]').click()
+    const afterDelete = (await w.evaluate(() => window.launcher.getWorkspace())).creationProjects[0]
+    expect(afterDelete.video.content.shots).toHaveLength(1)
+    expect(afterDelete.video.content.shots[0].id).toBe(saved.video.content.shots[0].id)
+    expect(afterDelete.artifacts).toEqual(saved.artifacts)
+    await w.locator('[data-action="cs-v-delete-shot"]').click()
+    await expect(w.locator('[data-action="cs-v-shot"]')).toHaveCount(0)
+    const empty = (await w.evaluate(() => window.launcher.getWorkspace())).creationProjects[0]
+    expect(empty.video.content.shots).toHaveLength(0)
+    expect(empty.video.edit.clips).toHaveLength(0)
+    expect(empty.video.exports).toEqual(saved.video.exports)
+    expect(empty.artifacts).toEqual(saved.artifacts)
     expect(saved.id).toBe(id)
   } finally {
     if (app) await app.close()

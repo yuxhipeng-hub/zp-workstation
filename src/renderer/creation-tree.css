@@ -1,4 +1,22 @@
 /* Project ownership is a tree; numbered rows express the production order. */
+#view[data-page='creation'] {
+  --focus: var(--text-secondary);
+}
+#view[data-page='creation']
+  .creation-studio
+  :is(input, textarea, select):is(:focus, :focus-visible),
+#view[data-page='creation'] .creation-studio label:has(:is(input, textarea, select):focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+#view[data-page='creation'] .creation-studio :is(input, textarea, select):focus {
+  border-bottom-color: var(--line-strong);
+}
+#view[data-page='creation'] .creation-studio :is(button, summary, [tabindex]):focus-visible {
+  outline-color: var(--text-secondary);
+  outline-width: 1px;
+  box-shadow: none;
+}
 .cc-outline .cc-canvas-tools {
   position: fixed;
   right: 16px;
@@ -367,6 +385,185 @@
 }
 .cc-outline .cc-workpage .cs-project-heading h2 {
   font-size: 16px;
+}
+.cc-outline .cc-workpage.cc-step-tree {
+  margin-block: 2px 12px;
+  padding: 0 0 0 14px;
+  border: 0;
+  border-left: 1px solid var(--cs-divider);
+  border-radius: 0;
+  background: transparent;
+}
+.cc-function-node {
+  position: relative;
+  min-width: 0;
+}
+.cc-function-node::before {
+  position: absolute;
+  top: 15px;
+  left: -14px;
+  width: 10px;
+  border-top: 1px solid var(--cs-divider);
+  content: '';
+}
+.cc-function-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+.cc-function-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.cc-function-trigger > svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--text-secondary);
+}
+.cc-function-trigger:hover,
+.cc-function-trigger[aria-expanded='true'] {
+  background: var(--panel-hover);
+}
+.cc-function-meta {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.cc-function-edit {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  width: 26px;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  opacity: 0;
+  cursor: pointer;
+}
+.cc-function-edit svg {
+  width: 13px;
+  height: 13px;
+}
+.cc-function-row:hover .cc-function-edit,
+.cc-stage-row:hover .cc-function-edit,
+.cc-function-row:focus-within .cc-function-edit,
+.cc-stage-row:focus-within .cc-function-edit {
+  opacity: 1;
+}
+.cc-function-edit:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+.cc-function-children {
+  margin-left: 12px;
+  padding-left: 14px;
+  border-left: 1px solid var(--cs-divider);
+}
+.cc-function-content {
+  min-width: 0;
+  max-width: 960px;
+  padding: 8px 12px 18px 25px;
+}
+.cc-function-content:empty {
+  display: none;
+}
+.cc-reader-text {
+  max-width: 80ch;
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cc-reader-fields {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  max-width: 80ch;
+}
+.cc-reader-fields > div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 14px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.cc-reader-fields dt {
+  color: var(--text-secondary);
+}
+.cc-reader-fields dd {
+  margin: 0;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cc-reader-records {
+  display: grid;
+  gap: 18px;
+}
+.cc-reader-records h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.cc-reader-media {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  align-items: start;
+  gap: 14px;
+}
+.cc-outline .cc-reader-media .cs-media {
+  min-height: 0;
+  max-height: 300px;
+}
+.cc-reader-media .cs-preview {
+  margin: 0;
+}
+.cc-reader-media .cs-meta {
+  display: none;
+}
+.cc-reader-media > section > h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+@media (max-width: 520px) {
+  .cc-outline .cc-workpage.cc-step-tree {
+    margin-left: 12px;
+    width: calc(100% - 12px);
+  }
+  .cc-reader-fields > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+  .cc-function-content {
+    padding-inline: 8px;
+  }
+}
+@media (pointer: coarse) {
+  .cc-function-edit {
+    opacity: 1;
+  }
 }
 .cc-outline .cc-workpage .cs-tabs {
   gap: 16px;

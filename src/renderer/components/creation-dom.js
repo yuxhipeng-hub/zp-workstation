@@ -41,10 +41,16 @@ function patch(node, next, added) {
   if (node.localName === 'svg' && next.dataset.lucide === node.dataset.lucide) return
   if (node.dataset.csMedia && node.childElementCount) return
   if (node.matches('[data-cs-acceptance],[data-cs-latest]')) return
+  const height = node.matches(
+    'textarea[data-v-autogrow],.cc-composer textarea[data-cs-field="brief"]',
+  )
+    ? node.style.height
+    : ''
   for (const attr of [...node.attributes])
     if (!next.hasAttribute(attr.name)) node.removeAttribute(attr.name)
   for (const attr of next.attributes)
     if (node.getAttribute(attr.name) !== attr.value) node.setAttribute(attr.name, attr.value)
+  if (height) node.style.height = height
   // Revalidation in hydrate updates health and changed sources; never insert a loading placeholder over live media.
   const byKey = new Map()
   for (const child of node.childNodes) if (key(child)) byKey.set(key(child), child)
@@ -88,14 +94,14 @@ export function updateCreationDom(view, html) {
   }
   const useMotion =
     next.dataset.csMotion === 'true' && !matchMedia('(prefers-reduced-motion: reduce)').matches
+  for (const animation of animations) animation.cancel()
+  animations.clear()
   const positions = new Map()
   if (useMotion)
     for (const node of current.querySelectorAll(
       '.cc-project,.cc-video,.cc-stage-node,.cc-shot-node',
     ))
       positions.set(node, node.getBoundingClientRect())
-  for (const animation of animations) animation.cancel()
-  animations.clear()
   const added = []
   patch(current, next, added)
   if (!useMotion) return

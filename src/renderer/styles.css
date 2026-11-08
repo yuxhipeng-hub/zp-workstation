@@ -359,7 +359,7 @@ button:disabled {
 }
 
 .nav-item:active {
-  transform: scale(0.985);
+  transform: none;
 }
 
 .nav-item.active {
@@ -748,7 +748,6 @@ body[data-theme='light'] .nav-item.active {
     background-color var(--motion-fast) var(--ease-out),
     border-color var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out),
-    transform var(--motion-fast) var(--ease-out),
     opacity var(--motion-fast) var(--ease-out);
 }
 
@@ -766,25 +765,24 @@ body[data-theme='light'] .nav-item.active {
   width: 16px;
   height: 16px;
   stroke-width: 1.9px;
-  transition: transform var(--motion-fast) var(--ease-spring);
 }
 
 .button:hover:not(:disabled) svg,
 .icon-button:hover:not(:disabled) svg {
-  transform: translateY(-1px) scale(1.08);
+  transform: none;
 }
 
 .button:hover:not(:disabled),
 .icon-button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--ink) 76%, var(--line-strong));
   background: var(--panel-hover);
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .button:active:not(:disabled),
 .icon-button:active:not(:disabled) {
   box-shadow: none;
-  transform: translateY(0) scale(0.985);
+  transform: none;
   transition-duration: 90ms;
 }
 
@@ -1539,11 +1537,11 @@ code {
   border-color: var(--text-tertiary);
   background: var(--panel-active);
   color: var(--text);
-  transform: scale(1.04);
+  transform: none;
 }
 
 .assignment-state:active {
-  transform: scale(0.96);
+  transform: none;
 }
 
 .assignment-state svg {
@@ -2854,7 +2852,7 @@ input::placeholder {
 }
 
 .time-control-trigger:active {
-  transform: scale(0.97);
+  transform: none;
 }
 
 .time-control-trigger:focus-visible {
@@ -2998,7 +2996,7 @@ input::placeholder {
 .path-list button:hover,
 .link-list button:hover {
   color: var(--text-secondary);
-  transform: translateX(2px);
+  transform: none;
 }
 
 .path-list button > span,

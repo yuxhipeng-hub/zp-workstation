@@ -1,4 +1,5 @@
 import { createCreationVideo } from './creation-video.js'
+import { renderCreationStepTree } from '../components/creation-step-tree.js'
 import { hydrateCreationProjectMenu } from '../components/creation-project-menu.js'
 import {
   creationStagePicker,
@@ -26,7 +27,13 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
   const thumbnails = new Map()
   let events,
     focusedStep = false,
-    motion = false
+    motion = false,
+    reading = true,
+    outlineStage = '',
+    editSection = '',
+    readerOrigin = ''
+  const expandedFunctions = new Set()
+  const productionStates = new Map()
   const videoPage = createCreationVideo({
     state,
     api,
@@ -35,7 +42,11 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
     toast,
     preview,
     onState(p, data) {
+      productionStates.set(p.id, data)
       updateRoleText(document, { ...p, video: data.video })
+    },
+    onShotDeleted(id) {
+      if (shotEditorId === id) shotEditorId = ''
     },
   })
   const expanded = new Set()
@@ -70,6 +81,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
       : selected + ':' + form
   const projects = () => state.workspace?.creationProjects || []
   const project = () => projects().find((x) => x.id === selected)
+  const focusedStage = (p) => outlineStage || (tab === 'works' ? 'works' : videoPage.getStep(p))
   const current = (p) =>
     p.artifacts.find((a) => a.id === artifactId) ||
     p.artifacts.find((a) => a.id === p.selectedArtifactId) ||
@@ -104,13 +116,13 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
   }
   function preview(p, a, slot = 'main') {
     if (!a)
-      return `<div class="cs-empty"><i data-lucide="film"></i><h3>尚未导入产物</h3><p>导入图片、MP4 或文字资料，在这里查看和审片。</p>${button('import', '导入第一份产物', '', true)}</div>`
+      return `<div class="cs-empty"><i data-lucide="film"></i><h3>尚未导入产物</h3>${button('import', '导入第一份产物', '', true)}</div>`
     return `<figure class="cs-preview" data-cs-preview="${slot}" data-artifact="${e(a.id)}"><figcaption><strong>${e(a.family)} · ${e(a.label)}</strong><span>${a.id === p.selectedArtifactId ? '选定版本 · ' : ''}<span data-cs-acceptance>正在核对文件</span></span></figcaption><div class="cs-media" data-cs-media="${e(p.id + ':' + a.id)}"><p>正在核对本机文件…</p></div><div class="cs-meta">来源：${e(a.sourceVersion || '未提供')} · ${stamp(a.createdAt)}</div></figure>`
   }
   function overview(p, a) {
     const pending = p.reviews.filter((r) => r.status !== 'resolved')
     const blocked = p.tasks.filter((t) => t.status === 'blocked')
-    return `<div class="cs-work cs-overview"><div class="cs-main-column"><div class="cs-section-heading"><h3>作品预览</h3>${p.artifacts.length ? button('latest', '查看最新产物') : ''}</div>${preview(p, a)}<section class="cs-summary" aria-label="项目概况"><div class="cs-next"><span>下一步</span><strong>${!a ? '导入第一份作品，开始审片' : pending.length ? '处理修改意见，关联修复版本后复查' : a.acceptance !== 'approved' ? '审查作品并确认验收' : '记录发布与复盘'}</strong></div><div><span>待处理意见</span><strong>${pending.length}<small>条</small></strong></div><div><span>待审查任务</span><strong>${p.tasks.filter((t) => t.status === 'review').length}<small>项</small></strong></div></section>${blocked.length ? `<p class="cs-error">阻塞问题：${e(blocked.map((t) => t.blockedReason || t.goal).join('；'))}</p>` : ''}</div><aside class="cs-context"><section class="cs-context-section"><div class="cs-section-heading"><h3>制作简报</h3>${button('edit', '编辑简报')}</div><p class="cs-prose">${e(p.brief || '尚未填写制作简报')}</p></section><section class="cs-context-section"><div class="cs-section-heading"><h3>项目目录</h3></div><p class="cs-directory" data-cs-directory>${p.directory ? e(p.directory) : '尚未关联制作目录'}</p><div class="cs-actions">${button('connect', p.directory ? '重新关联目录' : '关联目录')}${button('refresh', '刷新项目记录')}</div><details><summary>关联资料（仅供阅读）</summary><div class="cs-actions">${['BRIEF.md', 'HANDOFF.md', 'QA.md', 'README.md'].map((name) => button('document', name, `data-id="${name}"`)).join('')}</div><pre data-cs-document>选择一份资料查看。</pre><p class="cs-hint">手动读取 workbench-record.json；不会启动脚本或模型。</p></details></section><details class="cs-context-section"><summary>任务与执行详情 <span>${p.tasks.length}</span></summary>${executions(p)}</details><details class="cs-context-section"><summary>最近活动</summary>${
+    return `<div class="cs-work cs-overview"><div class="cs-main-column"><div class="cs-section-heading"><h3>作品预览</h3>${p.artifacts.length ? button('latest', '查看最新产物') : ''}</div>${preview(p, a)}<section class="cs-summary" aria-label="项目概况"><div class="cs-next"><span>下一步</span><strong>${!a ? '导入第一份作品，开始审片' : pending.length ? '处理修改意见，关联修复版本后复查' : a.acceptance !== 'approved' ? '审查作品并确认验收' : '记录发布与复盘'}</strong></div><div><span>待处理意见</span><strong>${pending.length}<small>条</small></strong></div><div><span>待审查任务</span><strong>${p.tasks.filter((t) => t.status === 'review').length}<small>项</small></strong></div></section>${blocked.length ? `<p class="cs-error">阻塞问题：${e(blocked.map((t) => t.blockedReason || t.goal).join('；'))}</p>` : ''}</div><aside class="cs-context"><section class="cs-context-section"><div class="cs-section-heading"><h3>制作简报</h3>${button('edit', '编辑简报')}</div><p class="cs-prose">${e(p.brief || '尚未填写制作简报')}</p></section><section class="cs-context-section"><div class="cs-section-heading"><h3>项目目录</h3></div><p class="cs-directory" data-cs-directory>${p.directory ? e(p.directory) : '尚未关联制作目录'}</p><div class="cs-actions">${button('connect', p.directory ? '重新关联目录' : '关联目录')}${button('refresh', '刷新项目记录')}</div><details><summary>关联资料（仅供阅读）</summary><div class="cs-actions">${['BRIEF.md', 'HANDOFF.md', 'QA.md', 'README.md'].map((name) => button('document', name, `data-id="${name}"`)).join('')}</div><pre data-cs-document>选择一份资料查看。</pre></details></section><details class="cs-context-section"><summary>任务与执行详情 <span>${p.tasks.length}</span></summary>${executions(p)}</details><details class="cs-context-section"><summary>最近活动</summary>${
       p.activity
         .slice(0, 15)
         .map((a) => `<p>${e(a.message)}<small>${stamp(a.at)}</small></p>`)
@@ -122,7 +134,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
   }
   function works(p, a) {
     const other = p.artifacts.find((x) => x.id === compareId)
-    return `<div class="cs-panel cs-actions">${field('versionLabel', '导入版本标签（可留空）')}${field('family', '作品分组', a?.family || '作品')}${button('import', '导入产物', '', true)}<span class="cs-hint">保留原文件，新增版本不会覆盖旧记录。</span></div><div class="cs-version-bar">${select('artifact', '查看版本', versions(p), a?.id)}${select('compare', '对比版本', [['', '不比较'], ...versions(p).filter(([id]) => id !== a?.id)], compareId)}${a ? button('select', '设为选定版本') + button('approve', '确认当前版本验收') : ''}</div><div class="cs-comparison ${other ? 'is-comparing' : ''}">${preview(p, a)}${other ? preview(p, other, 'compare') : ''}</div>${other ? `<div class="cs-actions">${field('seek', '同步时间点（秒）', time, 'number')}${button('sync-time', '两版定位到相同时间')}</div>` : ''}<details class="cs-panel"><summary>版本记录与原文件</summary>${p.artifacts.map((x) => `<p>${e(x.family)} · ${e(x.label)} · ${stamp(x.createdAt)}<small>${e(x.path || x.url)}<br>SHA-256：${e(x.digest || '未提供')}</small>${button('open', x.type === 'interactive' ? '在外部浏览器打开本机作品' : '外部打开文件', `data-id="${e(x.id)}"`)}</p>`).join('')}</details>`
+    return `<div class="cs-panel cs-actions">${field('versionLabel', '导入版本标签（可留空）')}${field('family', '作品分组', a?.family || '作品')}${button('import', '导入产物', '', true)}</div><div class="cs-version-bar">${select('artifact', '查看版本', versions(p), a?.id)}${select('compare', '对比版本', [['', '不比较'], ...versions(p).filter(([id]) => id !== a?.id)], compareId)}${a ? button('select', '设为选定版本') + button('approve', '确认当前版本验收') : ''}</div><div class="cs-comparison ${other ? 'is-comparing' : ''}">${preview(p, a)}${other ? preview(p, other, 'compare') : ''}</div>${other ? `<div class="cs-actions">${field('seek', '同步时间点（秒）', time, 'number')}${button('sync-time', '两版定位到相同时间')}</div>` : ''}<details class="cs-panel"><summary>版本记录与原文件</summary>${p.artifacts.map((x) => `<p>${e(x.family)} · ${e(x.label)} · ${stamp(x.createdAt)}<small>${e(x.path || x.url)}<br>SHA-256：${e(x.digest || '未提供')}</small>${button('open', x.type === 'interactive' ? '在外部浏览器打开本机作品' : '外部打开文件', `data-id="${e(x.id)}"`)}</p>`).join('')}</details>`
   }
   function reviews(p, a) {
     let rows = p.reviews.filter(
@@ -172,13 +184,13 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
             '处理状态',
             ['open', 'doing', 'recheck', 'resolved'].map((s) => [s, statuses[s]]),
             r.status,
-          )}${select('resolvedArtifactId', '修复版本', [['', '尚未关联'], ...versions(p)], r.resolvedArtifactId)}${button('update-review', '保存处理记录', `data-id="${e(r.id)}"`)}<small>“已解决”表示你已复查所选修复版本；原始意见会保留。</small><details><summary>处理历史</summary>${r.history.map((h) => `<p>${stamp(h.at)} · ${statuses[h.status] || h.status} · ${e(p.artifacts.find((a) => a.id === h.artifactId)?.label || '未关联版本')}</p>`).join('') || '<p>暂无处理记录</p>'}</details></article>`
+          )}${select('resolvedArtifactId', '修复版本', [['', '尚未关联'], ...versions(p)], r.resolvedArtifactId)}${button('update-review', '保存处理记录', `data-id="${e(r.id)}"`)}<details><summary>处理历史</summary>${r.history.map((h) => `<p>${stamp(h.at)} · ${statuses[h.status] || h.status} · ${e(p.artifacts.find((a) => a.id === h.artifactId)?.label || '未关联版本')}</p>`).join('') || '<p>暂无处理记录</p>'}</details></article>`
         })
         .join('') || '<p class="cs-empty-small">暂无符合条件的意见</p>'
     }</aside></div>`
   }
   function publications(p) {
-    return `<div class="cs-work"><section class="cs-panel" data-cs-form="publication"><h3>记录发布与复盘</h3>${field('platform', '发布平台')}${field('url', '作品链接')}${field('publishedAt', '实际发布时间', '', 'datetime-local')}${select('artifactId', '对应成片版本', [['', '选择版本'], ...versions(p)])}${field('hours', '制作耗时（小时）', '', 'number')}${field('cost', '额外支出（元）', '', 'number')}${area('notes', '经验与复盘')}${button('publication', '保存发布记录', '', true)}<p class="cs-hint">手动记录；不会登录平台或自动发布。</p></section><section class="cs-panel"><h3>发布记录与观察快照</h3>${p.publications.map((pub) => `<article class="cs-review"><h4>${e(pub.platform)}</h4><p>${stamp(pub.publishedAt)} · ${e(p.artifacts.find((a) => a.id === pub.artifactId)?.label || '')}</p><p>${e(pub.url)}</p><p>耗时 ${pub.hours ?? '未知'} 小时 · 支出 ${pub.cost ?? '未知'} 元</p><p class="cs-prose">${e(pub.notes)}</p><details><summary>添加一次观察快照</summary><div data-cs-form="${e(pub.id)}">${field('observedAt', '数据观察时间', '', 'datetime-local')}${['views', 'likes', 'comments', 'shares', 'favorites', 'followers'].map((k, i) => field(k, ['播放', '点赞', '评论', '分享', '收藏', '新增关注'][i], '', 'number')).join('')}${button('observation', '保存独立快照', `data-id="${e(pub.id)}"`)}</div></details>${pub.observations.map((o) => `<p>${stamp(o.observedAt)}<small>播放 ${o.views ?? '未知'} · 赞 ${o.likes ?? '未知'} · 评论 ${o.comments ?? '未知'} · 分享 ${o.shares ?? '未知'} · 收藏 ${o.favorites ?? '未知'} · 新增关注 ${o.followers ?? '未知'}</small></p>`).join('') || '<p>暂无观察快照；未知指标留空。</p>'}</article>`).join('') || '<p>暂无发布记录</p>'}</section></div>`
+    return `<div class="cs-work"><section class="cs-panel" data-cs-form="publication"><h3>记录发布与复盘</h3>${field('platform', '发布平台')}${field('url', '作品链接')}${field('publishedAt', '实际发布时间', '', 'datetime-local')}${select('artifactId', '对应成片版本', [['', '选择版本'], ...versions(p)])}${field('hours', '制作耗时（小时）', '', 'number')}${field('cost', '额外支出（元）', '', 'number')}${area('notes', '经验与复盘')}${button('publication', '保存发布记录', '', true)}</section><section class="cs-panel"><h3>发布记录与观察快照</h3>${p.publications.map((pub) => `<article class="cs-review"><h4>${e(pub.platform)}</h4><p>${stamp(pub.publishedAt)} · ${e(p.artifacts.find((a) => a.id === pub.artifactId)?.label || '')}</p><p>${e(pub.url)}</p><p>耗时 ${pub.hours ?? '未知'} 小时 · 支出 ${pub.cost ?? '未知'} 元</p><p class="cs-prose">${e(pub.notes)}</p><details><summary>添加一次观察快照</summary><div data-cs-form="${e(pub.id)}">${field('observedAt', '数据观察时间', '', 'datetime-local')}${['views', 'likes', 'comments', 'shares', 'favorites', 'followers'].map((k, i) => field(k, ['播放', '点赞', '评论', '分享', '收藏', '新增关注'][i], '', 'number')).join('')}${button('observation', '保存独立快照', `data-id="${e(pub.id)}"`)}</div></details>${pub.observations.map((o) => `<p>${stamp(o.observedAt)}<small>播放 ${o.views ?? '未知'} · 赞 ${o.likes ?? '未知'} · 评论 ${o.comments ?? '未知'} · 分享 ${o.shares ?? '未知'} · 收藏 ${o.favorites ?? '未知'} · 新增关注 ${o.followers ?? '未知'}</small></p>`).join('') || '<p>暂无观察快照</p>'}</article>`).join('') || '<p>暂无发布记录</p>'}</section></div>`
   }
   const children = (root) => [
     ...(root.kind !== 'project' ? [root] : []),
@@ -263,16 +275,12 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
   function roles(p) {
     return roleItems(p)
       .map(([step, label, owner, status], i) => {
-        const active =
-          workspaceOpen &&
-          focusedStep &&
-          selected === p.id &&
-          (tab === 'works' ? 'works' : videoPage.getStep(p)) === step
+        const active = workspaceOpen && focusedStep && selected === p.id && focusedStage(p) === step
         const show = active && !shotEditorId
         const shots = p.video?.content.shots || []
         const opened = shotBranches.has(p.id)
-        return `<div class="cc-stage-node" data-cc-stage="${e(p.id + ':' + step)}" data-cs-key="stage:${e(p.id)}:${step}"><div class="cc-stage-row"><span class="cc-stage-index">${String(i + 1).padStart(2, '0')}</span><div class="cc-stage-title"><button type="button" class="cc-stage" data-action="cs-stage" data-video="${e(p.id)}" data-id="${step}" aria-expanded="${show}" aria-controls="cs-step-${e(p.id)}-${step}"><strong>${label}</strong></button>${step === 'shots' ? button('shots-toggle', '<i data-lucide="' + (opened ? 'chevron-down' : 'chevron-right') + '" aria-hidden="true"></i>', `data-id="${e(p.id)}" aria-expanded="${opened}" aria-label="展开${e(p.name)}的镜头"`) : ''}</div><span class="cc-stage-owner">${owner}</span><span class="cc-stage-status">${e(status)}</span></div>${show ? workpage(p) : ''}${
-          step === 'shots' && opened
+        return `<div class="cc-stage-node" data-cc-stage="${e(p.id + ':' + step)}" data-cs-key="stage:${e(p.id)}:${step}"><div class="cc-stage-row"><span class="cc-stage-index">${String(i + 1).padStart(2, '0')}</span><div class="cc-stage-title"><button type="button" class="cc-stage" data-action="cs-stage" data-video="${e(p.id)}" data-id="${step}" aria-expanded="${show}" aria-controls="cs-step-${e(p.id)}-${step}"><strong>${label}</strong></button>${step === 'shots' && !reading ? button('shots-toggle', '<i data-lucide="' + (opened ? 'chevron-down' : 'chevron-right') + '" aria-hidden="true"></i>', `data-id="${e(p.id)}" aria-expanded="${opened}" aria-label="展开${e(p.name)}的镜头"`) : ''}<button type="button" class="cc-function-edit" data-action="cs-edit-step" data-video="${e(p.id)}" data-id="${step}" data-stage="${step}" data-tab="${step === 'works' ? 'works' : 'video'}" aria-label="编辑${label}" title="编辑${label}"><i data-lucide="pencil-line" aria-hidden="true"></i></button></div><span class="cc-stage-owner">${owner}</span><span class="cc-stage-status">${e(status)}</span></div>${show ? workpage(p) : ''}${
+          step === 'shots' && opened && !reading
             ? `<div class="cc-shot-list" data-cs-key="shots:${e(p.id)}" aria-label="${e(p.name)}的镜头">${
                 shots
                   .map((shot, index) => {
@@ -289,20 +297,28 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
   }
   function workpage(p, shot = null) {
     const a = current(p)
-    return `<section class="cc-workpage" data-cs-step="${focusedStep ? (tab === 'works' ? 'works' : videoPage.getStep(p)) : 'all'}" id="cs-step-${e(p.id)}-${tab === 'works' ? 'works' : videoPage.getStep(p)}" data-cs-key="work:${e(p.id)}:${focusedStep ? videoPage.getStep(p) + ':' + tab : 'all'}:${e(shot?.id || '')}" aria-label="视频工作区"><header class="cs-project-heading"><div><span class="cc-eyebrow">${e(p.stage)} · ${p.archived ? '已归档' : '视频工作页'}</span><h2>${e(shot ? '镜头 ' + String(p.video.content.shots.findIndex((s) => s.id === shot.id) + 1).padStart(2, '0') + ' · ' + (shot.purpose || '未命名镜头') : p.name)}</h2><p class="cs-hint"><span data-cs-latest>正在读取记录</span> · ${p.artifacts.length} 个版本</p></div><div class="cs-actions">${focusedStep ? button('open-work', '全部制作工具', `data-id="${e(p.id)}"`) : ''}${button('import', '导入素材')}${button('edit', '调整需求', `data-id="${e(p.id)}"`)}${button('close-work', '<i data-lucide="chevron-up" aria-hidden="true"></i>收起工作页')}</div></header><nav class="cs-tabs" aria-label="项目详情" ${focusedStep ? 'hidden' : ''}>${[
-      ['video', '视频制作'],
-      ['overview', '总览'],
-      ['works', '作品与版本'],
-      ['reviews', '修改意见'],
-      ['publications', '发布复盘'],
-    ]
-      .map(
-        ([key, label]) =>
-          `<button type="button" data-action="cs-tab" data-id="${key}" aria-current="${tab === key ? 'page' : 'false'}">${label}${key === 'reviews' && p.reviews.some((r) => r.status !== 'resolved') ? `<span>${p.reviews.filter((r) => r.status !== 'resolved').length}</span>` : ''}</button>`,
-      )
-      .join(
-        '',
-      )}<details class="cs-more"><summary aria-label="更多项目操作">更多<i data-lucide="chevron-down" aria-hidden="true"></i></summary><div class="cs-more-menu">${button('import', '导入产物')}${button('archive', p.archived ? '重新打开项目' : '归档项目')}${button('delete', '移除工作室记录')}</div></details></nav>${{ overview: () => overview(p, a), video: () => videoPage.renderPage(p, { focused: focusedStep, shotOnly: !!shot }), works: () => works(p, a), reviews: () => reviews(p, a), publications: () => publications(p) }[tab]()}</section>`
+    if (focusedStep && reading) {
+      const step = focusedStage(p)
+      return `<section class="cc-workpage cc-step-tree" data-cs-step="${e(step)}" id="cs-step-${e(p.id)}-${e(step)}" data-cs-key="read:${e(p.id)}:${e(step)}" aria-label="制作内容树">${renderCreationStepTree(p, step, { escapeHtml: e, preview, data: productionStates.get(p.id) }, expandedFunctions)}</section>`
+    }
+    return `<section class="cc-workpage" data-cs-step="${focusedStep ? focusedStage(p) : 'all'}" id="cs-step-${e(p.id)}-${focusedStep ? focusedStage(p) : tab === 'works' ? 'works' : videoPage.getStep(p)}" data-cs-key="work:${e(p.id)}:${focusedStep ? videoPage.getStep(p) + ':' + tab : 'all'}:${e(shot?.id || '')}" aria-label="视频工作区"><header class="cs-project-heading"><div><span class="cc-eyebrow">${e(p.stage)} · ${p.archived ? '已归档' : '视频工作页'}</span><h2>${e(shot ? '镜头 ' + String(p.video.content.shots.findIndex((s) => s.id === shot.id) + 1).padStart(2, '0') + ' · ' + (shot.purpose || '未命名镜头') : p.name)}</h2></div><div class="cs-actions">${!focusedStep || ['design', 'edit', 'works'].includes(tab === 'works' ? 'works' : videoPage.getStep(p)) ? button('import', '导入素材') : ''}${!focusedStep ? button('edit', '调整需求', `data-id="${e(p.id)}"`) : ''}${focusedStep ? button('read-step', '<i data-lucide="arrow-left" aria-hidden="true"></i>', 'aria-label="返回内容" title="返回内容"') : ''}${button('close-work', '<i data-lucide="chevron-up" aria-hidden="true"></i>收起工作页')}</div></header>${
+      focusedStep
+        ? ''
+        : `<nav class="cs-tabs" aria-label="项目详情">${[
+            ['video', '视频制作'],
+            ['overview', '总览'],
+            ['works', '作品与版本'],
+            ['reviews', '修改意见'],
+            ['publications', '发布复盘'],
+          ]
+            .map(
+              ([key, label]) =>
+                `<button type="button" data-action="cs-tab" data-id="${key}" aria-current="${tab === key ? 'page' : 'false'}">${label}${key === 'reviews' && p.reviews.some((r) => r.status !== 'resolved') ? `<span>${p.reviews.filter((r) => r.status !== 'resolved').length}</span>` : ''}</button>`,
+            )
+            .join(
+              '',
+            )}<details class="cs-more"><summary aria-label="更多项目操作">更多<i data-lucide="chevron-down" aria-hidden="true"></i></summary><div class="cs-more-menu">${button('import', '导入产物')}${button('archive', p.archived ? '重新打开项目' : '归档项目')}${button('delete', '移除工作室记录')}</div></details></nav>`
+    }${{ overview: () => overview(p, a), video: () => videoPage.renderPage(p, { focused: focusedStep, shotOnly: !!shot, section: editSection }), works: () => works(p, a), reviews: () => reviews(p, a), publications: () => publications(p) }[tab]()}</section>`
   }
   function videoObject(p) {
     const open = expandedVideos.has(p.id)
@@ -330,7 +346,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
     const animate = motion
     motion = false
     setTimeout(() => hydrate(gen), 0)
-    return `<div class="creation-studio cc-studio cc-outline" data-cs-motion="${animate}" aria-busy="${busy}"><header class="cs-toolbar cc-toolbar"><div class="cc-title"><h2>项目大纲</h2></div><nav class="cs-collection-tabs" aria-label="项目范围"><button type="button" data-action="cs-active-list" aria-current="${!archived ? 'page' : 'false'}">进行中 <span>${roots(false).length}</span></button><button type="button" data-action="cs-archived-list" aria-current="${archived ? 'page' : 'false'}">已归档 <span>${roots(true).length}</span></button></nav>${button('new', '<i data-lucide="plus" aria-hidden="true"></i>新建项目')}</header>${error ? `<p role="alert" class="cs-error">${e(error)}</p>` : ''}<div class="cc-viewport" tabindex="0" aria-label="项目画布，可拖动空白区域平移"><div class="cc-plane" style="zoom:${zoom}">${editing === 'new' ? editor() : ''}<div class="cc-projects">${list.map(projectObject).join('')}</div>${!list.length && editing !== 'new' ? `<div class="cs-empty cc-welcome"><i data-lucide="workflow" aria-hidden="true"></i><h3>${archived ? '暂无归档项目' : '让创意从这里展开'}</h3><p>创建项目，再把每一支视频和制作步骤连起来。</p>${button('new', '<i data-lucide="plus" aria-hidden="true"></i>创建项目', '', true)}</div>` : ''}</div></div><div class="cc-canvas-tools" role="group" aria-label="画布视图"><div role="group" aria-label="画布缩放">${button('zoom-out', '−', 'aria-label="缩小画布"')}<output data-cc-zoom>${Math.round(zoom * 100)}%</output>${button('zoom-in', '+', 'aria-label="放大画布"')}${button('reset-view', '重置视图')}</div></div></div>`
+    return `<div class="creation-studio cc-studio cc-outline" data-cs-motion="${animate}" aria-busy="${busy}"><header class="cs-toolbar cc-toolbar"><div class="cc-title"><h2>项目大纲</h2></div><nav class="cs-collection-tabs" aria-label="项目范围"><button type="button" data-action="cs-active-list" aria-current="${!archived ? 'page' : 'false'}">进行中 <span>${roots(false).length}</span></button><button type="button" data-action="cs-archived-list" aria-current="${archived ? 'page' : 'false'}">已归档 <span>${roots(true).length}</span></button></nav>${button('new', '<i data-lucide="plus" aria-hidden="true"></i>新建项目')}</header>${error ? `<p role="alert" class="cs-error">${e(error)}</p>` : ''}<div class="cc-viewport" tabindex="0" aria-label="项目画布，可拖动空白区域平移"><div class="cc-plane" style="zoom:${zoom}">${editing === 'new' ? editor() : ''}<div class="cc-projects">${list.map(projectObject).join('')}</div>${!list.length && editing !== 'new' ? `<div class="cs-empty cc-welcome"><i data-lucide="workflow" aria-hidden="true"></i><h3>${archived ? '暂无归档项目' : '让创意从这里展开'}</h3>${button('new', '<i data-lucide="plus" aria-hidden="true"></i>创建项目', '', true)}</div>` : ''}</div></div><div class="cc-canvas-tools" role="group" aria-label="画布视图"><div role="group" aria-label="画布缩放">${button('zoom-out', '−', 'aria-label="缩小画布"')}<output data-cc-zoom>${Math.round(zoom * 100)}%</output>${button('zoom-in', '+', 'aria-label="放大画布"')}${button('reset-view', '重置视图')}</div></div></div>`
   }
   function handleChange(element) {
     const key = element.dataset.csField,
@@ -458,11 +474,6 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
             )
         }
       }
-      const latest = root.querySelector('[data-cs-latest]')
-      if (latest)
-        latest.textContent = details.runs.length
-          ? statuses[details.runs.at(-1).displayStatus]
-          : '暂无执行记录'
     } catch (err) {
       if (gen === generation) toast(err.message, 'error')
     }
@@ -476,11 +487,6 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
           node.querySelector('[data-cs-run-state]').textContent =
             statuses[run?.displayStatus] || '状态待确认'
         }
-        const latest = root.querySelector('[data-cs-latest]')
-        if (latest)
-          latest.textContent = fresh.runs.length
-            ? statuses[fresh.runs.at(-1).displayStatus]
-            : '暂无执行记录'
       } catch {
         /* A subsequent manual refresh reports the error. */
       }
@@ -609,30 +615,76 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
   async function updateRoles(root, p, gen) {
     const data = await api.creationVideoState(p.id)
     if (gen !== generation || !root.isConnected) return
+    const previous = productionStates.get(p.id)
+    productionStates.set(p.id, data)
     updateRoleText(root, { ...p, video: data.video })
+    const signature = (value) =>
+      JSON.stringify([
+        value?.video.revision,
+        value?.video.content,
+        value?.video.jobs,
+        value?.video.exports,
+        value?.audits,
+        value?.storyConfirmed,
+        value?.designConfirmed,
+      ])
+    if (
+      reading &&
+      focusedStep &&
+      workspaceOpen &&
+      selected === p.id &&
+      signature(previous) !== signature(data)
+    )
+      render()
   }
   function handleTreeKey(event, root) {
     const target = event.target
+    const functionNode = target.closest('.cc-function-node')
+    if (event.key === 'Escape' && reading && functionNode) {
+      const trigger = functionNode.querySelector(':scope > .cc-function-row .cc-function-trigger')
+      if (trigger?.getAttribute('aria-expanded') === 'true') {
+        event.preventDefault()
+        void handleAction('cs-function-toggle', trigger)
+        trigger.focus({ preventScroll: true })
+        return true
+      }
+    }
     if (event.key === 'Escape' && target.closest('.cc-composer,.cc-workpage')) {
       event.preventDefault()
       void handleAction(workspaceOpen ? 'cs-close-work' : 'cs-cancel-edit', target)
       return true
     }
     const node = target.closest(
-      '.cc-project-trigger,.cc-video-trigger,.cc-stage,.cc-shot-trigger,[data-action="cs-shots-toggle"]',
+      '.cc-project-trigger,.cc-video-trigger,.cc-stage,.cc-shot-trigger,.cc-function-trigger,[data-action="cs-shots-toggle"]',
     )
     if (!node) return false
     const fold =
       node.dataset.action === 'cs-stage' && node.dataset.id === 'shots'
-        ? node.closest('.cc-stage-node').querySelector('[data-action="cs-shots-toggle"]')
+        ? node.closest('.cc-stage-node').querySelector('[data-action="cs-shots-toggle"]') || node
         : node
-    const expandable = ['cs-toggle', 'cs-project', 'cs-shots-toggle'].includes(fold.dataset.action)
+    const expandable = [
+      'cs-toggle',
+      'cs-project',
+      'cs-shots-toggle',
+      'cs-stage',
+      'cs-function-toggle',
+    ].includes(fold.dataset.action)
     if (event.key === 'ArrowRight' && expandable) {
       event.preventDefault()
       if (fold.getAttribute('aria-expanded') === 'false')
         void handleAction(fold.dataset.action, fold)
+      else if (node.classList.contains('cc-function-trigger'))
+        node
+          .closest('.cc-function-node')
+          .querySelector(':scope > .cc-function-children .cc-function-trigger')
+          ?.focus()
       else
         (
+          (node.classList.contains('cc-function-trigger')
+            ? node
+                .closest('.cc-function-node')
+                .querySelector(':scope > .cc-function-children .cc-function-trigger')
+            : node.closest('.cc-stage-node')?.querySelector('.cc-function-trigger')) ||
           fold.closest('.cc-stage-node')?.querySelector('.cc-shot-trigger') ||
           fold.closest('.cc-video')?.querySelector('.cc-stage') ||
           fold.closest('.cc-project')?.querySelector('.cc-video-trigger')
@@ -645,6 +697,12 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
         void handleAction(fold.dataset.action, fold)
       else
         (
+          node
+            .closest('.cc-function-node')
+            ?.parentElement.closest('.cc-function-node')
+            ?.querySelector(':scope > .cc-function-row .cc-function-trigger') ||
+          (node.classList.contains('cc-function-trigger') &&
+            node.closest('.cc-stage-node')?.querySelector('.cc-stage')) ||
           node
             .closest('.cc-shot-node')
             ?.closest('.cc-stage-node')
@@ -661,7 +719,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
       event.preventDefault()
       const nodes = [
         ...root.querySelectorAll(
-          '.cc-project-trigger,.cc-video-trigger,.cc-stage,.cc-shot-trigger,[data-action="cs-shots-toggle"]',
+          '.cc-project-trigger,.cc-video-trigger,.cc-stage,.cc-shot-trigger,.cc-function-trigger,[data-action="cs-shots-toggle"]',
         ),
       ].filter((el) => el.getClientRects().length)
       const index = nodes.indexOf(node),
@@ -693,7 +751,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
     const selector = shotEditorId
       ? `.cc-shot-trigger[data-video="${video}"][data-id="${CSS.escape(shotEditorId)}"]`
       : focusedStep && project()
-        ? `.cc-stage[data-video="${video}"][data-id="${tab === 'works' ? 'works' : videoPage.getStep(project())}"]`
+        ? `.cc-stage[data-video="${video}"][data-id="${focusedStage(project())}"]`
         : ''
     const node = selector && document.querySelector(selector)
     if (node) {
@@ -708,11 +766,22 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
   }
   async function handleAction(action, element) {
     if (!action.startsWith('cs-')) return false
-    motion = !element?.matches?.(':focus-visible')
+    motion =
+      [
+        'cs-toggle',
+        'cs-project',
+        'cs-stage',
+        'cs-shots-toggle',
+        'cs-new',
+        'cs-new-video',
+        'cs-edit',
+        'cs-close-work',
+      ].includes(action) && !element?.matches?.(':focus-visible')
     if (action.startsWith('cs-v-')) {
       const handled = await videoPage.handle(action.slice(3), project(), element)
       if (action === 'cs-v-save-brief' && !videoPage.hasError()) {
-        workspaceOpen = false
+        if (focusedStep) reading = true
+        else workspaceOpen = false
         render()
         focusObject(selected)
       }
@@ -726,6 +795,50 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
     for (const form of document.querySelectorAll('[data-cs-form]'))
       drafts.set(draftKey(form.dataset.csForm), values(form.dataset.csForm))
     error = ''
+    if (op === 'function-toggle') {
+      const id = element.dataset.id
+      if (expandedFunctions.has(id)) expandedFunctions.delete(id)
+      else expandedFunctions.add(id)
+      render()
+      return true
+    }
+    if (op === 'read-step') {
+      reading = true
+      shotEditorId = ''
+      render()
+      const origin =
+        readerOrigin &&
+        document.querySelector(`.cc-step-tree [aria-label="${CSS.escape(readerOrigin)}"]`)
+      if (origin) origin.focus({ preventScroll: true })
+      else focusEditorOrigin()
+      return true
+    }
+    if (op === 'edit-step') {
+      readerOrigin = element.getAttribute?.('aria-label') || ''
+      selected = element.dataset.video
+      expandedVideos.add(selected)
+      editing = ''
+      focusedStep = true
+      workspaceOpen = true
+      reading = false
+      outlineStage = element.dataset.stage || element.dataset.id
+      editSection = element.dataset.section || ''
+      tab = element.dataset.tab || (outlineStage === 'works' ? 'works' : 'video')
+      shotEditorId = ''
+      if (element.dataset.shot && project()?.video) {
+        videoPage.selectShot(project(), element.dataset.shot)
+        if (outlineStage === 'shots') {
+          shotEditorId = element.dataset.shot
+          shotBranches.add(selected)
+        }
+      }
+      if (tab === 'video') videoPage.setStep(project(), element.dataset.id)
+      render()
+      document
+        .querySelector('.cc-workpage [data-v],.cc-workpage [data-cs-field],.cv-start button')
+        ?.focus({ preventScroll: true })
+      return true
+    }
     if (['zoom-in', 'zoom-out', 'reset-view'].includes(op)) {
       zoom =
         op === 'reset-view'
@@ -814,6 +927,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
     }
     if (op === 'shots-toggle') {
       const id = element.dataset.id
+      reading = false
       if (shotBranches.has(id)) {
         shotBranches.delete(id)
         if (selected === id && shotEditorId) {
@@ -830,6 +944,9 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
       if (!item?.video?.content.shots.some((s) => s.id === element.dataset.id)) return true
       const same = selected === id && workspaceOpen && shotEditorId === element.dataset.id
       selected = id
+      reading = false
+      outlineStage = 'shots'
+      editSection = ''
       editing = ''
       focusedStep = true
       tab = 'video'
@@ -848,7 +965,7 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
         focusedStep &&
         workspaceOpen &&
         !shotEditorId &&
-        (tab === 'works' ? 'works' : videoPage.getStep(project())) === element.dataset.id
+        focusedStage(project()) === element.dataset.id
       const sameWorkspace = selected === id && workspaceOpen && !focusedStep && !editing
       selected = id
       expandedVideos.add(id)
@@ -859,6 +976,9 @@ export function createCreationStudioPage({ state, api, escapeHtml: e, render, to
       shotEditorId = ''
       workspaceOpen = !((op === 'stage' && sameStage) || (op === 'open-work' && sameWorkspace))
       focusedStep = op === 'stage'
+      reading = focusedStep
+      outlineStage = focusedStep ? element.dataset.id : ''
+      editSection = ''
       tab = op === 'stage' && element.dataset.id === 'works' ? 'works' : 'video'
       if (op === 'stage' && tab === 'video') videoPage.setStep(project(), element.dataset.id)
       render()

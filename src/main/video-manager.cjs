@@ -171,6 +171,46 @@ class VideoManager {
       }
       return this.workspace.get()
     }
+    if (action === 'delete-shot') {
+      const p = this.video(id),
+        shotId = input.shotId
+      if (
+        typeof shotId !== 'string' ||
+        shotId.length > 100 ||
+        !p.video.content.shots.some((s) => s.id === shotId)
+      )
+        throw new Error('镜头不存在。')
+      if (
+        this.active.has(id) ||
+        p.video.exports.some((r) => r.status === 'processing') ||
+        p.video.jobs.some((j) => j.shotId === shotId && activeStates.includes(j.status))
+      )
+        throw new Error('镜头关联的制作任务尚未结束，请先处理任务。')
+      const result = this.change(
+        id,
+        (v) => {
+          v.history.push({
+            id: v.revision,
+            at: V.now(),
+            digest: V.digest(v.content),
+            content: v.content,
+          })
+          v.content = V.content(v.content)
+          v.content.shots = v.content.shots.filter((s) => s.id !== shotId)
+          let start = 0
+          for (const s of v.content.shots) {
+            s.start = start
+            start += s.duration
+          }
+          v.edit.clips = v.edit.clips.filter((c) => c.shotId !== shotId)
+          v.revision = randomUUID()
+        },
+        '删除镜头',
+      )
+      for (const [token, preview] of this.previews)
+        if (preview.projectId === id && preview.job.shotId === shotId) this.previews.delete(token)
+      return result
+    }
     if (action === 'save-content') {
       const c = V.content(input.content)
       if (!input.content || typeof input.content !== 'object') throw new Error('制作内容无效。')

@@ -79,6 +79,81 @@ async function setup(t, provider = {}) {
   pass()
   return { dir, id: p.id, manager, workspace, creation, image, pass }
 }
+test('deleting a shot closes the timeline gap and preserves media, billing and production history', async (t) => {
+  const x = await setup(t)
+  const content = x.creation.project(x.id).video.content
+  content.shots.push(
+    V.shot({ id: 'shot-2', start: 2, duration: 3 }),
+    V.shot({ id: 'shot-3', start: 5, duration: 4 }),
+  )
+  await x.manager.command({ projectId: x.id, action: 'save-content', content })
+  x.manager.change(x.id, (v) => {
+    v.edit.clips = v.content.shots.map((s) => ({
+      shotId: s.id,
+      artifactId: 'kept-media',
+      in: 0,
+      out: s.duration,
+    }))
+    v.jobs.push({ id: 'paid-job', shotId: 'shot-2', status: 'succeeded', reserve: 12, settled: 8 })
+    v.exports.push({ id: 'old-film', status: 'review', content: v.content, edit: v.edit })
+  })
+  const before = x.creation.project(x.id)
+  await x.manager.command({ projectId: x.id, action: 'delete-shot', shotId: 'shot-2' })
+  const after = x.creation.project(x.id)
+  assert.deepEqual(
+    after.video.content.shots.map((s) => [s.id, s.start, s.duration]),
+    [
+      ['shot-1', 0, 2],
+      ['shot-3', 2, 4],
+    ],
+  )
+  assert.deepEqual(
+    after.video.edit.clips.map((c) => c.shotId),
+    ['shot-1', 'shot-3'],
+  )
+  assert.deepEqual(after.artifacts, before.artifacts)
+  assert.deepEqual(after.video.jobs, before.video.jobs)
+  assert.deepEqual(after.video.exports, before.video.exports)
+  assert.deepEqual(after.video.history.at(-1).content, before.video.content)
+  assert.notEqual(after.video.revision, before.video.revision)
+  await fs.access(x.image)
+  x.pass()
+  const prepared = await x.manager.prepare(x.id, 'shot-1')
+  await x.manager.command({ projectId: x.id, action: 'delete-shot', shotId: 'shot-1' })
+  assert.equal(x.manager.previews.has(prepared.token), false)
+  await x.manager.command({ projectId: x.id, action: 'delete-shot', shotId: 'shot-3' })
+  assert.deepEqual(x.creation.project(x.id).video.content.shots, [])
+  assert.deepEqual(x.creation.project(x.id).video.edit.clips, [])
+})
+
+test('shot deletion rejects invalid or active targets and rolls back a failed save', async (t) => {
+  const x = await setup(t)
+  const remove = (shotId = 'shot-1') =>
+    x.manager.command({ projectId: x.id, action: 'delete-shot', shotId })
+  await assert.rejects(remove('missing'), /镜头/)
+  await assert.rejects(remove({}), /镜头/)
+  for (const status of ['submitting', 'queued', 'running', 'downloading', 'unknown']) {
+    x.manager.change(x.id, (v) => {
+      v.jobs = [{ id: 'active-job', shotId: 'shot-1', status }]
+    })
+    await assert.rejects(remove(), /任务/)
+  }
+  x.manager.change(x.id, (v) => {
+    v.jobs = []
+  })
+  x.manager.active.set(x.id, { id: 'active-review' })
+  await assert.rejects(remove(), /任务/)
+  x.manager.active.delete(x.id)
+  const before = x.creation.project(x.id)
+  const save = x.workspace.save
+  x.workspace.save = () => {
+    throw new Error('disk full')
+  }
+  await assert.rejects(remove(), /disk full/)
+  assert.deepEqual(x.creation.project(x.id), before)
+  x.workspace.save = save
+})
+
 test('video workflow is opt-in, preserves old snapshots, revisions and rolls back failed writes', async (t) => {
   const x = await setup(t),
     p = x.creation.project(x.id)

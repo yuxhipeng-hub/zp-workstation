@@ -244,38 +244,14 @@ body[data-theme='light'] .nav-item.active {
 
 .button:active:not(:disabled),
 .icon-button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: none;
 }
 
 .button.is-busy,
 .icon-button.is-busy {
   position: relative;
-  /* 忙碌态隐藏文字，需盖过按钮自身的 color */
-  color: transparent !important;
   cursor: progress;
-  opacity: 0.78;
-}
-
-.button.is-busy > *,
-.icon-button.is-busy > * {
-  opacity: 0;
-}
-
-.button.is-busy::after,
-.icon-button.is-busy::after {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border: 2px solid color-mix(in srgb, var(--text) 26%, transparent);
-  border-top-color: var(--text);
-  border-radius: 999px;
-  content: '';
-  animation: spin 760ms linear infinite;
-}
-
-.button.primary.is-busy::after {
-  border-color: color-mix(in srgb, var(--ink-inverse) 34%, transparent);
-  border-top-color: var(--ink-inverse);
+  opacity: 1;
 }
 
 .quick-tooltip {
@@ -394,7 +370,7 @@ body[data-theme='light'] .nav-item.active {
 }
 
 .time-picker-column button:active {
-  transform: scale(0.97);
+  transform: none;
 }
 
 .time-picker-column button[aria-selected='true'] {
@@ -438,7 +414,7 @@ body[data-theme='light'] .nav-item.active {
 }
 
 .time-picker-foot button:active {
-  transform: scale(0.97);
+  transform: none;
 }
 
 .time-picker-foot button:focus-visible {

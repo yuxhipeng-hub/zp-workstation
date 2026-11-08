@@ -141,8 +141,22 @@ export function createCreationPreview(workspace, clone, createId) {
           history: [],
           revision: 'preview',
         }
-      } else if (input.action === 'save-content') p.video.content = clone(input.content)
-      else return desktop()
+      } else if (input.action === 'delete-shot') {
+        if (!p.video?.content.shots.some((s) => s.id === input.shotId))
+          throw new Error('镜头不存在。')
+        p.video.history.push({ id: p.video.revision, content: clone(p.video.content) })
+        p.video.content.shots = p.video.content.shots.filter((s) => s.id !== input.shotId)
+        let start = 0
+        for (const s of p.video.content.shots) {
+          s.start = start
+          start += Number(s.duration) || 0
+        }
+        p.video.edit.clips = p.video.edit.clips.filter((c) => c.shotId !== input.shotId)
+        p.video.revision = createId()
+      } else if (input.action === 'save-content') {
+        p.video.content = clone(input.content)
+        p.video.revision = createId()
+      } else return desktop()
       return clone(workspace)
     },
     async creationVideoState(id) {
