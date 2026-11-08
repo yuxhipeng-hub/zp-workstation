@@ -1,5 +1,13 @@
 # 交接归档
 
+## 发布记录：0.8.0（2026-11-08）
+
+- 汇总PPT对话创作、样稿与四格式导出，创作工作室七步骤内容树、媒体版本及审片，可选视频制作流程，GitHub发现与AI资讯界面。
+- 发布准备补齐CI和发布构建所需的FFmpeg、LibreOffice、Poppler及CI的Playwright Chromium；隐藏离屏测试显式建立初始视口，并保留云端失败证据。
+- 修复视频媒体根目录使用短路径或目录别名时误判越界；真实FFmpeg导出回归覆盖目录别名。修复窄窗口PPT导出菜单被画布遮挡，保留真实导出断言。
+- 本地完整门禁258单测/67 E2E通过，运行依赖审计无漏洞；最终云端验证与合并记录见[PR #63](https://github.com/yuxhipeng-hub/zp-workstation/pull/63)。
+- [Release与四项资产](https://github.com/yuxhipeng-hub/zp-workstation/releases/tag/v0.8.0)由发布流水线生成；生图仍为外部生成后手动导入，Seedance真实付费、PowerPoint/WPS、人工审美试听及干净Windows环境升级待用户验收。
+
 ## 2026-11-08 发布收尾归档
 
 - `codex/ai-news-polish` 于2026-11-07上传，内容基线 `6ead34e`，含PPT、创作工作室、GitHub发现、AI资讯与设计规则；本次汇总到v0.8.0。
