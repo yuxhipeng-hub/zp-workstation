@@ -9,6 +9,30 @@ const rootDir = path.join(__dirname, '..')
 const moduleUrl = pathToFileURL(path.join(rootDir, 'scripts', 'sync-obsidian-vault.mjs')).href
 const loadModule = () => import(moduleUrl)
 
+test('mirrors the PPT studio specification so the product direction survives handoff', async () => {
+  const { MIRROR_NOTES } = await loadModule()
+  assert.ok(MIRROR_NOTES.some((item) => item.source === 'docs/specs/002-ppt-studio.md'))
+  assert.ok(MIRROR_NOTES.some((item) => item.source === 'docs/PPT_ENGINE_EVALUATION.md'))
+})
+
+test('mirrors the GitHub discovery and AI news specifications', async () => {
+  const { MIRROR_NOTES } = await loadModule()
+  assert.ok(
+    MIRROR_NOTES.some(
+      (item) =>
+        item.source === 'docs/specs/004-github-discovery.md' &&
+        item.note === '10 产品/GitHub 发现规格.md',
+    ),
+  )
+  assert.ok(
+    MIRROR_NOTES.some(
+      (item) =>
+        item.source === 'docs/specs/005-ai-news-ui.md' &&
+        item.note === '10 产品/AI 资讯界面规格.md',
+    ),
+  )
+})
+
 test('rewrites repository document paths into wikilinks', async () => {
   const { rewriteLinks } = await loadModule()
   const targets = new Map([

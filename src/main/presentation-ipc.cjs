@@ -1,0 +1,120 @@
+const path = require('node:path')
+const { validatePresentationInput, getPresentationIssues } = require('../shared/presentation.mjs')
+const { cleanPresentationBrief } = require('./presentation-ai.cjs')
+const { cleanPresentationChat } = require('./presentation-chat.cjs')
+const { exportPresentationFile } = require('./presentation-delivery.cjs')
+const { PRESENTATION_EXPORT_FORMATS } = require('../shared/presentation-export-formats.mjs')
+const { readPresentationImage } = require('./presentation-image.cjs')
+const { PresentationQuality } = require('./presentation-quality.cjs')
+
+/** PPT 白名单独立注册，进程、对话框与保存依赖均由主进程注入。 */
+function registerPresentationIpc({
+  ipcMain,
+  workspace,
+  aiService,
+  dialog,
+  getMainWindow,
+  getExportDirectory,
+  onPresentationDirty,
+  writePresentation = exportPresentationFile,
+  qualityService = new PresentationQuality({ aiService }),
+}) {
+  ipcMain.handle('presentation:dirty', (_event, value) => {
+    if (typeof value !== 'boolean') throw new Error('作品状态无效。')
+    onPresentationDirty?.(value)
+    return true
+  })
+  ipcMain.handle('presentation:save', (_event, input) =>
+    workspace.savePresentation(validatePresentationInput(input)),
+  )
+  ipcMain.handle('presentation:delete', (_event, id) => {
+    if (typeof id !== 'string' || !id || id.length > 80) throw new Error('作品编号无效。')
+    return workspace.deletePresentation(id)
+  })
+  ipcMain.handle('presentation:generate', (_event, input) =>
+    aiService.generatePresentation(cleanPresentationBrief(input)),
+  )
+  ipcMain.handle('presentation:chat', (_event, input) =>
+    aiService.chatPresentation(cleanPresentationChat(input)),
+  )
+  let designBusy = false
+  ipcMain.handle('presentation:design', async (_event, input) => {
+    if (designBusy) throw new Error('已有设计任务正在进行。')
+    designBusy = true
+    try {
+      const result = await aiService.designPresentation(input)
+      if (input.action === 'complete' && result.deck) {
+        if (aiService.getConfig().visionProfileId) {
+          result.autoInspect = true
+          result.visualReport = {
+            status: 'pending',
+            message: '整套已生成，视觉检查将在后台进行，可以继续编辑。',
+          }
+        } else
+          result.visualReport = {
+            status: 'not-configured',
+            message: '未指定视觉模型，尚未进行截图视觉检查。',
+          }
+      }
+      return result
+    } finally {
+      designBusy = false
+    }
+  })
+  ipcMain.handle('presentation:inspect', (_event, input) => qualityService.inspect(input))
+  ipcMain.handle('presentation:describe-image', (_event, input) =>
+    qualityService.describeImage(input),
+  )
+  let imageBusy = false
+  ipcMain.handle('presentation:image', async () => {
+    if (imageBusy) throw new Error('已有图片正在导入。')
+    imageBusy = true
+    try {
+      const result = await dialog.showOpenDialog(getMainWindow(), {
+        title: '选择 PPT 图片',
+        properties: ['openFile'],
+        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg'] }],
+      })
+      if (result.canceled || !result.filePaths?.[0]) return { canceled: true }
+      return await readPresentationImage(result.filePaths[0], (bytes) =>
+        require('electron').nativeImage.createFromBuffer(bytes),
+      )
+    } finally {
+      imageBusy = false
+    }
+  })
+  let exportBusy = false
+  ipcMain.handle('presentation:export', async (_event, input) => {
+    const wrapped = input && Object.hasOwn(input, 'deck')
+    const format = wrapped ? input.format : 'pptx'
+    if (typeof format !== 'string' || !Object.hasOwn(PRESENTATION_EXPORT_FORMATS, format))
+      throw new Error('导出格式无效。')
+    const deck = validatePresentationInput(wrapped ? input.deck : input)
+    if (
+      ['pptx', 'pdf'].includes(format) &&
+      getPresentationIssues(deck).some((issue) => issue.blocking)
+    )
+      throw new Error('部分页面内容超出版式容量，请根据交付检查调整后导出。')
+    if (exportBusy) throw new Error('已有作品正在导出，请稍候。')
+    exportBusy = true
+    try {
+      const name =
+        deck.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '') || '演示文稿'
+      const selectedFormat = PRESENTATION_EXPORT_FORMATS[format]
+      const result = await dialog.showSaveDialog(getMainWindow(), {
+        title: `导出 ${selectedFormat.label}`,
+        defaultPath: path.join(getExportDirectory(), `${name}.${format}`),
+        filters: [{ name: selectedFormat.label, extensions: [format] }],
+      })
+      if (result.canceled || !result.filePath) return { canceled: true }
+      const target = result.filePath.toLowerCase().endsWith(`.${format}`)
+        ? result.filePath
+        : `${result.filePath}.${format}`
+      return await writePresentation(deck, target, { format })
+    } finally {
+      exportBusy = false
+    }
+  })
+}
+
+module.exports = { registerPresentationIpc }

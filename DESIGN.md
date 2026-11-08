@@ -16,6 +16,10 @@ Secondary reference: Linear for dense lists and navigation clarity.
 4. Motion explains state changes. It should not be a page entrance performance.
 5. The colorful `zp` mark is the only intentionally expressive brand element.
 6. Chinese text must remain comfortable on Windows at 100%, 125%, and 150% scaling.
+7. Remove unnecessary small-print annotations wherever possible: duplicate
+   introductions, obvious instructions, and implementation notes. Keep essential
+   attribution, timestamps, errors, and action feedback readable; do not substitute
+   tiny or low-contrast text for removing clutter. Move optional help into details.
 
 ## Color
 
@@ -134,7 +138,7 @@ cards and separators:
 Rules:
 
 - A page should normally use one `workbench-canvas`, not a collection of cards.
-- Every non-Today route uses a single `route-canvas`; inner modules are grouped
+- Routes other than Today and Creation use one `route-canvas`; inner modules are grouped
   with dividers and spacing instead of separate floating cards.
 - Internal sections use separators and spacing, not their own outer borders.
 - Separators inside a canvas use reduced-contrast lines; they should support the
@@ -154,6 +158,23 @@ The first approved sample set is:
 
 These pages establish the component and spacing rules before the remaining
 features are migrated.
+
+### Approved Compact List Reference
+
+The GitHub discovery page was approved by the user on 2026-11-06 as the reference
+for ranking pages, news lists, and compact filter toolbars. Its reusable rules
+are maintained in [the Chinese design system, section 9](docs/DESIGN_SYSTEM.md#9-榜单与资讯列表已确认的视觉基准).
+
+- Use one outer surface, generous content padding, text view tabs, segmented
+  period controls, and straight row dividers.
+- Compact toolbar controls use 30px height; filter triggers and options use
+  32px height, with 12px labels. Preserve outer padding when reducing controls.
+- Filters open a theme-aware rounded popover with selected checks, comfortable
+  option padding, a subtle scrollbar, and full keyboard support.
+- Avoid duplicate headings and persistent explanatory clutter. Keep the layout,
+  scroll position, and focus stable during switching and background refreshes.
+- This compact density applies to list toolbars; forms and editors retain their
+  own task-appropriate control sizes.
 
 ## Migration Status
 
@@ -175,3 +196,35 @@ All product routes now share the same surface and component rules:
 - Icon-only controls have accessible labels.
 - Loading, dragging, saving, and failure states remain explicit.
 - Interactions must not depend on hover alone.
+
+## Creation project canvas
+
+The background is the canvas. Reuse the application's existing dot surface as the single
+background owner. Keep the
+app header, toolbar, viewport, and tree transparent; never redraw a local dot layer.
+Use a vertical outline: project → video → numbered stage, with real shots beneath
+the storyboard stage. Align names, owners, and recorded states
+across the outline width, without duplicate column captions or hierarchy instructions.
+Use an anchored, vertical theme popup for project actions, with no layout displacement.
+Center the outline, growing up to 1440px;
+opening, closing, and switching branches must preserve the viewport without auto-scrolling.
+Keep action icons beside the object's name. Place editors directly below their source row;
+repeated activation collapses them while preserving drafts. Keep zoom/reset fixed at the
+window's lower right corner without a footer strip or panning instructions.
+Do not use a grid of seven cards. Branch disclosures are independent
+from the active editor. Do not enclose this route in a large card or add a permanent
+inspector. Editors sit directly below their own row in compact, borderless panels with one solid fill: requirements up to 320px wide,
+step workspaces up to 520px wide, with bounded height and internal scrolling.
+Requirement editors stay below 260px by default and 312px with their two-column settings
+expanded. Textareas have no manual resize grip.
+The requirement field starts at one line, grows with wrapping/newlines to 112px,
+and shrinks when content is removed; restored drafts use the same sizing.
+Use transparent primary text/icon actions and transparent scrollbar tracks. Stage choices
+use the same theme popup as project actions. Label manual stage tags and registered
+artifact-version counts explicitly, separately from agent execution state.
+Plus actions open a compact editor; saving collapses it, and the
+object's requirements action reopens it. Disclosures reveal branches without running tasks;
+shot leaves open their own editor and preserve separate drafts. Reveal detailed controls progressively. Existing media,
+review, version, and publication tools live in a collapsible video workspace.
+See `docs/specs/003-creation-studio.md` for hierarchy compatibility and interaction rules.
+Position popups while hidden, then reveal them synchronously at their anchor; never animate a move from a default position.

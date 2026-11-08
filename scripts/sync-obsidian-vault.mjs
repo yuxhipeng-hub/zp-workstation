@@ -16,6 +16,48 @@ export const SYNC_COMMAND = 'npm run sync:vault'
 /** 仓库文档逐份镜像到 vault。 */
 export const MIRROR_NOTES = [
   {
+    source: 'docs/specs/006-creation-video-pipeline.md',
+    note: '10 产品/视频制作流程规格.md',
+    title: '视频制作流程规格',
+    category: '产品',
+    description: 'Codex 导演、镜头审核、火山方舟预算与受控后期',
+  },
+  {
+    source: 'docs/CREATION_VIDEO_GUIDE.md',
+    note: '20 使用/视频制作使用说明.md',
+    title: '视频制作使用说明',
+    category: '使用',
+    description: '连接与配置、首个项目、费用授权、恢复与验证边界',
+  },
+  {
+    source: 'docs/specs/005-ai-news-ui.md',
+    note: '10 产品/AI 资讯界面规格.md',
+    title: 'AI 资讯界面规格',
+    category: '产品',
+    description: '紧凑资讯列表、文案精简、内置阅读与稳定更新交互',
+  },
+  {
+    source: 'docs/specs/004-github-discovery.md',
+    note: '10 产品/GitHub 发现规格.md',
+    title: 'GitHub 发现规格',
+    category: '产品',
+    description: '开源项目日周月榜、现成数据源、本地收藏、缓存与网络边界',
+  },
+  {
+    source: 'docs/examples/creation-record/README.md',
+    note: '50 规格/创作记录样例.md',
+    title: '创作记录样例',
+    category: '产品',
+    description: '显式关联的外部记录协议样例使用说明',
+  },
+  {
+    source: 'docs/specs/003-creation-studio.md',
+    note: '10 产品/创作工作室规格.md',
+    title: '创作工作室规格',
+    category: '产品',
+    description: '创作项目、作品版本、审片反馈、外部记录协议与执行边界',
+  },
+  {
     source: 'README.md',
     note: '10 产品/项目说明（README）.md',
     title: '项目说明（README）',
@@ -119,6 +161,20 @@ export const MIRROR_NOTES = [
     title: '001 本机应用托管与桌面智能体',
     category: '规格',
     description: '已停止方向的历史规格，保留作为背景资料',
+  },
+  {
+    source: 'docs/specs/002-ppt-studio.md',
+    note: '50 规格/002 PPT 工作室.md',
+    title: '002 PPT 工作室',
+    category: '规格',
+    description: '工具导航、PPT 工作室第一版及长期设计方向',
+  },
+  {
+    source: 'docs/PPT_ENGINE_EVALUATION.md',
+    note: '50 规格/PPT 引擎验证记录.md',
+    title: 'PPT 引擎验证记录',
+    category: '规格',
+    description: 'PPTAgent、Presenton 的隔离安装、转换实测、当前模型对象修改与未验收边界',
   },
 ]
 

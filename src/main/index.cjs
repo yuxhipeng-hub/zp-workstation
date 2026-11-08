@@ -7,6 +7,9 @@ const {
   nativeImage,
   nativeTheme,
   safeStorage,
+  protocol,
+  dialog,
+  net,
 } = require('electron')
 const { APP_ID, APP_NAME } = require('./constants.cjs')
 const { SettingsStore } = require('./settings-store.cjs')
@@ -15,12 +18,20 @@ const { ExperimentLibrary } = require('./experiment-library.cjs')
 const { ScheduleManager } = require('./schedule-manager.cjs')
 const { Logger } = require('./logger.cjs')
 const { AihotClient } = require('./aihot-client.cjs')
+const { GitHubDiscoveryClient } = require('./github-discovery-client.cjs')
 const { AiService } = require('./ai-service.cjs')
 const { LauncherUpdater } = require('./launcher-updater.cjs')
 const { BackupManager } = require('./backup-manager.cjs')
 const { ReminderManager } = require('./reminder-manager.cjs')
 const { createStartupTimer } = require('./startup-timer.cjs')
 const { registerIpc } = require('./ipc.cjs')
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'studio-media',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+])
 
 const startupTimer = createStartupTimer()
 
@@ -47,12 +58,34 @@ if (process.env.DSH_LAUNCHER_REMOTE_DEBUG) {
 let mainWindow = null
 let tray = null
 let quitting = false
+let presentationDirty = false
+
+function confirmPresentationClose() {
+  if (!presentationDirty) return true
+  const response = dialog.showMessageBoxSync(mainWindow, {
+    type: 'question',
+    title: 'PPT 作品尚未保存',
+    message: '当前作品有未保存的修改。',
+    detail: '返回工作室保存作品，或放弃本次修改后退出。',
+    buttons: ['返回保存', '放弃修改并退出'],
+    defaultId: 0,
+    cancelId: 0,
+  })
+  if (response !== 1) {
+    quitting = false
+    mainWindow?.show()
+    return false
+  }
+  presentationDirty = false
+  return true
+}
 let settings
 let workspace
 let experimentLibrary
 let scheduleManager
 let logger
 let aihotClient
+let githubClient
 let aiService
 let launcherUpdater
 let backupManager
@@ -156,6 +189,7 @@ function createMainWindow() {
       mainWindow.hide()
       return
     }
+    if (!quitting && !confirmPresentationClose()) event.preventDefault()
   })
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -198,6 +232,10 @@ async function bootstrap() {
   scheduleManager = new ScheduleManager({ workspace })
   nativeTheme.themeSource = settings.get().theme || 'system'
   aihotClient = new AihotClient({ userDataDir: userData, logger })
+  githubClient = new GitHubDiscoveryClient({
+    userDataDir: userData,
+    fetchImpl: (url, options) => net.fetch(String(url), options),
+  })
   backupManager = new BackupManager({
     userDataDir: userData,
     appVersion: app.getVersion(),
@@ -223,6 +261,9 @@ async function bootstrap() {
   })
 
   registerIpc({
+    onPresentationDirty: (value) => {
+      presentationDirty = value
+    },
     app,
     settings,
     workspace,
@@ -230,6 +271,7 @@ async function bootstrap() {
     scheduleManager,
     logger,
     aihotClient,
+    githubClient,
     aiService,
     launcherUpdater,
     backupManager,
@@ -265,7 +307,11 @@ app.on('window-all-closed', () => {
   if (!settings?.get().minimizeToTray) app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (!confirmPresentationClose()) {
+    event.preventDefault()
+    return
+  }
   quitting = true
   backupManager?.stopAuto()
 })

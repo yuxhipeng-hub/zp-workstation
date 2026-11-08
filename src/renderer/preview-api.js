@@ -1,4 +1,6 @@
+import { createCreationPreview } from './creation-preview.js'
 const listeners = new Map()
+import { createPresentation, cleanPresentation } from '../shared/presentation.mjs'
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
@@ -1129,12 +1131,22 @@ export function createPreviewLauncherApi() {
     `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
   return {
+    ...createCreationPreview(state.workspace, clone, createId),
     on: subscribe,
     async bootstrap() {
       return clone(state)
     },
     async getAihotDaily() {
       return clone(createPreviewAihotDaily())
+    },
+    async getGitHubSnapshot() {
+      throw new Error('浏览器预览不读取真实榜单，请在桌面应用中查看。')
+    },
+    async getGitHubFavorites() {
+      return clone(state.workspace.githubFavorites || [])
+    },
+    async setGitHubFavorite() {
+      throw new Error('请在桌面应用中收藏项目。')
     },
     async getAihotItems(options = {}) {
       const all = createPreviewAihotItems().data
@@ -1181,6 +1193,24 @@ export function createPreviewLauncherApi() {
       return clone(state.settings)
     },
     async getAiConfig() {
+      return clone(state.ai)
+    },
+    async testVisionProfile() {
+      throw new Error('浏览器预览不调用真实视觉模型，请在桌面应用中测试。')
+    },
+    async designPresentation() {
+      throw new Error('浏览器预览不调用真实模型，请在桌面应用中制作设计样稿。')
+    },
+    async inspectPresentation() {
+      throw new Error('实际 PPTX 渲染与视觉检查需要桌面应用。')
+    },
+    async describePresentationImage() {
+      throw new Error('图片理解需要在桌面应用中配置视觉模型。')
+    },
+    async setVisionProfile(id) {
+      const profile = state.ai.profiles.find((p) => p.id === id)
+      if (id && !profile?.supportsVision) throw new Error('请选择支持视觉输入的模型。')
+      state.ai.visionProfileId = id
       return clone(state.ai)
     },
     async saveAiProfile(profile, apiKey, clearKey = false) {
@@ -1462,6 +1492,50 @@ export function createPreviewLauncherApi() {
     },
     async importBackupArchive() {
       return clone({ fileName: 'ZP-Workbench-backup.zpbackup', workspace: state.workspace })
+    },
+    async savePresentation(input) {
+      const deck = cleanPresentation(input)
+      state.workspace.presentations = [
+        deck,
+        ...(state.workspace.presentations || []).filter((item) => item.id !== deck.id),
+      ]
+      return clone(state.workspace)
+    },
+    async setPresentationDirty() {
+      return true
+    },
+    async deletePresentation(id) {
+      state.workspace.presentations = (state.workspace.presentations || []).filter(
+        (item) => item.id !== id,
+      )
+      return clone(state.workspace)
+    },
+    async generatePresentation(input) {
+      const deck = createPresentation(input)
+      deck.slides = Array.from({ length: input.pageCount }, (_, index) => ({
+        ...clone(deck.slides[Math.min(index, 2)]),
+        id: createId(),
+        layout: index === 0 ? 'cover' : index === input.pageCount - 1 ? 'closing' : 'split',
+        title: index === 0 ? input.title : `示例大纲 · 第 ${index + 1} 页`,
+        body: '这是界面预览的示例内容，未调用真实模型。',
+      }))
+      return { deck, profile: { label: '预览示例', model: '未调用模型' } }
+    },
+    async chatPresentation(input) {
+      const message = '这是界面预览示例，未调用真实模型。请在桌面应用中连接模型制作作品。'
+      if (input.deck) return { action: 'clarify', message, profile: { label: '预览示例' } }
+      return {
+        action: 'create',
+        message,
+        deck: createPresentation({ title: '对话创作示例' }),
+        profile: { label: '预览示例' },
+      }
+    },
+    async exportPresentation() {
+      throw new Error('浏览器预览不提供本机文件导出，请在桌面应用中导出。')
+    },
+    async choosePresentationImage() {
+      throw new Error('浏览器预览不提供本机图片选择，请在桌面应用中导入。')
     },
     async createAssignment(input) {
       const now = new Date().toISOString()

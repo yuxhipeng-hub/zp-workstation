@@ -1,7 +1,14 @@
+const { cleanProjects } = require('./creation-schema.cjs')
+const { cleanFavorites, cleanRepo, repoName } = require('./github-discovery-schema.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { cleanAiPlan } = require('./ai-plan.cjs')
+const {
+  cleanPresentation,
+  validatePresentationInput,
+  PRESENTATION_LIMITS,
+} = require('../shared/presentation.mjs')
 
 const ASSIGNMENT_STATUSES = new Set(['inbox', 'doing', 'done'])
 const ASSIGNMENT_PRIORITIES = new Set(['low', 'medium', 'high'])
@@ -9,6 +16,9 @@ const DEFAULT_WORKSPACE = {
   version: 2,
   courses: [],
   assignments: [],
+  presentations: [],
+  creationProjects: [],
+  githubFavorites: [],
   knowledge: [],
   experiments: [],
   experimentGroups: [],
@@ -278,6 +288,14 @@ class WorkspaceStore {
         .filter(Boolean)
         .slice(0, 300),
       assignments: Array.isArray(stored.assignments) ? stored.assignments : [],
+      // cleanPresentation 同时兼容旧文字页面和可选的策划、图表、对比与阶段内容；旧快照不需改写。
+      presentations: (Array.isArray(stored.presentations) ? stored.presentations : [])
+        .map((item) => cleanPresentation(item))
+        .filter(Boolean)
+        .slice(0, PRESENTATION_LIMITS.projects)
+        .filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index),
+      creationProjects: cleanProjects(stored.creationProjects),
+      githubFavorites: cleanFavorites(stored.githubFavorites),
       knowledge: Array.isArray(stored.knowledge) ? stored.knowledge : [],
       experiments,
       experimentGroups,
@@ -285,11 +303,89 @@ class WorkspaceStore {
     }
   }
 
+  saveCreationProjects(projects) {
+    const previous = this.data.creationProjects
+    this.data.creationProjects = cleanProjects(projects)
+    try {
+      this.save()
+    } catch (error) {
+      this.data.creationProjects = previous
+      throw error
+    }
+    return this.get()
+  }
+
+  setGitHubFavorite(fullName, input) {
+    if (!repoName(fullName)) throw new Error('项目名称无效。')
+    const previous = this.data.githubFavorites
+    const rest = previous.filter((item) => item.fullName.toLowerCase() !== fullName.toLowerCase())
+    const repo = input ? cleanRepo(input) : null
+    if (input && (!repo || repo.fullName.toLowerCase() !== fullName.toLowerCase()))
+      throw new Error('收藏项目无效。')
+    if (repo && rest.length >= 500) throw new Error('最多收藏 500 个项目。')
+    if (!repo && rest.length === previous.length) return this.get()
+    // Explicit backup before changing user-owned favorites; save remains atomic.
+    this.createBackup('github-favorites')
+    this.data.githubFavorites = repo
+      ? [
+          {
+            ...repo,
+            savedAt:
+              previous.find((item) => item.fullName.toLowerCase() === fullName.toLowerCase())
+                ?.savedAt || new Date().toISOString(),
+          },
+          ...rest,
+        ]
+      : rest
+    try {
+      this.save()
+    } catch (error) {
+      this.data.githubFavorites = previous
+      throw error
+    }
+    return this.get()
+  }
+
   courseNameFor(item) {
     if (!item || typeof item !== 'object') return ''
     if (item.name && item.weekday) return item.name
     if (item.group !== undefined) return item.group
     return item.course || item.source?.group || ''
+  }
+
+  savePresentation(input) {
+    const cleaned = validatePresentationInput(input)
+    const index = this.data.presentations.findIndex((item) => item.id === cleaned.id)
+    if (index < 0 && this.data.presentations.length >= PRESENTATION_LIMITS.projects) {
+      throw new Error('最多保存 100 份作品，请先删除不再需要的作品。')
+    }
+    const previous = this.data.presentations
+    const deck = cleanPresentation(
+      { ...cleaned, updatedAt: new Date().toISOString() },
+      index >= 0 ? previous[index] : null,
+    )
+    this.data.presentations = [deck, ...previous.filter((item) => item.id !== deck.id)]
+    try {
+      this.save()
+    } catch (error) {
+      this.data.presentations = previous
+      throw error
+    }
+    return this.get()
+  }
+
+  deletePresentation(id) {
+    if (typeof id !== 'string' || !id || id.length > 80) throw new Error('作品编号无效。')
+    const previous = this.data.presentations
+    if (!previous.some((item) => item.id === id)) throw new Error('没有找到这份作品。')
+    this.data.presentations = previous.filter((item) => item.id !== id)
+    try {
+      this.save()
+    } catch (error) {
+      this.data.presentations = previous
+      throw error
+    }
+    return this.get()
   }
 
   linkCourses() {

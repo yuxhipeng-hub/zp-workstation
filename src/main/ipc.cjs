@@ -1,10 +1,23 @@
+const { registerCreationIpc } = require('./creation-ipc.cjs')
+const { registerGitHubDiscoveryIpc } = require('./github-discovery-ipc.cjs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
-const { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } = require('electron')
+const {
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  shell,
+  protocol,
+  net,
+  safeStorage,
+} = require('electron')
 const { THEME_VALUES } = require('./constants.cjs')
 const { collectDiagnostics } = require('./diagnostics.cjs')
 const { resolveDropReferences } = require('./drop-reference.cjs')
+const { registerPresentationIpc } = require('./presentation-ipc.cjs')
 
 function isSafeExternalUrl(value) {
   try {
@@ -40,12 +53,14 @@ function registerIpc({
   scheduleManager,
   logger,
   aihotClient,
+  githubClient,
   aiService,
   launcherUpdater,
   backupManager,
   reminderManager,
   startupTimer,
   getMainWindow,
+  onPresentationDirty,
 }) {
   const send = (channel, payload) => {
     for (const window of BrowserWindow.getAllWindows()) {
@@ -84,6 +99,8 @@ function registerIpc({
   ipcMain.handle('ai:profile-delete', (_event, id) => aiService.deleteProfile(id))
   ipcMain.handle('ai:profile-activate', (_event, id) => aiService.activateProfile(id))
   ipcMain.handle('ai:profile-test', (_event, id) => aiService.testProfile(id))
+  ipcMain.handle('ai:vision-test', (_event, id) => aiService.testVisionProfile(id))
+  ipcMain.handle('ai:vision-profile', (_event, id) => aiService.setVisionProfile(id))
   ipcMain.handle('ai:assignment-plan', async (_event, assignmentId) => {
     const assignment = workspace
       .get()
@@ -111,7 +128,37 @@ function registerIpc({
     return aihotClient.getStory(publicId, { force: options.force === true })
   })
 
+  registerGitHubDiscoveryIpc({ ipcMain, client: githubClient, workspace })
+  const creation = registerCreationIpc({
+    ipcMain,
+    workspace,
+    dialog,
+    shell,
+    clipboard,
+    protocol,
+    net,
+    getMainWindow,
+  })
+  require('./video-ipc.cjs').registerVideoIpc({
+    ipcMain,
+    workspace,
+    creation,
+    dialog,
+    getMainWindow,
+    safeStorage,
+    send,
+    app,
+  })
   ipcMain.handle('workspace:get', () => workspace.get())
+  registerPresentationIpc({
+    ipcMain,
+    workspace,
+    aiService,
+    dialog,
+    getMainWindow,
+    onPresentationDirty,
+    getExportDirectory: () => defaultDownloadDir(app),
+  })
   ipcMain.handle('workspace:courses', () => workspace.listCourses())
   ipcMain.handle('workspace:course-create', (_event, input) => workspace.createCourse(input))
   ipcMain.handle('workspace:course-rename', async (_event, id, name) => {

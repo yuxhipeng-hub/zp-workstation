@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "projectId": "explicit-demo-record",
+  "sourceVersion": "sample-1",
+  "updatedAt": "2026-11-05T12:00:00Z",
+  "tasks": [{ "id": "review", "goal": "阅读协议样例", "status": "pending" }],
+  "runs": [],
+  "artifacts": [
+    {
+      "id": "readme-v1",
+      "family": "关联说明",
+      "type": "text",
+      "label": "v1",
+      "path": "README.md",
+      "sourceVersion": "sample-1",
+      "taskId": "review",
+      "createdAt": "2026-11-05T12:00:00Z"
+    }
+  ]
+}

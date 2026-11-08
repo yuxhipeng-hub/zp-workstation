@@ -7,6 +7,17 @@ const root = path.resolve(__dirname, '..')
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const { APP_ID, APP_NAME } = require('../src/main/constants.cjs')
 
+test('packages the shared presentation model and native PPTX export runtime', () => {
+  for (const item of [
+    'src/shared/**/*',
+    'node_modules/pptxgenjs/**/*',
+    'node_modules/image-size/**/*',
+  ]) {
+    assert.ok(packageJson.build.files.includes(item), item)
+  }
+  assert.ok(packageJson.dependencies.pptxgenjs)
+})
+
 test('keeps a stable Windows shell identity across updates', () => {
   const { build } = packageJson
   const { nsis } = build

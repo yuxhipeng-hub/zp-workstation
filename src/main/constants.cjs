@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS = {
   syncLastAt: null,
   aiProfiles: [],
   activeAiProfileId: '',
+  presentationVisionProfileId: '',
   reminderLog: {},
   onboarding: {
     welcomeSeen: false,

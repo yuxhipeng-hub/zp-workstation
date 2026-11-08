@@ -4,6 +4,7 @@ const os = require('node:os')
 const path = require('node:path')
 const test = require('node:test')
 const { WorkspaceStore } = require('../src/main/workspace-store.cjs')
+const { createPresentation } = require('../src/shared/presentation.mjs')
 
 function createStore() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-workbench-'))
@@ -12,6 +13,221 @@ function createStore() {
     store: new WorkspaceStore(directory),
   }
 }
+
+test('canvas hierarchy preserves legacy media and repairs invalid parent links across snapshots', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const records = [
+    { id: 'old', name: '旧视频', artifacts: [{ id: 'a', path: 'Z:\\old.mp4', type: 'video' }] },
+    { id: 'group', name: '系列', kind: 'project' },
+    { id: 'child', name: '短片', parentId: 'group' },
+    { id: 'nested', name: '嵌套', parentId: 'child' },
+    { id: 'orphan', name: '孤立', parentId: 'missing' },
+    { id: 'cycle-a', name: '循环A', parentId: 'cycle-b' },
+    { id: 'cycle-b', name: '循环B', parentId: 'cycle-a' },
+  ]
+  const clean = store.normalizeData({ creationProjects: records }).creationProjects
+  assert.equal(clean[0].kind, 'video')
+  assert.equal(clean[0].artifacts[0].path, 'Z:\\old.mp4')
+  assert.equal(clean[2].parentId, 'group')
+  for (const x of clean.slice(3)) assert.equal(x.parentId, '')
+  store.saveCreationProjects(clean)
+  const snapshot = path.join(directory, 'canvas.json')
+  store.exportSnapshot(snapshot)
+  const backup = store.createBackup('canvas')
+  store.saveCreationProjects([])
+  store.importSnapshot(snapshot)
+  assert.deepEqual(new WorkspaceStore(directory).get().creationProjects, clean)
+  store.saveCreationProjects([])
+  store.restoreBackup(backup.fileName)
+  assert.deepEqual(new WorkspaceStore(directory).get().creationProjects, clean)
+})
+
+test('GitHub favorites normalize old data and survive reload, snapshot and backup without extra fields', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  assert.deepEqual(store.normalizeData({ version: 1 }).githubFavorites, [])
+  assert.deepEqual(
+    store.normalizeData({ githubFavorites: [{ fullName: '../bad', savedAt: '2026-11-06' }] })
+      .githubFavorites,
+    [],
+  )
+  store.save()
+  store.setGitHubFavorite('example/tool', {
+    fullName: 'example/tool',
+    description: '项目',
+    stars: 100,
+    url: 'file:///bad',
+    apiKey: 'secret',
+  })
+  const favorite = new WorkspaceStore(directory).get().githubFavorites[0]
+  assert.equal(favorite.url, 'https://github.com/example/tool')
+  assert.equal(favorite.apiKey, undefined)
+  assert.equal(store.listBackups().length > 0, true)
+  const file = path.join(directory, 'snapshot.json')
+  store.exportSnapshot(file)
+  const backup = store.createBackup('test')
+  const save = store.save
+  store.save = () => {
+    throw new Error('disk full')
+  }
+  assert.throws(() => store.setGitHubFavorite('example/tool', null), /disk full/)
+  assert.equal(store.get().githubFavorites.length, 1)
+  store.save = save
+  store.setGitHubFavorite('example/tool', null)
+  assert.equal(store.get().githubFavorites.length, 0)
+  store.importSnapshot(file)
+  assert.equal(store.get().githubFavorites.length, 1)
+  store.setGitHubFavorite('example/tool', null)
+  store.restoreBackup(backup.fileName)
+  assert.equal(store.get().githubFavorites[0].description, '项目')
+  store.importWorkspaceData({ version: 1, assignments: [], knowledge: [{ legacy: true }] })
+  assert.deepEqual(store.get().githubFavorites, [])
+  assert.deepEqual(store.get().knowledge, [{ legacy: true, courseId: '' }])
+})
+
+test('creation projects normalize old workspaces, survive restart and backup, rollback failed save', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  assert.deepEqual(store.normalizeData({ version: 1 }).creationProjects, [])
+  store.saveCreationProjects([
+    {
+      id: 'studio',
+      name: '测试',
+      stage: '简报',
+      brief: '要求',
+      apiKey: 'must-not-persist',
+      video: {
+        schemaVersion: 1,
+        revision: 'revision-1',
+        content: { story: '视频故事' },
+        jobs: [{ id: 'j', status: 'unknown', taskId: 'provider-task', reserve: 8 }],
+        apiKey: 'must-not-persist',
+      },
+      artifacts: [{ id: 'v1', type: 'video', path: 'Z:\\missing.mp4', label: 'v1' }],
+    },
+  ])
+  assert.equal(new WorkspaceStore(directory).get().creationProjects[0].brief, '要求')
+  assert.equal(
+    new WorkspaceStore(directory).get().creationProjects[0].video.jobs[0].taskId,
+    'provider-task',
+  )
+  assert.equal(JSON.stringify(store.get()).includes('must-not-persist'), false)
+  const backup = store.createBackup('creation')
+  const before = store.get().creationProjects
+  const originalSave = store.save
+  store.save = () => {
+    throw new Error('disk full')
+  }
+  assert.throws(() => store.saveCreationProjects([]), /disk full/)
+  assert.deepEqual(store.get().creationProjects, before)
+  store.save = originalSave
+  store.saveCreationProjects([])
+  store.restoreBackup(backup.fileName)
+  assert.equal(store.get().creationProjects[0].artifacts[0].path, 'Z:\\missing.mp4')
+  assert.equal(store.get().creationProjects[0].video.jobs[0].reserve, 8)
+})
+
+test('canvas objects, images and locks survive workspace reload and backup restore', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const { canvasFromScene } = require('../src/shared/presentation-canvas.mjs')
+  const { buildSlideScene } = require('../src/shared/presentation.mjs')
+  const deck = createPresentation()
+  deck.designDirection = 'precision'
+  deck.slides[0].visualIntent = '突出本页真实结论，保留来源。'
+  deck.slides[0].canvas = canvasFromScene(buildSlideScene(deck.slides[0]), deck.slides[0])
+  deck.slides[0].canvas[0].locked = true
+  deck.slides[0].canvas.push({
+    id: 'photo',
+    type: 'image',
+    x: 100,
+    y: 300,
+    w: 200,
+    h: 100,
+    fit: 'cover',
+    locked: false,
+    hidden: false,
+    data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+  })
+  deck.slides[0].background = 'F7F6F2'
+  store.savePresentation(deck)
+  const saved = new WorkspaceStore(directory).get().presentations[0]
+  assert.equal(saved.designDirection, 'precision')
+  assert.equal(saved.slides[0].visualIntent, deck.slides[0].visualIntent)
+  assert.deepEqual(saved.slides[0].canvas, deck.slides[0].canvas)
+  const backup = store.createBackup('canvas-ppt')
+  store.deletePresentation(deck.id)
+  store.restoreBackup(backup.fileName)
+  assert.deepEqual(store.get().presentations[0].slides[0].canvas, saved.slides[0].canvas)
+})
+
+test('structured PPT data and planning survive reload, backups and old-snapshot compatibility', (t) => {
+  const { referenceDeck, planningReply } = require('./fixtures/presentation-reference.cjs')
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const deck = referenceDeck('proposal')
+  deck.strategy = planningReply(deck).plan.strategy
+  store.savePresentation(deck)
+  const saved = new WorkspaceStore(directory).get().presentations[0]
+  assert.deepEqual(saved.slides[2].chart.series[0].values, [3, 4, 1])
+  assert.deepEqual(saved.slides[3].comparison, deck.slides[3].comparison)
+  assert.deepEqual(saved.strategy, deck.strategy)
+  const backup = store.createBackup('structured-ppt')
+  store.deletePresentation(deck.id)
+  store.restoreBackup(backup.fileName)
+  assert.deepEqual(store.get().presentations[0].slides[5].items, saved.slides[5].items)
+  const old = createPresentation({ title: '旧版作品' })
+  const migrated = store.normalizeData({
+    presentations: [old, { ...deck, slides: [{ ...deck.slides[2], chart: { type: 'bad' } }] }],
+  })
+  assert.equal(migrated.presentations[0].slides[1].layout, 'split')
+  assert.equal(migrated.presentations[0].strategy, undefined)
+  assert.equal(migrated.presentations[1].slides[0].chart, undefined)
+})
+
+test('persists PPT projects, updates without duplicates and preserves them through snapshot import', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  store.createAssignment({ title: '已有作业' })
+  const deck = createPresentation({ title: '商业提案' })
+  store.savePresentation(deck)
+  deck.title = '修改后的提案'
+  deck.slides[1].notes = '核实数据来源'
+  store.savePresentation(deck)
+  const reloaded = new WorkspaceStore(directory)
+  assert.equal(reloaded.get().presentations.length, 1)
+  assert.equal(reloaded.get().presentations[0].title, deck.title)
+  assert.equal(reloaded.get().presentations[0].slides[1].notes, '核实数据来源')
+  assert.equal(reloaded.get().assignments[0].title, '已有作业')
+  const snapshot = path.join(directory, 'snapshot.json')
+  reloaded.exportSnapshot(snapshot)
+  reloaded.deletePresentation(deck.id)
+  assert.equal(reloaded.get().presentations.length, 0)
+  reloaded.importSnapshot(snapshot)
+  assert.equal(reloaded.get().presentations[0].id, deck.id)
+  const oldBackup = reloaded.createBackup('ppt')
+  reloaded.deletePresentation(deck.id)
+  reloaded.restoreBackup(oldBackup.fileName)
+  assert.equal(reloaded.get().presentations[0].id, deck.id)
+})
+
+test('old workspaces default to no PPT projects and failed saves retain the previous deck', (t) => {
+  const { directory, store } = createStore()
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  assert.deepEqual(store.normalizeData({ assignments: [] }).presentations, [])
+  const deck = createPresentation({ title: '原始作品' })
+  store.savePresentation(deck)
+  const before = store.get().presentations
+  store.save = () => {
+    throw new Error('模拟磁盘写入失败')
+  }
+  assert.throws(() => store.savePresentation({ ...deck, title: '未能保存的修改' }), /模拟磁盘/)
+  assert.deepEqual(store.get().presentations, before)
+  assert.throws(() => store.deletePresentation(deck.id), /模拟磁盘/)
+  assert.deepEqual(store.get().presentations, before)
+  assert.equal(new WorkspaceStore(directory).get().presentations[0].title, '原始作品')
+})
 
 test('persists assignments as local data', (t) => {
   const { directory, store } = createStore()

@@ -1,3 +1,5 @@
+import { createCreationStudioPage } from './pages/creation-studio.js'
+import { updateCreationDom } from './components/creation-dom.js'
 import { createIcons, FileCheck2, FolderOpen, icons, Upload } from 'lucide'
 import { defineMorphIcon } from 'morphicons/element'
 import { createModelSettingsPage } from './pages/model-settings.js'
@@ -5,21 +7,30 @@ import { createSettingsPage } from './pages/settings.js'
 import { createBackupPage } from './pages/backup.js'
 import { createExperimentsPage } from './pages/experiments.js'
 import { createNewsPage } from './pages/news.js'
+import { createGitHubDiscoveryPage } from './pages/github-discovery.js'
 import { createAssignmentsPage } from './pages/assignments.js'
 import { createWelcomeOverlay } from './pages/welcome.js'
 import { createGuidePage } from './pages/guide.js'
 import { createLogsPage } from './pages/logs.js'
 import { createAboutPage } from './pages/about.js'
 import { createEditors } from './components/editors.js'
+import { openSaveChangesDialog } from './components/save-changes-dialog.js'
 import { pageMeta, WEEKDAY_LABELS, SCHEDULE_COLORS } from './lib/constants.js'
 import { keepFocusInDialog } from './lib/focus.js'
 import { createTodayPage } from './pages/today.js'
 import { createSchedulePage } from './pages/schedule.js'
+import { createPptStudioPage } from './pages/ppt-studio.js'
 import '@fontsource-variable/inter/wght.css'
 import '@fontsource-variable/noto-sans-sc/wght.css'
 import './styles.css'
 import './design-system.css'
 import './ui-refresh.css'
+import './github-discovery.css'
+import './news.css'
+import './ppt-studio.css'
+import './creation-studio.css'
+import './creation-video.css'
+import './creation-tree.css'
 
 defineMorphIcon()
 
@@ -235,6 +246,29 @@ function aiProtocolLabel(protocol) {
 }
 
 let modelSettingsPage = null
+let creationStudioPage = null
+function getCreationStudioPage() {
+  if (!creationStudioPage)
+    creationStudioPage = createCreationStudioPage({ state, api, escapeHtml, render, toast })
+  return creationStudioPage
+}
+let pptStudioPage = null
+
+function getPptStudioPage() {
+  if (!pptStudioPage) {
+    pptStudioPage = createPptStudioPage({
+      state,
+      api,
+      escapeHtml,
+      render,
+      toast,
+      openChoiceDialog,
+      openSaveChangesDialog,
+      activeAiProfile,
+    })
+  }
+  return pptStudioPage
+}
 
 function getModelSettingsPage() {
   if (!modelSettingsPage) {
@@ -353,6 +387,21 @@ function getAssignmentsPage() {
 }
 
 let newsPage = null
+let githubPage = null
+
+function getGitHubPage() {
+  if (!githubPage)
+    githubPage = createGitHubDiscoveryPage({
+      state,
+      api,
+      escapeHtml,
+      render,
+      refreshIcons,
+      toast,
+      preview: Boolean(previewModule),
+    })
+  return githubPage
+}
 
 function getNewsPage() {
   if (!newsPage) {
@@ -1140,6 +1189,17 @@ document.addEventListener('click', (event) => {
 })
 
 document.addEventListener('keydown', (event) => {
+  if (state.page === 'github' && getGitHubPage().handleKeydown(event)) return
+  if (
+    state.page === 'news' &&
+    event.target.id === 'newsSearch' &&
+    event.key === 'Enter' &&
+    !event.isComposing
+  ) {
+    event.preventDefault()
+    void guard(() => handleAction('search-news', event.target), '搜索资讯失败')
+    return
+  }
   const input = event.target.closest?.('[data-time-input]')
   if (input) {
     if (event.key === 'ArrowDown') {
@@ -1374,6 +1434,12 @@ function render(options = {}) {
   const samePage = view.dataset.page === state.page
   view.classList.toggle('is-settled', samePage)
   const previousScrollTop = view.scrollTop
+  const disclosureSnapshots = samePage
+    ? [...view.querySelectorAll('details[data-disclosure-id]')].map((element) => ({
+        key: element.dataset.disclosureId,
+        open: element.open,
+      }))
+    : []
   const nestedScrollSnapshots = [...view.querySelectorAll('[data-scroll-preserve]')].map(
     (element) => ({
       key: element.dataset.scrollPreserve,
@@ -1396,13 +1462,22 @@ function render(options = {}) {
     else item.removeAttribute('aria-current')
   })
 
+  if (samePage && state.page === 'news' && getNewsPage().update()) {
+    syncOnboardingOverlay()
+    refreshIcons()
+    return
+  }
+
   const renderers = {
     today: () => getTodayPage().renderPage(),
     schedule: () => getSchedulePage().renderPage(),
     assignments: () => getAssignmentsPage().renderPage(),
     experiments: () => getExperimentsPage().renderPage(),
     news: () => getNewsPage().renderPage(),
+    github: () => getGitHubPage().renderPage(),
     ai: () => getModelSettingsPage().renderPage(),
+    creation: () => getCreationStudioPage().renderPage(),
+    ppt: () => getPptStudioPage().renderPage(),
     guide: () => getGuidePage().renderPage(),
     logs: () => getLogsPage().renderPage(),
     settings: () => getSettingsPage().renderPage(),
@@ -1411,10 +1486,16 @@ function render(options = {}) {
   }
   view.dataset.page = state.page
   const content = (renderers[state.page] || (() => getTodayPage().renderPage()))()
-  view.innerHTML =
-    state.page === 'today'
-      ? content
-      : `<div class="workbench-canvas route-canvas" data-route-canvas>${content}</div>`
+  if (state.page === 'creation') updateCreationDom(view, content)
+  else
+    view.innerHTML =
+      state.page === 'today'
+        ? content
+        : `<div class="workbench-canvas route-canvas" data-route-canvas>${content}</div>`
+  for (const { key, open } of disclosureSnapshots) {
+    const details = view.querySelector(`details[data-disclosure-id="${CSS.escape(key)}"]`)
+    if (details) details.open = open
+  }
   syncOnboardingOverlay()
   refreshIcons()
   syncExperimentMorph()
@@ -1662,7 +1743,7 @@ async function loadAihot({ force = false } = {}) {
   if (state.aihotBusy) return
   state.aihotBusy = true
   state.aihotError = null
-  if (state.page === 'today') render()
+  if (state.page === 'today' || (state.page === 'news' && state.newsTab === 'daily')) render()
   try {
     const [daily, items] = await Promise.all([
       api.getAihotDaily({ force }),
@@ -1676,7 +1757,7 @@ async function loadAihot({ force = false } = {}) {
     state.aihotError = error.message
   } finally {
     state.aihotBusy = false
-    if (state.page === 'today') render()
+    if (state.page === 'today' || (state.page === 'news' && state.newsTab === 'daily')) render()
   }
 }
 
@@ -1695,15 +1776,12 @@ function findNewsItem(id) {
   return null
 }
 
+let newsLoadSequence = 0
 async function loadNews({ reset = false, force = false } = {}) {
-  if (state.newsBusy) return
+  if (state.newsBusy && !reset) return
+  const sequence = ++newsLoadSequence
   state.newsBusy = true
   state.newsError = null
-  if (reset) {
-    state.newsItems = []
-    state.newsCursor = ''
-    state.newsHasMore = false
-  }
   if (state.page === 'news') render()
   try {
     const result = await api.getAihotItems({
@@ -1713,19 +1791,24 @@ async function loadNews({ reset = false, force = false } = {}) {
       category: state.newsCategory,
       q: state.newsQuery,
       limit: 20,
-      cursor: state.newsCursor,
+      cursor: reset ? '' : state.newsCursor,
     })
+    if (sequence !== newsLoadSequence) return
     const data = result?.data
-    const items = data?.items || []
-    state.newsItems = reset ? items : [...state.newsItems, ...items]
-    state.newsCursor = data?.nextCursor || ''
-    state.newsHasMore = data?.hasMore === true && Boolean(state.newsCursor)
+    if (data) {
+      const items = data.items || []
+      state.newsItems = reset ? items : [...state.newsItems, ...items]
+      state.newsCursor = data.nextCursor || ''
+      state.newsHasMore = data.hasMore === true && Boolean(state.newsCursor)
+    }
     state.newsError = result?.error || null
   } catch (error) {
-    state.newsError = error.message
+    if (sequence === newsLoadSequence) state.newsError = error.message
   } finally {
-    state.newsBusy = false
-    if (state.page === 'news') render()
+    if (sequence === newsLoadSequence) {
+      state.newsBusy = false
+      if (state.page === 'news') render()
+    }
   }
 }
 
@@ -1736,19 +1819,13 @@ async function loadNewsHot({ force = false } = {}) {
   if (state.page === 'news') render()
   try {
     const result = await api.getAihotHot({ force })
-    state.newsHot = result?.data || []
+    if (result?.data) state.newsHot = result.data
     state.newsHotError = result?.error || null
   } catch (error) {
     state.newsHotError = error.message
   } finally {
     state.newsHotBusy = false
     if (state.page === 'news') render()
-  }
-  const firstTopic = state.newsHot?.[0]
-  if (firstTopic?.publicId && !state.newsStory) {
-    state.newsExpanded = { kind: 'story', id: firstTopic.publicId }
-    render()
-    await loadNewsStory(firstTopic.publicId)
   }
 }
 
@@ -2325,6 +2402,10 @@ async function persistSettingField(element) {
 }
 
 async function handleAction(action, element) {
+  if (action.startsWith('gh-') && (await getGitHubPage().handleAction(action, element))) return
+  if (action.startsWith('cs-') && (await getCreationStudioPage().handleAction(action, element)))
+    return
+  if (action.startsWith('ppt-') && (await getPptStudioPage().handleAction(action, element))) return
   if (await getModelSettingsPage().handleAction(action, element)) return
   switch (action) {
     case 'open-assignment-composer':
@@ -3020,7 +3101,7 @@ async function handleAction(action, element) {
     case 'refresh-news':
       if (state.newsTab === 'hot') await loadNewsHot({ force: true })
       else if (state.newsTab === 'daily') await loadAihot({ force: true })
-      else await loadNews({ force: true })
+      else await loadNews({ reset: true, force: true })
       break
     case 'load-more-news':
       await loadNews()
@@ -3268,6 +3349,10 @@ document.addEventListener('click', async (event) => {
     state.page = nav.dataset.page
     state.highlightAssignmentId = null
     state.highlightScheduleCourseId = null
+    if (state.page === 'github') {
+      await getGitHubPage().open()
+      return
+    }
     if (state.page === 'news') {
       await openNewsPage()
       return
@@ -3281,6 +3366,10 @@ document.addEventListener('click', async (event) => {
   const pageJump = event.target.closest('[data-page-jump]')
   if (pageJump) {
     state.page = pageJump.dataset.pageJump
+    if (state.page === 'github') {
+      await getGitHubPage().open()
+      return
+    }
     if (state.page === 'news') {
       await openNewsPage()
       return
@@ -3333,8 +3422,6 @@ document.addEventListener('click', async (event) => {
     render()
     if (state.newsTab === 'hot') {
       if (!state.newsHot) await loadNewsHot()
-      else if (!state.newsStory && state.newsHot.length)
-        await loadNewsStory(state.newsHot[0].publicId)
     } else if (state.newsTab === 'daily') {
       if (!state.aihotDaily) await loadAihot()
     } else if (!state.newsItems.length) {
@@ -3354,6 +3441,7 @@ document.addEventListener('click', async (event) => {
   const newsWindow = event.target.closest('[data-news-window]')
   if (newsWindow) {
     state.newsWindow = newsWindow.dataset.newsWindow
+    state.newsExpanded = { kind: '', id: '' }
     await loadNews({ reset: true })
     return
   }
@@ -3404,6 +3492,14 @@ document.addEventListener('click', async (event) => {
 
   const action = event.target.closest('[data-action]')
   if (action && !action.disabled) {
+    if (action.dataset.action.startsWith('gh-')) {
+      await guard(() => handleAction(action.dataset.action, action), 'GitHub 发现操作失败')
+      return
+    }
+    if (action.dataset.action.startsWith('cs-')) {
+      await guard(() => handleAction(action.dataset.action, action), '工作室操作失败')
+      return
+    }
     if (action.closest('summary')) {
       event.preventDefault()
       event.stopPropagation()
@@ -3457,7 +3553,14 @@ document.addEventListener(
   true,
 )
 
+for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'dblclick']) {
+  document.addEventListener(type, (event) => {
+    if (state.page === 'ppt') getPptStudioPage().handlePointer(event)
+  })
+}
+
 document.addEventListener('keydown', (event) => {
+  if (state.page === 'ppt') getPptStudioPage().handleKeydown(event)
   if (event.key !== 'Escape') return
   if (state.scheduleTimeEditorOpen) {
     state.scheduleTimeEditorOpen = false
@@ -3473,6 +3576,7 @@ document.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('input', (event) => {
+  if (state.page === 'ppt' && getPptStudioPage().handleInput(event.target)) return
   if (event.target.id === 'scheduleCourseColor') {
     syncScheduleColorControls(event.target.value)
   }
@@ -3515,6 +3619,7 @@ document.addEventListener(
 )
 
 document.addEventListener('change', async (event) => {
+  if (state.page === 'creation' && getCreationStudioPage().handleChange(event.target)) return
   if (event.target.id === 'aiProfilePreset') {
     getModelSettingsPage().applyPreset(event.target)
     return
@@ -3950,6 +4055,7 @@ async function start() {
     applyTheme(state.settings.theme || 'system')
     render()
     if (state.page === 'news') await openNewsPage()
+    if (state.page === 'github') await getGitHubPage().open()
     completeUiTask(startupTaskId, 'ZP Workbench 已就绪', '本地工作区已加载。')
     requestAnimationFrame(() => {
       void api.reportStartup?.({ firstRenderMs: Math.round(performance.now()) })?.catch(() => {})

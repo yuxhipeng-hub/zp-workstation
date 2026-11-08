@@ -340,7 +340,8 @@ test('reads AI news inside the app instead of jumping to the website', async () 
     await dismissWelcome(window)
     await window.locator('.nav').getByRole('button', { name: 'AI 资讯', exact: true }).click()
 
-    await expect(window.locator('#view .page-intro h2')).toHaveText('AI 资讯')
+    await expect(window.getByRole('heading', { name: 'AI 资讯', exact: true })).toHaveCount(1)
+    await expect(window.locator('#view .news-header')).toBeVisible()
     await expect(window.locator('.news-feed')).toBeVisible()
 
     const heads = window.locator('.news-item-head')
