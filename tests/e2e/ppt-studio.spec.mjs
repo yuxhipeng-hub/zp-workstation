@@ -1,4 +1,5 @@
-import { test, expect, _electron as electron } from '@playwright/test'
+import { test, expect } from '@playwright/test'
+import { launchHiddenElectron } from './hidden-electron.mjs'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -580,7 +581,7 @@ async function launch(directory) {
     ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
   }
   delete env.ELECTRON_RUN_AS_NODE
-  const app = await electron.launch({ args: ['.'], env })
+  const app = await launchHiddenElectron(directory, env)
   const window = await app.firstWindow()
   const welcome = window.getByRole('button', { name: '进入工作站' })
   if (
